@@ -5,7 +5,8 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY || "key_not_set", // Prevent crash during build/dev if key is missing
+    dangerouslyAllowBrowser: true // Only strictly needed if used in client components, but harmless here as we use it in API routes
 });
 
 export default openai;
