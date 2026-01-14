@@ -1,7 +1,9 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
-const ChatInterface = () => {
+
+const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: string, externalStory?: { url: string, name: string } }) => {
     // State
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
     const [input, setInput] = useState('');
@@ -12,12 +14,25 @@ const ChatInterface = () => {
     const [showHistory, setShowHistory] = useState(false); // Toggle for full chat history
     const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
 
+    useEffect(() => {
+        if (externalTrigger) {
+            triggerAssistantMessage(externalTrigger);
+        }
+    }, [externalTrigger]);
+
+    useEffect(() => {
+        if (externalStory) {
+            playUserStory(externalStory.url, externalStory.name);
+        }
+    }, [externalStory]);
+
+
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastInteractionRef = useRef(Date.now()); // Track inactivity
 
-    const engagementPrompts = [
+    const [engagementPrompts, setEngagementPrompts] = useState([
         "¿Hay algo en que pueda ayudarte?",
         "¿De dónde nos visitas?",
         "¿Cómo te llamas?",
@@ -26,7 +41,22 @@ const ChatInterface = () => {
         "¿Te gustaría conocer algún lugar histórico?",
         "¿Sabías que Santiago es la Madre de Ciudades?",
         "Si buscas comida rica, puedo recomendarte lugares."
-    ];
+    ]);
+
+    useEffect(() => {
+        fetchCloudPhrases();
+    }, []);
+
+    const fetchCloudPhrases = async () => {
+        const { data } = await supabase.from('santis_phrases').select('phrase');
+        if (data && data.length > 0) {
+            const cloudPhrases = data.map((d: { phrase: string }) => d.phrase);
+            setEngagementPrompts(prev => [...prev, ...cloudPhrases]);
+        }
+    };
+
+
+
 
     // Scroll to bottom
     const scrollToBottom = () => {
@@ -95,7 +125,7 @@ const ChatInterface = () => {
         }
 
         return () => clearInterval(interval);
-    }, [isSpeaking, messages]); // Added messages dependency to ensure text updates if message changes while speaking
+    }, [isSpeaking, messages]);
 
 
     // Text-to-Speech Helper
@@ -107,6 +137,9 @@ const ChatInterface = () => {
                 body: JSON.stringify({ text }),
             });
 
+            if (response.status === 401) {
+                throw new Error("API_KEY_MISSING");
+            }
             if (!response.ok) throw new Error("Audio generation failed");
 
             const blob = await response.blob();
@@ -116,15 +149,57 @@ const ChatInterface = () => {
                 audioRef.current.src = url;
                 audioRef.current.play();
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("TTS Error:", error);
+            if (error.message === "API_KEY_MISSING") {
+                alert("Santi no puede hablar porque falta la OPENAI_API_KEY en el archivo .env.local");
+            }
         }
     };
 
     const triggerAssistantMessage = (text: string) => {
+        updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
         playAudioResponse(text);
     };
+
+    const playUserStory = async (url: string, name: string) => {
+
+        updateInteractionTime();
+        const intro = `¡Epa! Mirá lo que grabó un viajero sobre ${name}. Prestá atención...`;
+
+        // Add intro message
+        setMessages(prev => [...prev, { role: 'assistant', content: intro }]);
+
+        try {
+            // First, Santi says the intro
+            const response = await fetch('/api/speech', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: intro }),
+            });
+            const blob = await response.blob();
+            const introUrl = URL.createObjectURL(blob);
+
+            if (audioRef.current) {
+                audioRef.current.src = introUrl;
+                audioRef.current.play();
+
+                // When intro finishes, play the actual story
+                audioRef.current.onended = () => {
+                    if (audioRef.current) {
+                        audioRef.current.src = url;
+                        audioRef.current.play();
+                        audioRef.current.onended = null; // Reset
+                    }
+                };
+            }
+        } catch (error) {
+            console.error("Story Playback Error:", error);
+        }
+    };
+
+
 
     // Send Message Logic
     const handleSend = async (overrideText?: string) => {
@@ -218,47 +293,48 @@ const ChatInterface = () => {
             />
 
             {/* MAIN ROBOT DISPLAY & FLOATING BUBBLE */}
-            <div style={{
+            <div className="robot-container" style={{
                 position: 'fixed',
                 bottom: '0',
-                left: '20px',
+                left: '0',
                 zIndex: 9999,
-                pointerEvents: 'none', // Allow clicks pass through
+                pointerEvents: 'none',
                 display: 'flex',
                 alignItems: 'flex-end',
             }}>
                 {/* The Robot */}
                 <img
+                    className="robot-avatar"
                     src={isSpeaking
                         ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
                         : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                     }
                     alt="Robot Guia Santi"
                     style={{
-                        height: '420px',
+                        height: 'clamp(180px, 40vh, 420px)',
                         width: 'auto',
                         objectFit: 'contain',
-                        marginBottom: '-20px',
+                        marginBottom: '-10px',
                         filter: 'drop-shadow(0 0 15px rgba(255, 255, 255, 0.6))'
                     }}
                 />
 
-                {/* The Floating Thought Bubble (Only visible if Speaking, Thinking, or Welcome) */}
+                {/* The Floating Thought Bubble */}
                 {!showHistory && (isThinking || isSpeaking || messages.length === 0) && (
                     <div className="thought-bubble-popup" style={{
-                        marginBottom: '250px', // Lift it up near the head
-                        marginLeft: '-50px',
-                        maxWidth: '300px',
-                        pointerEvents: 'auto', // Allow copy text
+                        marginBottom: 'clamp(120px, 25vh, 250px)',
+                        marginLeft: '-40px',
+                        maxWidth: 'min(300px, 60vw)',
+                        pointerEvents: 'auto',
                         animation: 'popIn 0.3s ease-out forwards'
                     }}>
                         {messages.length === 0 ? (
-                            <p style={{ margin: 0, textAlign: 'center' }}>
+                            <div style={{ margin: 0, textAlign: 'center', fontSize: '0.9rem' }}>
                                 <strong>¡Hola! Soy Santi.</strong><br />
                                 ¿En qué te ayudo?
-                            </p>
+                            </div>
                         ) : (
-                            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                            <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.95rem' }}>
                                 {isThinking
                                     ? <span className="thinking-dots">🧠 Pensando...</span>
                                     : <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText}</span>
@@ -274,14 +350,14 @@ const ChatInterface = () => {
             {showHistory && (
                 <div style={{
                     flex: 1,
-                    padding: '20px',
+                    padding: '15px',
                     overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '25px',
+                    gap: '15px',
                     zIndex: 10,
-                    marginBottom: '100px', // Space for input
-                    background: 'rgba(255,255,255,0.7)', // Slightly visible background
+                    marginBottom: '100px',
+                    background: 'rgba(255,255,255,0.7)',
                     backdropFilter: 'blur(5px)'
                 }}>
                     {messages.map((m, i) => (
@@ -306,48 +382,62 @@ const ChatInterface = () => {
             {/* INPUT AREA (Floating at bottom center) */}
             <div style={{
                 position: 'fixed',
-                bottom: '20px',
+                bottom: '15px',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                width: '90%',
-                maxWidth: '600px',
+                width: 'min(90%, 600px)',
                 zIndex: 10000,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px'
+                gap: '8px'
             }}>
 
-                {/* History Toggle Button */}
-                <button
-                    onClick={() => setShowHistory(!showHistory)}
-                    style={{
-                        alignSelf: 'center',
-                        background: 'rgba(255,255,255,0.9)',
-                        border: 'none',
-                        borderRadius: '20px',
-                        padding: '5px 15px',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-                        color: '#666',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px'
-                    }}
-                >
-                    {showHistory ? '⬇️ Ocultar Chat' : '⬆️ Ver Historial'}
-                </button>
+                {/* Actions Row */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                    <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        style={{
+                            background: 'rgba(255,255,255,0.92)',
+                            border: 'none',
+                            borderRadius: '20px',
+                            padding: '6px 14px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                            color: '#444',
+                            fontWeight: '500'
+                        }}
+                    >
+                        {showHistory ? '⬇️ Ocultar Chat' : '⬆️ Ver Chat'}
+                    </button>
+
+                    <button
+                        onClick={() => alert('Próximamente: Login para Negocios y Usuarios Certificados')}
+                        style={{
+                            background: 'rgba(32, 178, 170, 0.95)',
+                            border: 'none',
+                            borderRadius: '20px',
+                            padding: '6px 14px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                            color: 'white',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        🏢 Login Negocios
+                    </button>
+                </div>
 
                 <div style={{
                     display: 'flex',
-                    gap: '10px',
+                    gap: '8px',
                     background: 'rgba(255,255,255,0.95)',
-                    padding: '10px',
+                    padding: '8px',
                     borderRadius: '50px',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
                     backdropFilter: 'blur(10px)'
                 }}>
-                    {/* Mic Button */}
                     <button
                         onClick={toggleListening}
                         className={isListening ? 'listening-pulse' : ''}
@@ -356,17 +446,15 @@ const ChatInterface = () => {
                             color: isListening ? 'white' : '#555',
                             border: '1px solid #eee',
                             borderRadius: '50%',
-                            width: '50px',
-                            height: '50px',
+                            width: '44px',
+                            height: '44px',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '1.4rem',
-                            transition: 'all 0.2s',
+                            fontSize: '1.2rem',
                             flexShrink: 0
                         }}
-                        title="Hablar"
                     >
                         {isListening ? '⏹️' : '🎙️'}
                     </button>
@@ -376,15 +464,15 @@ const ChatInterface = () => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={isListening ? "Te escucho..." : "Pregúntale a Santi..."}
+                        placeholder={isListening ? "Te escucho..." : "Tu pregunta..."}
                         disabled={isLoading || isListening}
                         style={{
                             flex: 1,
-                            padding: '0 20px',
+                            padding: '0 10px',
                             borderRadius: '30px',
                             border: 'none',
                             outline: 'none',
-                            fontSize: '1rem',
+                            fontSize: '0.95rem',
                             background: 'transparent'
                         }}
                     />
@@ -397,11 +485,11 @@ const ChatInterface = () => {
                             color: 'white',
                             border: 'none',
                             borderRadius: '50%',
-                            width: '50px',
-                            height: '50px',
+                            width: '44px',
+                            height: '44px',
                             cursor: 'pointer',
                             fontWeight: 'bold',
-                            fontSize: '1.2rem',
+                            fontSize: '1.1rem',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -415,39 +503,34 @@ const ChatInterface = () => {
             </div>
 
             <style jsx>{`
-                /* Floating Thought Popup */
                 .thought-bubble-popup {
                     background: #fff;
-                    padding: 20px;
-                    border-radius: 30px;
-                    border-bottom-left-radius: 5px; /* Connector feel */
+                    padding: 15px;
+                    border-radius: 25px;
+                    border-bottom-left-radius: 5px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-                    font-size: 1.1rem;
-                    line-height: 1.5;
                     color: #333;
                     position: relative;
                     border: 2px solid #fff;
                 }
 
-                /* Dots connector */
                 .thought-bubble-popup::before {
                     content: '';
                     position: absolute;
-                    bottom: -15px;
-                    left: -15px;
-                    width: 25px;
-                    height: 25px;
+                    bottom: -10px;
+                    left: -10px;
+                    width: 20px;
+                    height: 20px;
                     background: white;
                     border-radius: 50%;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
                 }
                  .thought-bubble-popup::after {
                     content: '';
                     position: absolute;
-                    bottom: -25px;
-                    left: -35px;
-                    width: 15px;
-                    height: 15px;
+                    bottom: -18px;
+                    left: -22px;
+                    width: 10px;
+                    height: 10px;
                     background: white;
                     border-radius: 50%;
                 }
@@ -457,17 +540,17 @@ const ChatInterface = () => {
                     100% { transform: scale(1) translateY(0); opacity: 1; }
                 }
 
-                /* History List Styles */
                 .message-container { display: flex; width: 100%; }
                 .message-container.user { justify-content: flex-end; }
                 .message-container.assistant { justify-content: flex-start; }
 
                 .bubble {
-                    padding: 15px 20px;
-                    max-width: 80%;
-                    border-radius: 20px;
-                    margin-bottom: 15px;
-                    font-size: 1rem;
+                    padding: 12px 18px;
+                    max-width: 85%;
+                    border-radius: 18px;
+                    margin-bottom: 12px;
+                    font-size: 0.95rem;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
                 }
                 .speech-bubble {
                     background: #D2691E;
@@ -483,7 +566,6 @@ const ChatInterface = () => {
                 
                 .thinking-dots {
                     color: #888;
-                    font-style: italic;
                     animation: pulseText 1.5s infinite;
                 }
 
@@ -495,7 +577,7 @@ const ChatInterface = () => {
 
                 @keyframes pulse {
                     0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
-                    70% { box-shadow: 0 0 0 15px rgba(255, 68, 68, 0); }
+                    70% { box-shadow: 0 0 0 12px rgba(255, 68, 68, 0); }
                     100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); }
                 }
                 .listening-pulse {

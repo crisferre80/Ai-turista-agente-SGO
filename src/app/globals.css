@@ -103,9 +103,32 @@ body {
   color: white;
 }
 
+/* Responsive Mobile Adjustments */
+@media (max-width: 768px) {
+  .dashboard-container {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 10px;
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .app-header-banner h2 {
+    font-size: 1.2rem;
+  }
+
+  .map-wrapper {
+    height: 400px;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -113,6 +136,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }

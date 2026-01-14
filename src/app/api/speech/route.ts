@@ -9,6 +9,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Text is required' }, { status: 400 });
         }
 
+        if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "key_not_set") {
+            return NextResponse.json({ error: 'OpenAI API key is missing' }, { status: 401 });
+        }
+
         const mp3 = await openai.audio.speech.create({
             model: "tts-1",
             voice: "alloy", // "alloy" is a good neutral/robot-like voice. Alternatives: "echo", "fable".
