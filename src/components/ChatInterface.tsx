@@ -8,24 +8,95 @@ const ChatInterface = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
     const [isListening, setIsListening] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [showHistory, setShowHistory] = useState(false); // Toggle for full chat history
+    const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const lastInteractionRef = useRef(Date.now()); // Track inactivity
+
+    const engagementPrompts = [
+        "¿Hay algo en que pueda ayudarte?",
+        "¿De dónde nos visitas?",
+        "¿Cómo te llamas?",
+        "¿Cuál es tu edad?",
+        "Cuanto más sepa de vos, mejor podré guiarte.",
+        "¿Te gustaría conocer algún lugar histórico?",
+        "¿Sabías que Santiago es la Madre de Ciudades?",
+        "Si buscas comida rica, puedo recomendarte lugares."
+    ];
 
     // Scroll to bottom
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    const updateInteractionTime = () => {
+        lastInteractionRef.current = Date.now();
+    };
+
     useEffect(() => {
-        scrollToBottom();
-    }, [messages, isThinking]);
+        if (showHistory) {
+            scrollToBottom();
+        }
+    }, [messages, isThinking, showHistory]);
 
     // Format messages for API
     const getApiMessages = () => {
         return messages.map(m => ({ role: m.role, content: m.content }));
     };
+
+    // Helper to get the content to show
+    const getLastAssistantMessage = () => {
+        const assistantMsgs = messages.filter(m => m.role === 'assistant');
+        if (assistantMsgs.length === 0) return null;
+        return assistantMsgs[assistantMsgs.length - 1].content;
+    };
+
+    // Proactive Engagement Timer
+    useEffect(() => {
+        const checkInterval = setInterval(() => {
+            const timeSinceLast = Date.now() - lastInteractionRef.current;
+            const isIdle = !isSpeaking && !isThinking && !isListening && !input.trim();
+
+            // 60 seconds = 60000ms
+            if (timeSinceLast >= 60000 && isIdle) {
+                const randomPrompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
+                triggerAssistantMessage(randomPrompt);
+                updateInteractionTime();
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(checkInterval);
+    }, [isSpeaking, isThinking, isListening, input]);
+
+    // Typewriter Effect Logic
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+
+        if (isSpeaking) {
+            const fullText = getLastAssistantMessage() || "";
+            setDisplayedText("");
+            let currentIndex = 0;
+            const typingSpeed = 40;
+
+            interval = setInterval(() => {
+                if (currentIndex <= fullText.length) {
+                    setDisplayedText(fullText.slice(0, currentIndex));
+                    currentIndex++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, typingSpeed);
+        } else {
+            setDisplayedText("");
+        }
+
+        return () => clearInterval(interval);
+    }, [isSpeaking, messages]); // Added messages dependency to ensure text updates if message changes while speaking
+
 
     // Text-to-Speech Helper
     const playAudioResponse = async (text: string) => {
@@ -50,8 +121,14 @@ const ChatInterface = () => {
         }
     };
 
+    const triggerAssistantMessage = (text: string) => {
+        setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+        playAudioResponse(text);
+    };
+
     // Send Message Logic
     const handleSend = async (overrideText?: string) => {
+        updateInteractionTime(); // Reset timer
         const textToSend = overrideText || input;
         if (!textToSend.trim()) return;
 
@@ -89,19 +166,19 @@ const ChatInterface = () => {
         } finally {
             setIsLoading(false);
             setIsThinking(false);
+            updateInteractionTime(); // Reset timer again after response
         }
     };
 
     // Voice Recognition (Speech-to-Text)
     const toggleListening = () => {
+        updateInteractionTime();
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             alert("Tu navegador no soporta entrada de voz. Intenta usar Chrome.");
             return;
         }
 
         if (isListening) {
-            // Stop logic handles automatically if single utterance, but we can force stop here ideally.
-            // For simplicity, we assume the user clicks to START and it stops automatically on silence.
             setIsListening(false);
             return;
         }
@@ -115,8 +192,10 @@ const ChatInterface = () => {
         recognition.interimResults = false;
 
         recognition.onstart = () => setIsListening(true);
-
-        recognition.onend = () => setIsListening(false);
+        recognition.onend = () => {
+            setIsListening(false);
+            updateInteractionTime();
+        };
 
         recognition.onresult = (event: any) => {
             const transcript = event.results[0][0].transcript;
@@ -129,58 +208,145 @@ const ChatInterface = () => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#333' }}>
-            <audio ref={audioRef} style={{ display: 'none' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#333', position: 'relative' }}>
+            <audio
+                ref={audioRef}
+                style={{ display: 'none' }}
+                onPlay={() => setIsSpeaking(true)}
+                onEnded={() => setIsSpeaking(false)}
+                onPause={() => setIsSpeaking(false)}
+            />
 
-            {/* Chat Content Area */}
-            <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {/* MAIN ROBOT DISPLAY & FLOATING BUBBLE */}
+            <div style={{
+                position: 'fixed',
+                bottom: '0',
+                left: '20px',
+                zIndex: 9999,
+                pointerEvents: 'none', // Allow clicks pass through
+                display: 'flex',
+                alignItems: 'flex-end',
+            }}>
+                {/* The Robot */}
+                <img
+                    src={isSpeaking
+                        ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
+                        : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
+                    }
+                    alt="Robot Guia Santi"
+                    style={{
+                        height: '420px',
+                        width: 'auto',
+                        objectFit: 'contain',
+                        marginBottom: '-20px',
+                        filter: 'drop-shadow(0 0 15px rgba(255, 255, 255, 0.6))'
+                    }}
+                />
 
-                {/* Robot Welcome Hero */}
-                {messages.length === 0 && (
-                    <div style={{ textAlign: 'center', marginTop: '20px', marginBottom: '40px' }}>
-                        <div style={{ fontSize: '80px', lineHeight: 1 }}>🤖</div>
-                        <h3 style={{ margin: '10px 0', color: '#D2691E' }}>Santi</h3>
-                        <div style={{
-                            background: 'white',
-                            padding: '15px',
-                            borderRadius: '16px',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                            display: 'inline-block',
-                            maxWidth: '80%'
-                        }}>
-                            <p>¡Hola! Soy tu guía con IA. Hablemos de Santiago del Estero.</p>
-                        </div>
-                    </div>
-                )}
-
-                {messages.map((m, i) => (
-                    <div key={i} style={{
-                        alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                        maxWidth: '85%',
-                        padding: '12px 16px',
-                        borderRadius: '16px',
-                        borderBottomRightRadius: m.role === 'user' ? '4px' : '16px',
-                        borderBottomLeftRadius: m.role === 'assistant' ? '4px' : '16px',
-                        background: m.role === 'user' ? '#D2691E' : 'white',
-                        color: m.role === 'user' ? 'white' : '#333',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                {/* The Floating Thought Bubble (Only visible if Speaking, Thinking, or Welcome) */}
+                {!showHistory && (isThinking || isSpeaking || messages.length === 0) && (
+                    <div className="thought-bubble-popup" style={{
+                        marginBottom: '250px', // Lift it up near the head
+                        marginLeft: '-50px',
+                        maxWidth: '300px',
+                        pointerEvents: 'auto', // Allow copy text
+                        animation: 'popIn 0.3s ease-out forwards'
                     }}>
-                        {m.content}
-                    </div>
-                ))}
-
-                {isThinking && (
-                    <div style={{ alignSelf: 'flex-start', color: '#666', fontSize: '0.9rem', paddingLeft: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span>🧠</span> Pensando...
+                        {messages.length === 0 ? (
+                            <p style={{ margin: 0, textAlign: 'center' }}>
+                                <strong>¡Hola! Soy Santi.</strong><br />
+                                ¿En qué te ayudo?
+                            </p>
+                        ) : (
+                            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                {isThinking
+                                    ? <span className="thinking-dots">🧠 Pensando...</span>
+                                    : <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText}</span>
+                                }
+                            </div>
+                        )}
                     </div>
                 )}
-                <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
-            <div style={{ padding: '15px', background: 'rgba(255,255,255,0.5)', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
 
+            {/* OPTIONAL HISTORY VIEW (Toggable) */}
+            {showHistory && (
+                <div style={{
+                    flex: 1,
+                    padding: '20px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '25px',
+                    zIndex: 10,
+                    marginBottom: '100px', // Space for input
+                    background: 'rgba(255,255,255,0.7)', // Slightly visible background
+                    backdropFilter: 'blur(5px)'
+                }}>
+                    {messages.map((m, i) => (
+                        <div key={i} className={`message-container ${m.role}`}>
+                            <div className={`bubble ${m.role === 'assistant' ? 'thought-bubble-list' : 'speech-bubble'}`}>
+                                {m.content}
+                            </div>
+                        </div>
+                    ))}
+                    {isThinking && (
+                        <div className="message-container assistant">
+                            <div className="bubble thought-bubble-list thinking">...</div>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+            )}
+
+            {!showHistory && <div style={{ flex: 1 }} /* Spacer */ onClick={() => setShowHistory(false)} />}
+
+
+            {/* INPUT AREA (Floating at bottom center) */}
+            <div style={{
+                position: 'fixed',
+                bottom: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '90%',
+                maxWidth: '600px',
+                zIndex: 10000,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+            }}>
+
+                {/* History Toggle Button */}
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    style={{
+                        alignSelf: 'center',
+                        background: 'rgba(255,255,255,0.9)',
+                        border: 'none',
+                        borderRadius: '20px',
+                        padding: '5px 15px',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                        color: '#666',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                    }}
+                >
+                    {showHistory ? '⬇️ Ocultar Chat' : '⬆️ Ver Historial'}
+                </button>
+
+                <div style={{
+                    display: 'flex',
+                    gap: '10px',
+                    background: 'rgba(255,255,255,0.95)',
+                    padding: '10px',
+                    borderRadius: '50px',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                    backdropFilter: 'blur(10px)'
+                }}>
                     {/* Mic Button */}
                     <button
                         onClick={toggleListening}
@@ -188,16 +354,17 @@ const ChatInterface = () => {
                         style={{
                             background: isListening ? '#ff4444' : 'white',
                             color: isListening ? 'white' : '#555',
-                            border: '1px solid #ddd',
+                            border: '1px solid #eee',
                             borderRadius: '50%',
-                            width: '46px',
-                            height: '46px',
+                            width: '50px',
+                            height: '50px',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '1.2rem',
-                            transition: 'all 0.2s'
+                            fontSize: '1.4rem',
+                            transition: 'all 0.2s',
+                            flexShrink: 0
                         }}
                         title="Hablar"
                     >
@@ -209,14 +376,16 @@ const ChatInterface = () => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={isListening ? "Te escucho..." : "Escribe o habla..."}
+                        placeholder={isListening ? "Te escucho..." : "Pregúntale a Santi..."}
                         disabled={isLoading || isListening}
                         style={{
                             flex: 1,
-                            padding: '12px 15px',
-                            borderRadius: '25px',
-                            border: '1px solid #ddd',
+                            padding: '0 20px',
+                            borderRadius: '30px',
+                            border: 'none',
                             outline: 'none',
+                            fontSize: '1rem',
+                            background: 'transparent'
                         }}
                     />
 
@@ -227,11 +396,17 @@ const ChatInterface = () => {
                             background: '#20B2AA',
                             color: 'white',
                             border: 'none',
-                            borderRadius: '25px',
-                            padding: '10px 20px',
+                            borderRadius: '50%',
+                            width: '50px',
+                            height: '50px',
                             cursor: 'pointer',
                             fontWeight: 'bold',
-                            opacity: (isLoading || !input.trim()) ? 0.6 : 1
+                            fontSize: '1.2rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            opacity: (isLoading || !input.trim()) ? 0.6 : 1,
+                            flexShrink: 0
                         }}
                     >
                         ➤
@@ -240,9 +415,87 @@ const ChatInterface = () => {
             </div>
 
             <style jsx>{`
+                /* Floating Thought Popup */
+                .thought-bubble-popup {
+                    background: #fff;
+                    padding: 20px;
+                    border-radius: 30px;
+                    border-bottom-left-radius: 5px; /* Connector feel */
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                    font-size: 1.1rem;
+                    line-height: 1.5;
+                    color: #333;
+                    position: relative;
+                    border: 2px solid #fff;
+                }
+
+                /* Dots connector */
+                .thought-bubble-popup::before {
+                    content: '';
+                    position: absolute;
+                    bottom: -15px;
+                    left: -15px;
+                    width: 25px;
+                    height: 25px;
+                    background: white;
+                    border-radius: 50%;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                }
+                 .thought-bubble-popup::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -25px;
+                    left: -35px;
+                    width: 15px;
+                    height: 15px;
+                    background: white;
+                    border-radius: 50%;
+                }
+
+                @keyframes popIn {
+                    0% { transform: scale(0.8) translateY(20px); opacity: 0; }
+                    100% { transform: scale(1) translateY(0); opacity: 1; }
+                }
+
+                /* History List Styles */
+                .message-container { display: flex; width: 100%; }
+                .message-container.user { justify-content: flex-end; }
+                .message-container.assistant { justify-content: flex-start; }
+
+                .bubble {
+                    padding: 15px 20px;
+                    max-width: 80%;
+                    border-radius: 20px;
+                    margin-bottom: 15px;
+                    font-size: 1rem;
+                }
+                .speech-bubble {
+                    background: #D2691E;
+                    color: white;
+                    border-bottom-right-radius: 4px;
+                }
+                .thought-bubble-list {
+                    background: white;
+                    color: #333;
+                    border: 1px solid #eee;
+                    border-bottom-left-radius: 4px;
+                }
+                
+                .thinking-dots {
+                    color: #888;
+                    font-style: italic;
+                    animation: pulseText 1.5s infinite;
+                }
+
+                @keyframes pulseText {
+                    0% { opacity: 0.5; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0.5; }
+                }
+
                 @keyframes pulse {
                     0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
-                    70% { box-shadow: 0 0 0 10px rgba(255, 68, 68, 0); }
+                    70% { box-shadow: 0 0 0 15px rgba(255, 68, 68, 0); }
                     100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); }
                 }
                 .listening-pulse {
