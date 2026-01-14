@@ -1,27 +1,31 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Image Reference Palette */
+  --bg-gradient-start: #FFE4B5;
+  /* Moccasin/Peach */
+  --bg-gradient-end: #87CEEB;
+  /* Sky Blue */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  --ui-container-bg: #2F4F4F;
+  /* Dark Slate Gray (The main dashboard shell) */
+  --ui-panel-bg: rgba(255, 255, 255, 0.1);
+  /* Glassy feel */
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+  --color-primary: #D2691E;
+  /* Chocolate (Keeping for warmth) */
+  --color-teal: #20B2AA;
+  /* Light Sea Green */
+  --color-button-text: #FFFFFF;
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --font-main: 'Outfit', 'Inter', system-ui, sans-serif;
+  /* Rounder font if possible */
+
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 2rem;
+
+  --border-radius: 16px;
+  /* Rounder corners */
+  --shadow-card: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -30,13 +34,85 @@ body {
   margin: 0;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: var(--font-main);
+  background: linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  color: #333;
+  line-height: 1.6;
+  min-height: 100vh;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+.dashboard-container {
+  background-color: var(--ui-container-bg);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  /* Map gets more space */
+  gap: 20px;
+  height: 80vh;
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .dashboard-container {
+    grid-template-columns: 1fr;
+    height: auto;
   }
+}
+
+/* Header */
+.app-header-banner {
+  text-align: center;
+  padding: 2rem 0 1rem 0;
+  font-size: 1.5rem;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.app-subtext {
+  font-size: 1rem;
+  color: #555;
+  margin-top: 5px;
+  display: block;
+}
+
+/* Buttons */
+.btn-filter {
+  background: white;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  text-align: center;
+}
+
+.btn-filter.active {
+  background: #20B2AA;
+  color: white;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
