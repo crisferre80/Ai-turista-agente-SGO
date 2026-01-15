@@ -259,6 +259,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
 
                 if (userLocation) {
                     drawRoute(userLocation, found.coords as [number, number], found.name);
+                } else {
+                    onNarrate?.("Para mostrarte cómo llegar, por favor activá tu ubicación tocando el botoncito de la brújula arriba a la derecha.");
                 }
 
                 const targetMarker = markersRef.current.find((m: any) => m.getElement()._attrId === found.id);

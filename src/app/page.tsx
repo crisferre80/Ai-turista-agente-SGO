@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
+import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
 
 // IMAGES PROVIDED BY USER
@@ -99,6 +100,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activePlace, setActivePlace] = useState<any>(null);
   const [zoomImage, setZoomImage] = useState<string | undefined>(undefined);
+  const [showIntro, setShowIntro] = useState(true);
 
   useEffect(() => {
     fetchData();
@@ -138,8 +140,8 @@ export default function Home() {
   };
 
   const handleNarration = (text: string) => {
-    setNarration(text);
-    setTimeout(() => setNarration(undefined), 100);
+    // Use a non-AI-triggering narration method
+    (window as any).santiSpeak?.(text);
   };
 
   return (
@@ -155,10 +157,7 @@ export default function Home() {
       <div style={{
         position: 'fixed',
         top: 0, left: 0, right: 0, bottom: 0,
-        backgroundImage: `url(${IMG_FLAG})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        filter: 'blur(30px) brightness(0.3)',
+        background: 'linear-gradient(135deg, #c5382eff 0%, #e2e8f0 100%)',
         zIndex: 0
       }} />
       <div style={{
@@ -166,41 +165,35 @@ export default function Home() {
         top: 0, left: 0, right: 0, bottom: 0,
         backgroundImage: `url(${IMG_PATTERN})`,
         backgroundSize: '400px',
-        opacity: 0.08,
+        opacity: 0.1,
         zIndex: 1,
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        mixBlendMode: 'multiply'
       }} />
 
+      {/* INTRO OVERLAY (Root Level for Priority) */}
+      {showIntro && (
+        <IntroOverlay
+          onComplete={() => {
+            setShowIntro(false);
+            sessionStorage.setItem('santi_visual_intro_seen', 'true');
+            // Small delay to let the overlay fade out before Santi speaks
+            setTimeout(() => {
+              (window as any).santiNarrate?.("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
+            }, 500);
+          }}
+        />
+      )}
+
       {/* CONTENT WRAPPER */}
-      <div style={{ position: 'relative', zIndex: 10, padding: '0 20px' }}>
+      <div style={{ position: 'relative', zIndex: 10, padding: '70px 20px 0 20px' }}>
         {/* Top Header */}
         <header style={{
-          padding: '40px 0 20px',
+          padding: '20px 0',
           textAlign: 'center',
-          color: 'white'
+          color: '#1e293b'
         }}>
-          <h2 style={{
-            fontSize: 'clamp(1.2rem, 5vw, 2.2rem)',
-            margin: 0,
-            fontWeight: '900',
-            background: `linear-gradient(to bottom, ${COLOR_WHITE} 60%, ${COLOR_GOLD})`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            textShadow: '0 10px 30px rgba(0,0,0,0.5)'
-          }}>
-            ¡HOLA! SOY SANTI, TU GUIA ROBOT DE SANTIAGO DEL ESTERO
-          </h2>
-          <span style={{
-            fontSize: '1rem',
-            opacity: 0.8,
-            letterSpacing: '3px',
-            fontWeight: 'bold',
-            marginTop: '10px',
-            display: 'block',
-            color: COLOR_RED
-          }}>
-            MADRE DE CIUDADES • AGENTE TURÍSTICO VIRTUAL
-          </span>
+          {/* Vacío: El título ahora está junto a Santi */}
         </header>
 
         {/* Responsive Styles Injection */}
@@ -295,13 +288,13 @@ export default function Home() {
 
           {/* SECTION 1: Multimedia (Videos & Gallery) */}
           <div className="multimedia-card" style={{
-            background: 'rgba(0,0,0,0.3)',
+            background: 'rgba(255,255,255,0.7)',
             backdropFilter: 'blur(20px)',
-            color: 'white',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-            border: `1px solid ${COLOR_WHITE}11`
+            color: '#1e293b',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.05)',
+            border: `1px solid rgba(0,0,0,0.05)`
           }}>
-            <h3 style={{ margin: '0 0 25px 0', fontSize: '1.8rem', fontWeight: '900', color: COLOR_GOLD }}>🎥 Santiago en Video</h3>
+            <h3 style={{ margin: '0 0 25px 0', fontSize: '1.8rem', fontWeight: '900', color: COLOR_BLUE, textAlign: 'right' }}>🎥 Santiago en Video</h3>
             <div className="scroll-container">
               {videos.length > 0 ? (
                 videos.map((vid) => (
@@ -333,7 +326,7 @@ export default function Home() {
               )}
             </div>
 
-            <h3 style={{ margin: '40px 0 20px 0', fontSize: '1.5rem', fontWeight: '800', opacity: 0.9, color: COLOR_GOLD }}>📸 Galería de Atractivos</h3>
+            <h3 style={{ margin: '40px 0 20px 0', fontSize: '1.5rem', fontWeight: '800', opacity: 0.9, color: COLOR_BLUE, textAlign: 'right' }}>📸 Galería de Atractivos</h3>
             <div className="scroll-container" style={{ paddingBottom: '10px' }}>
               {attractions.filter(t => t.image).slice(0, 15).map((attr, i) => (
                 <div key={i} style={{ scrollSnapAlign: 'start' }}>
@@ -358,10 +351,10 @@ export default function Home() {
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '20px',
-              background: 'rgba(0,0,0,0.4)',
+              background: 'rgba(255,255,255,0.6)',
               padding: '35px',
               borderRadius: '40px',
-              border: `1px solid ${COLOR_RED}33`
+              border: `1px solid ${COLOR_BLUE}11`
             }}>
               <QuickActionBtn
                 icon="🍽️"
@@ -387,6 +380,7 @@ export default function Home() {
 
           </div>
         </div>
+
 
         {/* PROTAGONIST CHAT INTERFACE (Fixed at root for perfect positioning) */}
         <ChatInterface

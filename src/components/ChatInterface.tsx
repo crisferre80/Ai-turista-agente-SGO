@@ -20,6 +20,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [showHistory, setShowHistory] = useState(false); // Toggle for full chat history
+    const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu toggle
     const [audioBlocked, setAudioBlocked] = useState(false); // Handle autoplay block
     const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
     const [isIdle, setIsIdle] = useState(false); // For auto-hide
@@ -95,6 +96,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         return assistantMsgs[assistantMsgs.length - 1].content;
     };
 
+    // Intro Logic is now handled by IntroOverlay in page.tsx
+
     // Idle / Auto-hide logic
     useEffect(() => {
         const checkInterval = setInterval(() => {
@@ -108,7 +111,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 setIsIdle(false);
             }
 
-            // Proactive Engagement (keep existing logic but higher threshold)
+            // Proactive Engagement
             if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
                 const randomPrompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
                 triggerAssistantMessage(randomPrompt);
@@ -119,13 +122,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         return () => clearInterval(checkInterval);
     }, [isSpeaking, isThinking, isListening, input, engagementPrompts]);
 
-    // Global access for cards
+    // Global access for triggers
     useEffect(() => {
         (window as any).santiNarrate = (text: string) => {
             handleSend(text);
         };
-        return () => { delete (window as any).santiNarrate; };
-    }, [messages]);
+        (window as any).santiSpeak = (text: string) => {
+            triggerAssistantMessage(text, true); // Skip focus to avoid loops
+        };
+        return () => {
+            delete (window as any).santiNarrate;
+            delete (window as any).santiSpeak;
+        };
+    }, []); // Only register once
 
     // Typewriter Effect Logic
     useEffect(() => {
@@ -169,27 +178,34 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             const url = URL.createObjectURL(blob);
 
             if (audioRef.current) {
+                // Clear state and pause to avoid AbortError
+                audioRef.current.onended = null;
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
                 audioRef.current.src = url;
+
                 audioRef.current.play().catch(err => {
-                    console.warn("Autoplay blocked:", err);
-                    setAudioBlocked(true);
+                    if (err.name !== 'AbortError') {
+                        console.warn("Autoplay blocked:", err);
+                        setAudioBlocked(true);
+                    }
                 });
             }
         } catch (error: any) {
             console.error("TTS Error:", error);
             if (error.message === "API_KEY_MISSING") {
-                alert("Santi no puede hablar porque falta la OPENAI_API_KEY en el archivo .env.local");
+                alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
             }
         }
     };
 
-    const triggerAssistantMessage = (text: string) => {
+    const triggerAssistantMessage = (text: string, skipMapFocus = false) => {
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
         playAudioResponse(text);
 
-        // Trigger map focus if a place is mentioned
-        if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+        // Trigger map focus if a place is mentioned and not explicitly skipped
+        if (!skipMapFocus && typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
             (window as any).focusPlaceOnMap(text);
         }
     };
@@ -363,72 +379,197 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             {/* MAIN ROBOT DISPLAY & FLOATING BUBBLE */}
             <div className="robot-container" style={{
                 position: 'fixed',
-                bottom: isModalOpen ? '-80px' : '10px',
-                left: '10px',
+                bottom: isModalOpen ? '-120px' : '20px',
+                left: '20px',
                 zIndex: 40000,
                 pointerEvents: 'none',
                 display: 'flex',
-                alignItems: 'flex-end',
-                transition: 'bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
             }}>
-                {/* The Robot (HOST POSITION - Always fixed and visible) */}
-                <img
-                    className={`robot-avatar ${isSpeaking ? 'active' : 'idle'}`}
-                    src={isSpeaking
-                        ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
-                        : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
-                    }
-                    alt="Robot Guia Santi"
-                    style={{
-                        height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
-                        width: 'auto',
-                        objectFit: 'contain',
-                        filter: 'drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
-                        transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        opacity: 1,
-                        transform: isSpeaking ? 'scale(1)' : 'scale(0.9)',
-                        pointerEvents: 'auto'
-                    }}
-                />
 
-                {/* The Floating Thought Bubble (Above Head) */}
-                {!showHistory && (isThinking || isSpeaking || messages.length === 0 || audioBlocked) && (
-                    <div className="thought-bubble-popup" style={{
-                        marginBottom: isSpeaking ? 'clamp(200px, 35vh, 400px)' : 'clamp(100px, 18vh, 180px)',
-                        marginLeft: '-40px',
-                        maxWidth: 'min(300px, 65vw)',
-                        pointerEvents: 'auto',
-                        animation: 'popIn 0.3s ease-out forwards',
-                        transition: 'all 0.5s ease',
-                        cursor: audioBlocked ? 'pointer' : 'default',
-                        borderBottomLeftRadius: '8px',
-                        borderTopLeftRadius: '30px'
-                    }} onClick={() => {
-                        if (audioBlocked && audioRef.current) {
-                            setAudioBlocked(false);
-                            audioRef.current.play();
+
+
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    {/* The Robot (HOST POSITION - Always fixed and visible) */}
+                    <img
+                        className={`robot-avatar ${isSpeaking ? 'active' : 'idle'}`}
+                        src={isSpeaking
+                            ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
+                            : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                         }
+                        alt="Robot Guia Santi"
+                        style={{
+                            height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
+                            width: 'auto',
+                            objectFit: 'contain',
+                            filter: 'drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
+                            transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                            opacity: 1,
+                            transform: isSpeaking ? 'scale(1)' : 'scale(0.9)',
+                            pointerEvents: 'auto'
+                        }}
+                    />
+
+                    {/* The Floating Thought Bubble */}
+                    {!showHistory && (isThinking || isSpeaking || messages.length === 0 || audioBlocked) && (
+                        <div className="thought-bubble-popup" style={{
+                            position: 'absolute',
+                            left: '50px',
+                            bottom: '100%',
+                            minWidth: '220px',
+                            maxWidth: '300px',
+                            pointerEvents: 'auto',
+                            animation: 'popInBubble 0.3s ease-out forwards',
+                            transition: 'all 0.5s ease',
+                            cursor: audioBlocked ? 'pointer' : 'default',
+                            borderBottomLeftRadius: '2px',
+                            borderTopLeftRadius: '30px',
+                            zIndex: 40001
+                        }} onClick={() => {
+                            if (audioBlocked && audioRef.current) {
+                                setAudioBlocked(false);
+                                audioRef.current.play();
+                            }
+                        }}>
+                            {audioBlocked ? (
+                                <div style={{ color: '#D2691E', fontWeight: 'bold' }}>
+                                    🔇 Clic para activar sonido
+                                </div>
+                            ) : (
+                                <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.94rem', color: 'white' }}>
+                                    {isThinking
+                                        ? <span className="thinking-dots">🧠 Pensando...</span>
+                                        : <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText || "¿En qué te ayudo?"}</span>
+                                    }
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* NEW TOP HEADER WITH HAMBURGER MENU */}
+            <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '60px',
+                background: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(20px)',
+                borderBottom: `1px solid ${COLOR_BLUE}11`,
+                zIndex: 50000,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0 20px',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                        width: '40px',
+                        height: '40px',
+                        background: 'white',
+                        borderRadius: '50%',
+                        border: `2px solid ${COLOR_BLUE}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                     }}>
-                        {audioBlocked ? (
-                            <div style={{ color: '#D2691E', fontWeight: 'bold' }}>
-                                🔇 Santi está silenciado.<br />
-                                <span style={{ fontSize: '0.8rem' }}>Hacé clic aquí para oírlo.</span>
-                            </div>
-                        ) : messages.length === 0 ? (
-                            <div style={{ margin: 0, textAlign: 'center', fontSize: '0.9rem' }}>
-                                <strong>¡Hola! Soy Santi.</strong><br />
-                                ¿En qué te ayudo?
-                            </div>
-                        ) : (
-                            <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.95rem' }}>
-                                {isThinking
-                                    ? <span className="thinking-dots">🧠 Pensando...</span>
-                                    : <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText}</span>
-                                }
-                            </div>
-                        )}
+                        <img
+                            src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
+                            alt="Santi Logo"
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                transform: 'scale(1.2) translateY(2px)'
+                            }}
+                        />
                     </div>
-                )}
+                    <h1 style={{
+                        fontSize: '1.2rem',
+                        fontWeight: '900',
+                        color: COLOR_BLUE,
+                        margin: 0,
+                        letterSpacing: '-0.5px'
+                    }}> IA Santi Guía </h1>
+                </div>
+
+                <div style={{ position: 'relative' }}>
+                    <button
+                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.5rem',
+                            cursor: 'pointer',
+                            color: COLOR_BLUE,
+                            padding: '5px'
+                        }}
+                    >
+                        {isMenuOpen ? '✕' : '☰'}
+                    </button>
+
+                    {isMenuOpen && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '50px',
+                            right: 0,
+                            background: 'white',
+                            borderRadius: '15px',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                            padding: '10px',
+                            minWidth: '180px',
+                            zIndex: 50001,
+                            border: `1px solid ${COLOR_BLUE}11`,
+                            animation: 'popIn 0.2s ease-out'
+                        }}>
+                            <button
+                                onClick={() => { setShowHistory(!showHistory); setIsMenuOpen(false); }}
+                                style={{
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    padding: '12px 15px',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    color: COLOR_BLUE,
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px'
+                                }}
+                            >
+                                <span>{showHistory ? '📖' : '📘'}</span> {showHistory ? 'Cerrar Chat' : 'Ver Historial'}
+                            </button>
+                            <button
+                                onClick={() => window.location.href = '/login'}
+                                style={{
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    padding: '12px 15px',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    color: COLOR_BLUE,
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px'
+                                }}
+                            >
+                                <span>🏢</span> Mi Negocio
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
 
@@ -436,22 +577,27 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             {showHistory && (
                 <div style={{
                     position: 'fixed',
-                    top: '180px', // Below the robot
-                    left: '20px',
+                    top: '70px', // Below the NEW header
+                    right: '20px',
                     width: 'min(90%, 400px)',
-                    maxHeight: '60vh',
+                    maxHeight: '70vh',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '15px',
-                    zIndex: 29999, // Just behind robot
-                    background: 'rgba(15, 23, 42, 0.95)',
-                    backdropFilter: 'blur(20px)',
-                    border: `1px solid ${COLOR_BLUE}44`,
+                    zIndex: 29999,
+                    background: 'rgba(255, 255, 255, 0.98)',
+                    backdropFilter: 'blur(25px)',
+                    border: `1px solid ${COLOR_BLUE}11`,
                     borderRadius: '24px',
-                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
                     padding: '20px',
-                    overflowY: 'auto'
+                    overflowY: 'auto',
+                    animation: 'popIn 0.3s ease-out'
                 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: `1px solid ${COLOR_BLUE}08`, paddingBottom: '10px' }}>
+                        <span style={{ fontWeight: 'bold', color: COLOR_BLUE }}>Historial de Chat</span>
+                        <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+                    </div>
                     {messages.map((m, i) => (
                         <div key={i} className={`message-container ${m.role}`}>
                             <div className={`bubble ${m.role === 'assistant' ? 'thought-bubble-list' : 'speech-bubble'}`}>
@@ -468,92 +614,90 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 </div>
             )}
 
-            {!showHistory && <div style={{ flex: 1 }} /* Spacer */ onClick={() => setShowHistory(false)} />}
 
-
-            {/* INPUT AREA (Floating at bottom center) */}
+            {/* INPUT AREA (Floating at bottom-right of footer) */}
             <div style={{
                 position: 'fixed',
-                bottom: '20px',
+                bottom: '10px',
                 right: '20px',
                 left: 'auto',
-                transform: isIdle ? 'translateY(150%)' : 'translateY(0)',
                 width: 'min(90%, 400px)',
                 zIndex: 30005,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
-                transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                opacity: isIdle ? 0 : 1,
-                pointerEvents: isIdle ? 'none' : 'auto'
+                transition: 'all 0.5s ease'
             }}>
-
-                {/* Actions Row */}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        style={{
-                            background: 'rgba(255,255,255,0.92)',
-                            border: 'none',
-                            borderRadius: '20px',
-                            padding: '6px 14px',
-                            fontSize: '0.75rem',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-                            color: '#444',
-                            fontWeight: '500'
-                        }}
-                    >
-                        {showHistory ? '⬇️ Ocultar Chat' : '⬆️ Ver Chat'}
-                    </button>
-
-                    <button
-                        onClick={() => window.location.href = '/login'}
-                        style={{
-                            background: 'rgba(32, 178, 170, 0.95)',
-                            border: 'none',
-                            borderRadius: '20px',
-                            padding: '6px 14px',
-                            fontSize: '0.75rem',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-                            color: 'white',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        🏢 Login Negocios
-                    </button>
-                </div>
-
-                {/* Instruction Legend */}
+                {/* Instruction Legend (Aligned Right) */}
                 <div style={{
-                    textAlign: 'center',
-                    fontSize: '0.85rem',
-                    color: COLOR_GOLD,
-                    fontWeight: 'bold',
-                    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
-                    marginBottom: '5px',
+                    textAlign: 'right',
+                    fontSize: '0.8rem',
+                    color: COLOR_BLUE,
+                    fontWeight: '900',
+                    marginRight: '15px',
                     animation: 'pulseText 2s infinite'
                 }}>
-                    🎤 ¡Presioná el mic y preguntame lo que quieras!
+                    ¡Presioná el mic y hablá! 👉
                 </div>
+
+
 
                 <div style={{
                     display: 'flex',
                     gap: '8px',
-                    background: 'rgba(255,255,255,0.95)',
+                    background: 'rgba(255,255,255,1)',
                     padding: '8px',
                     borderRadius: '50px',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                    backdropFilter: 'blur(10px)'
+                    boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
+                    border: `1px solid ${COLOR_BLUE}22`
                 }}>
+                    <button
+                        onClick={() => handleSend()}
+                        disabled={isLoading || (!input.trim() && !isListening)}
+                        style={{
+                            background: (isLoading || !input.trim()) ? '#f1f5f9' : COLOR_BLUE,
+                            color: (isLoading || !input.trim()) ? '#94a3b8' : 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '44px',
+                            height: '44px',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            fontSize: '1.1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        ➤
+                    </button>
+
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder={isListening ? "Te escucho..." : "Tu pregunta..."}
+                        disabled={isLoading || isListening}
+                        style={{
+                            flex: 1,
+                            padding: '0 30px',
+                            borderRadius: '40px',
+                            border: 'none',
+                            outline: 'none',
+                            fontSize: '0.95rem',
+                            background: 'transparent',
+                            color: '#1e293b'
+                        }}
+                    />
+
                     <button
                         onClick={toggleListening}
                         className={isListening ? 'listening-pulse' : ''}
                         style={{
-                            background: isListening ? COLOR_RED : 'white',
-                            color: isListening ? 'white' : COLOR_BLUE,
-                            border: `2px solid ${isListening ? COLOR_GOLD : '#eee'}`,
+                            background: isListening ? COLOR_RED : COLOR_GOLD,
+                            color: isListening ? 'white' : '#000',
+                            border: `none`,
                             borderRadius: '50%',
                             width: '44px',
                             height: '44px',
@@ -566,47 +710,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                         }}
                     >
                         {isListening ? '⏹️' : '🎙️'}
-                    </button>
-
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={isListening ? "Te escucho..." : "Tu pregunta..."}
-                        disabled={isLoading || isListening}
-                        style={{
-                            flex: 1,
-                            padding: '0 10px',
-                            borderRadius: '30px',
-                            border: 'none',
-                            outline: 'none',
-                            fontSize: '0.95rem',
-                            background: 'transparent'
-                        }}
-                    />
-
-                    <button
-                        onClick={() => handleSend()}
-                        disabled={isLoading || (!input.trim() && !isListening)}
-                        style={{
-                            background: (isLoading || !input.trim()) ? 'rgba(255,255,255,0.1)' : COLOR_GOLD,
-                            color: (isLoading || !input.trim()) ? 'rgba(255,255,255,0.3)' : '#000',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '44px',
-                            height: '44px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '1.1rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            opacity: (isLoading || !input.trim()) ? 0.6 : 1,
-                            flexShrink: 0
-                        }}
-                    >
-                        ➤
                     </button>
                 </div>
             </div>
@@ -653,6 +756,11 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 }
 
                 @keyframes popIn {
+                    0% { transform: scale(0.95) translateY(-10px); opacity: 0; }
+                    100% { transform: scale(1) translateY(0); opacity: 1; }
+                }
+
+                @keyframes popInBubble {
                     0% { transform: scale(0.8) translateY(20px); opacity: 0; }
                     100% { transform: scale(1) translateY(0); opacity: 1; }
                 }

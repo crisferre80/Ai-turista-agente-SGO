@@ -167,6 +167,27 @@ export default function LoginPage() {
                         </button>
                     </div>
                 )}
+
+                <div style={{ marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+                    <button
+                        onClick={() => router.push('/')}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#666',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px',
+                            width: '100%',
+                            fontWeight: '500'
+                        }}
+                    >
+                        ← Volver al Inicio
+                    </button>
+                </div>
             </div>
         </div>
     );
