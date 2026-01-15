@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { takePhoto } from '@/lib/photoService';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -107,10 +108,19 @@ export default function ProfilePage() {
                             style={avatarStyle}
                         />
                         {editing && (
-                            <label style={uploadOverlay}>
+                            <div
+                                onClick={async () => {
+                                    const photo = await takePhoto();
+                                    if (photo) {
+                                        const file = new File([photo.blob], `avatar-${Date.now()}.${photo.format}`, { type: `image/${photo.format}` });
+                                        setAvatarFile(file);
+                                        setProfile((prev: any) => ({ ...prev, avatar_url: URL.createObjectURL(file) }));
+                                    }
+                                }}
+                                style={uploadOverlay}
+                            >
                                 📷
-                                <input type="file" hidden onChange={e => setAvatarFile(e.target.files?.[0] || null)} />
-                            </label>
+                            </div>
                         )}
                     </div>
                     <h1 style={{ margin: '15px 0 5px 0', fontSize: '28px' }}>{newName || profile.name}</h1>

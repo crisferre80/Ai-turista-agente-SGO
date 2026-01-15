@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
+import { takePhoto } from '@/lib/photoService';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -110,6 +111,26 @@ export default function AdminDashboard() {
         } catch (e: any) {
             alert('Error subiendo: ' + e.message);
             return null;
+        }
+    };
+
+    const captureImage = async (target: 'place' | 'business' | 'gallery') => {
+        const photo = await takePhoto();
+        if (photo) {
+            // Convert Blob to File to keep compatibility with existing upload logic
+            const file = new File([photo.blob], `camera-${Date.now()}.${photo.format}`, { type: `image/${photo.format}` });
+            if (target === 'place') {
+                setUploadFile(file);
+                // Preview for user
+                setNewPlace(prev => ({ ...prev, img: URL.createObjectURL(file) }));
+            }
+            else if (target === 'business') {
+                setBusinessFile(file);
+                setNewBusiness(prev => ({ ...prev, image_url: URL.createObjectURL(file) }));
+            }
+            else if (target === 'gallery') {
+                setGalleryFiles(prev => [...prev, file]);
+            }
         }
     };
 
@@ -325,12 +346,17 @@ export default function AdminDashboard() {
 
                                 <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '12px', border: '1px solid #eee' }}>
                                     <label style={labelStyle}>Imagen Principal (Auto-reducida)</label>
-                                    <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} style={{ marginBottom: '10px' }} />
-                                    {newPlace.img && <img src={newPlace.img} style={{ height: '50px', borderRadius: '4px' }} alt="Thumb" />}
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                                        <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} style={{ flex: 1 }} />
+                                        <button type="button" onClick={() => captureImage('place')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
+                                    </div>
+                                    {newPlace.img && <img src={newPlace.img} style={{ height: '80px', borderRadius: '4px', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '10px' }} alt="Thumb" />}
                                     <Input label="O URL" value={newPlace.img} onChange={v => setNewPlace({ ...newPlace, img: v })} />
 
-                                    <label style={{ ...labelStyle, marginTop: '15px' }}>Galería de Fotos (Opcional)</label>
-                                    <input type="file" multiple accept="image/*" onChange={e => setGalleryFiles(Array.from(e.target.files || []))} style={{ marginBottom: '10px' }} />
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                                        <input type="file" multiple accept="image/*" onChange={e => setGalleryFiles(Array.from(e.target.files || []))} style={{ flex: 1 }} />
+                                        <button type="button" onClick={() => captureImage('gallery')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Galería</button>
+                                    </div>
                                     <p style={{ fontSize: '11px', color: '#888' }}>{newPlace.gallery.length} fotos existentes en galería.</p>
                                 </div>
 
@@ -396,8 +422,11 @@ export default function AdminDashboard() {
                                 </div>
                                 <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '10px' }}>
                                     <label style={labelStyle}>Foto del Negocio</label>
-                                    <input type="file" accept="image/*" onChange={e => setBusinessFile(e.target.files?.[0] || null)} />
-                                    {newBusiness.image_url && <img src={newBusiness.image_url} style={{ height: '30px', marginTop: '5px' }} />}
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                                        <input type="file" accept="image/*" onChange={e => setBusinessFile(e.target.files?.[0] || null)} style={{ flex: 1 }} />
+                                        <button type="button" onClick={() => captureImage('business')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
+                                    </div>
+                                    {newBusiness.image_url && <img src={newBusiness.image_url} style={{ height: '60px', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }} />}
                                 </div>
                                 <Input label="WhatsApp / Cel" value={newBusiness.contact} onChange={v => setNewBusiness({ ...newBusiness, contact: v })} />
                                 <Input label="Web o Instagram" value={newBusiness.website} onChange={v => setNewBusiness({ ...newBusiness, website: v })} />
