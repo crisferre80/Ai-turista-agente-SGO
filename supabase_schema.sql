@@ -53,5 +53,19 @@ CREATE TABLE santis_phrases (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- TABLA DE VIDEOS DE LA APP
+CREATE TABLE app_videos (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- HABILITAR STORAGE (Buckets: images, audios)
 -- Nota: Esto se configura manualmente en la UI de Supabase o vía políticas RLS.
+
+-- POLÍTICAS DE SEGURIDAD (RLS)
+ALTER TABLE app_videos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Videos públicos" ON app_videos FOR SELECT TO public USING (true);
+CREATE POLICY "Admin inserta videos" ON app_videos FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Admin borra videos" ON app_videos FOR DELETE TO public USING (true);

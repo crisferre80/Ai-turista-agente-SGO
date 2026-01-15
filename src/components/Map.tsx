@@ -12,9 +12,10 @@ interface MapProps {
     attractions?: any[];
     onNarrate?: (text: string) => void;
     onStoryPlay?: (url: string, name: string) => void;
+    onPlaceFocus?: (place: any) => void;
 }
 
-const Map = ({ attractions = [], onNarrate, onStoryPlay }: MapProps) => {
+const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProps) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -140,11 +141,99 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay }: MapProps) => {
         );
     };
 
+    // 1. Marker Creation Effect (Only runs when attractions or map readiness changes)
     useEffect(() => {
         if (!isMapReady || !map.current) return;
         const currentMap = map.current;
+
+        // Clean up old markers
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
+
+        attractions.forEach(attr => {
+            if (!currentMap || !attr.coords) return;
+
+            const wrapper = document.createElement('div');
+            const el = document.createElement('div');
+            el.className = 'custom-circular-marker';
+
+            const markerColor = attr.isBusiness ? '#20B2AA' : '#D2691E';
+            const imageUrl = attr.image || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png";
+
+            el.style.cssText = `
+                width: 45px;
+                height: 45px;
+                border: 3px solid ${markerColor};
+                border-radius: 50%;
+                background-image: url(${imageUrl});
+                background-size: cover;
+                background-position: center;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            `;
+
+            wrapper.appendChild(el);
+
+            el.onmouseenter = () => {
+                el.style.transform = 'scale(1.2) translateY(-5px)';
+                el.style.boxShadow = `0 0 20px ${markerColor}aa`;
+            };
+            el.onmouseleave = () => {
+                el.style.transform = 'scale(1) translateY(0)';
+                el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            };
+
+            const galleryCount = attr.gallery_urls?.length || 0;
+            const popupContent = `
+                <div style="color: #333; padding: 0; min-width: 240px; overflow: hidden; border-radius: 12px; font-family: system-ui;">
+                    <div style="position: relative">
+                        <img src="${imageUrl}" style="width: 100%; height: 130px; object-fit: cover; border-bottom: 2px solid #eee" />
+                        ${galleryCount > 0 ? '<span style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">+' + galleryCount + ' fotos</span>' : ''}
+                    </div>
+                    <div style="padding: 12px">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px">
+                            <h4 style="margin: 0; font-size: 17px; font-weight: 800; color: ${markerColor}">${attr.name}</h4>
+                            <span style="font-size: 10px; background: #eee; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">${attr.category || 'Lugar'}</span>
+                        </div>
+                        <p style="margin: 0 0 12px 0; font-size: 13px; line-height: 1.5; color: #555">${attr.description}</p>
+                        
+                        <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" 
+                            style="background: ${markerColor}; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 8px">
+                            🚀 ¡Ir ahora!
+                        </button>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                            <button onclick="window.requestRecord('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
+                                style="background: white; color: #777; border: 1px solid #ddd; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 11px">
+                                🎙️ Grabar
+                            </button>
+                            <button onclick="window.requestPlayStories('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
+                                style="background: #f5f5f5; color: #333; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 11px">
+                                👂 Historias
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const marker = new mapboxgl.Marker(wrapper)
+                    .setLngLat(attr.coords as [number, number])
+                    .setPopup(new mapboxgl.Popup({ offset: 35, maxWidth: '280px' }).setHTML(popupContent))
+                    .addTo(currentMap);
+
+                (wrapper as any)._attrId = attr.id;
+                markersRef.current.push(marker);
+            } catch (e) { }
+        });
+
+    }, [attractions, isMapReady]);
+
+    // 2. Global Listeners Effect (Depends on location/ready state, but doesn't recreate markers)
+    useEffect(() => {
+        if (!isMapReady || !map.current) return;
+        const currentMap = map.current;
 
         (window as any).requestRoute = (destLng: number, destLat: number, destName: string) => {
             if (userLocation && map.current) drawRoute(userLocation, [destLng, destLat], destName);
@@ -159,47 +248,30 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay }: MapProps) => {
             else onNarrate?.(`Aún no hay historias para ${name}.`);
         };
 
-        attractions.forEach(attr => {
-            if (!currentMap || !attr.coords) return;
-            const el = document.createElement('div');
-            el.className = 'marker';
-            el.style.cssText = `background: ${attr.isBusiness ? '#20B2AA' : '#D2691E'}; width:24px; height:24px; border-radius:50%; border:2px solid white; cursor:pointer;`;
+        (window as any).focusPlaceOnMap = (placeName: string) => {
+            const found = attractions.find(a =>
+                placeName.toLowerCase().includes(a.name.toLowerCase()) ||
+                a.name.toLowerCase().includes(placeName.toLowerCase())
+            );
 
-            const popupContent = `
-                <div style="color: #333; padding: 0; min-width: 220px; overflow: hidden; border-radius: 8px">
-                    ${attr.image ? `<img src="${attr.image}" style="width: 100%; height: 120px; object-fit: cover; border-bottom: 2px solid #eee" />` : ''}
-                    <div style="padding: 10px">
-                        <h4 style="margin: 0 0 5px 0; font-size: 16px;">${attr.name}</h4>
-                        <p style="margin: 0 0 8px 0; font-size: 12px; line-height: 1.4; color: #666">${attr.description}</p>
-                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
-                            <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" 
-                                style="background: #20B2AA; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; width: 100%">
-                                ✨ ¡Llevame ahí!
-                            </button>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px">
-                                <button onclick="window.requestRecord('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
-                                    style="background: white; color: #D2691E; border: 2px solid #D2691E; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 11px">
-                                    🎙️ Grabar
-                                </button>
-                                <button onclick="window.requestPlayStories('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
-                                    style="background: #D2691E; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 11px">
-                                    👂 Oír relatos
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+            if (found && found.coords) {
+                currentMap.flyTo({ center: found.coords as [number, number], zoom: 15 });
 
-            try {
-                const marker = new mapboxgl.Marker(el)
-                    .setLngLat(attr.coords as [number, number])
-                    .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupContent))
-                    .addTo(currentMap);
-                markersRef.current.push(marker);
-            } catch (e) { }
-        });
-    }, [attractions, userLocation, isMapReady]);
+                if (userLocation) {
+                    drawRoute(userLocation, found.coords as [number, number], found.name);
+                }
+
+                const targetMarker = markersRef.current.find((m: any) => m.getElement()._attrId === found.id);
+                if (targetMarker) {
+                    if (!targetMarker.getPopup()?.isOpen()) targetMarker.togglePopup();
+                }
+
+                if (onPlaceFocus) onPlaceFocus(found);
+                return found;
+            }
+            return null;
+        };
+    }, [isMapReady, attractions, userLocation]);
 
     if (error) {
         return (

@@ -3,7 +3,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
 
-const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: string, externalStory?: { url: string, name: string } }) => {
+const COLOR_RED = "#9E1B1B";
+const COLOR_BLUE = "#1A3A6C";
+const COLOR_GOLD = "#F1C40F";
+
+const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
+    externalTrigger?: string,
+    externalStory?: { url: string, name: string },
+    isModalOpen?: boolean
+}) => {
     // State
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
     const [input, setInput] = useState('');
@@ -12,7 +20,9 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [showHistory, setShowHistory] = useState(false); // Toggle for full chat history
+    const [audioBlocked, setAudioBlocked] = useState(false); // Handle autoplay block
     const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
+    const [isIdle, setIsIdle] = useState(false); // For auto-hide
 
     useEffect(() => {
         if (externalTrigger) {
@@ -85,22 +95,37 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
         return assistantMsgs[assistantMsgs.length - 1].content;
     };
 
-    // Proactive Engagement Timer
+    // Idle / Auto-hide logic
     useEffect(() => {
         const checkInterval = setInterval(() => {
             const timeSinceLast = Date.now() - lastInteractionRef.current;
-            const isIdle = !isSpeaking && !isThinking && !isListening && !input.trim();
+            const idleTime = 30000; // 30 seconds
 
-            // 60 seconds = 60000ms
-            if (timeSinceLast >= 60000 && isIdle) {
+            if (timeSinceLast >= idleTime && !isSpeaking && !isThinking && !isListening && !input.trim()) {
+                setIsIdle(true);
+                setShowHistory(false);
+            } else {
+                setIsIdle(false);
+            }
+
+            // Proactive Engagement (keep existing logic but higher threshold)
+            if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
                 const randomPrompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
                 triggerAssistantMessage(randomPrompt);
                 updateInteractionTime();
             }
-        }, 5000); // Check every 5 seconds
+        }, 5000);
 
         return () => clearInterval(checkInterval);
-    }, [isSpeaking, isThinking, isListening, input]);
+    }, [isSpeaking, isThinking, isListening, input, engagementPrompts]);
+
+    // Global access for cards
+    useEffect(() => {
+        (window as any).santiNarrate = (text: string) => {
+            handleSend(text);
+        };
+        return () => { delete (window as any).santiNarrate; };
+    }, [messages]);
 
     // Typewriter Effect Logic
     useEffect(() => {
@@ -137,9 +162,7 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                 body: JSON.stringify({ text }),
             });
 
-            if (response.status === 401) {
-                throw new Error("API_KEY_MISSING");
-            }
+            if (response.status === 401) throw new Error("API_KEY_MISSING");
             if (!response.ok) throw new Error("Audio generation failed");
 
             const blob = await response.blob();
@@ -147,7 +170,10 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
 
             if (audioRef.current) {
                 audioRef.current.src = url;
-                audioRef.current.play();
+                audioRef.current.play().catch(err => {
+                    console.warn("Autoplay blocked:", err);
+                    setAudioBlocked(true);
+                });
             }
         } catch (error: any) {
             console.error("TTS Error:", error);
@@ -161,6 +187,11 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
         playAudioResponse(text);
+
+        // Trigger map focus if a place is mentioned
+        if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+            (window as any).focusPlaceOnMap(text);
+        }
     };
 
     const playUserStory = async (url: string, name: string) => {
@@ -235,6 +266,11 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
             // Speak the response
             playAudioResponse(botReply);
 
+            // Detect place in reply and focus map
+            if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+                (window as any).focusPlaceOnMap(botReply);
+            }
+
         } catch (error) {
             console.error(error);
             setMessages(prev => [...prev, { role: 'assistant', content: "Ocurrió un error al contactar a mi cerebro digital. Intenta más tarde." }]);
@@ -260,30 +296,62 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
 
         // Initialize
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
+        if (!SpeechRecognition) {
+            alert("El motor de reconocimiento no está disponible.");
+            return;
+        }
 
-        recognition.lang = 'es-AR'; // Argentine Spanish
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'es-AR';
         recognition.continuous = false;
         recognition.interimResults = false;
 
-        recognition.onstart = () => setIsListening(true);
+        recognition.onstart = () => {
+            console.log("Voice recognition started");
+            setIsListening(true);
+        };
+
+        recognition.onerror = (event: any) => {
+            setIsListening(false);
+            if (event.error === 'no-speech') {
+                console.log("Speech recognition info: no-speech detected (user was silent)");
+            } else {
+                console.error("Speech recognition error", event.error);
+                if (event.error === 'not-allowed') {
+                    alert("Permiso denegado. Asegurate de usar HTTPS o localhost para que el micrófono funcione.");
+                } else {
+                    alert("Error de voz: " + event.error);
+                }
+            }
+        };
+
         recognition.onend = () => {
+            console.log("Voice recognition ended");
             setIsListening(false);
             updateInteractionTime();
         };
 
         recognition.onresult = (event: any) => {
             const transcript = event.results[0][0].transcript;
+            console.log("Result received:", transcript);
             if (transcript) {
                 handleSend(transcript);
             }
         };
 
-        recognition.start();
+        try {
+            recognition.start();
+        } catch (e) {
+            console.error("Start error:", e);
+            setIsListening(false);
+        }
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#333', position: 'relative' }}>
+        <div
+            onClick={() => { if (isIdle) { setIsIdle(false); updateInteractionTime(); } }}
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#333', position: 'relative' }}
+        >
             <audio
                 ref={audioRef}
                 style={{ display: 'none' }}
@@ -295,40 +363,58 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
             {/* MAIN ROBOT DISPLAY & FLOATING BUBBLE */}
             <div className="robot-container" style={{
                 position: 'fixed',
-                bottom: '0',
-                left: '0',
-                zIndex: 9999,
+                bottom: isModalOpen ? '-80px' : '10px',
+                left: '10px',
+                zIndex: 40000,
                 pointerEvents: 'none',
                 display: 'flex',
                 alignItems: 'flex-end',
+                transition: 'bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
             }}>
-                {/* The Robot */}
+                {/* The Robot (HOST POSITION - Always fixed and visible) */}
                 <img
-                    className="robot-avatar"
+                    className={`robot-avatar ${isSpeaking ? 'active' : 'idle'}`}
                     src={isSpeaking
                         ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
                         : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                     }
                     alt="Robot Guia Santi"
                     style={{
-                        height: 'clamp(180px, 40vh, 420px)',
+                        height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
                         width: 'auto',
                         objectFit: 'contain',
-                        marginBottom: '-10px',
-                        filter: 'drop-shadow(0 0 15px rgba(255, 255, 255, 0.6))'
+                        filter: 'drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
+                        transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        opacity: 1,
+                        transform: isSpeaking ? 'scale(1)' : 'scale(0.9)',
+                        pointerEvents: 'auto'
                     }}
                 />
 
-                {/* The Floating Thought Bubble */}
-                {!showHistory && (isThinking || isSpeaking || messages.length === 0) && (
+                {/* The Floating Thought Bubble (Above Head) */}
+                {!showHistory && (isThinking || isSpeaking || messages.length === 0 || audioBlocked) && (
                     <div className="thought-bubble-popup" style={{
-                        marginBottom: 'clamp(120px, 25vh, 250px)',
+                        marginBottom: isSpeaking ? 'clamp(200px, 35vh, 400px)' : 'clamp(100px, 18vh, 180px)',
                         marginLeft: '-40px',
-                        maxWidth: 'min(300px, 60vw)',
+                        maxWidth: 'min(300px, 65vw)',
                         pointerEvents: 'auto',
-                        animation: 'popIn 0.3s ease-out forwards'
+                        animation: 'popIn 0.3s ease-out forwards',
+                        transition: 'all 0.5s ease',
+                        cursor: audioBlocked ? 'pointer' : 'default',
+                        borderBottomLeftRadius: '8px',
+                        borderTopLeftRadius: '30px'
+                    }} onClick={() => {
+                        if (audioBlocked && audioRef.current) {
+                            setAudioBlocked(false);
+                            audioRef.current.play();
+                        }
                     }}>
-                        {messages.length === 0 ? (
+                        {audioBlocked ? (
+                            <div style={{ color: '#D2691E', fontWeight: 'bold' }}>
+                                🔇 Santi está silenciado.<br />
+                                <span style={{ fontSize: '0.8rem' }}>Hacé clic aquí para oírlo.</span>
+                            </div>
+                        ) : messages.length === 0 ? (
                             <div style={{ margin: 0, textAlign: 'center', fontSize: '0.9rem' }}>
                                 <strong>¡Hola! Soy Santi.</strong><br />
                                 ¿En qué te ayudo?
@@ -346,19 +432,25 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
             </div>
 
 
-            {/* OPTIONAL HISTORY VIEW (Toggable) */}
+            {/* OPTIONAL HISTORY VIEW (Toggable Floating Panel) */}
             {showHistory && (
                 <div style={{
-                    flex: 1,
-                    padding: '15px',
-                    overflowY: 'auto',
+                    position: 'fixed',
+                    top: '180px', // Below the robot
+                    left: '20px',
+                    width: 'min(90%, 400px)',
+                    maxHeight: '60vh',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '15px',
-                    zIndex: 10,
-                    marginBottom: '100px',
-                    background: 'rgba(255,255,255,0.7)',
-                    backdropFilter: 'blur(5px)'
+                    zIndex: 29999, // Just behind robot
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    border: `1px solid ${COLOR_BLUE}44`,
+                    borderRadius: '24px',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                    padding: '20px',
+                    overflowY: 'auto'
                 }}>
                     {messages.map((m, i) => (
                         <div key={i} className={`message-container ${m.role}`}>
@@ -382,14 +474,18 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
             {/* INPUT AREA (Floating at bottom center) */}
             <div style={{
                 position: 'fixed',
-                bottom: '15px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 'min(90%, 600px)',
-                zIndex: 10000,
+                bottom: '20px',
+                right: '20px',
+                left: 'auto',
+                transform: isIdle ? 'translateY(150%)' : 'translateY(0)',
+                width: 'min(90%, 400px)',
+                zIndex: 30005,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px'
+                gap: '8px',
+                transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                opacity: isIdle ? 0 : 1,
+                pointerEvents: isIdle ? 'none' : 'auto'
             }}>
 
                 {/* Actions Row */}
@@ -412,7 +508,7 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                     </button>
 
                     <button
-                        onClick={() => alert('Próximamente: Login para Negocios y Usuarios Certificados')}
+                        onClick={() => window.location.href = '/login'}
                         style={{
                             background: 'rgba(32, 178, 170, 0.95)',
                             border: 'none',
@@ -429,6 +525,19 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                     </button>
                 </div>
 
+                {/* Instruction Legend */}
+                <div style={{
+                    textAlign: 'center',
+                    fontSize: '0.85rem',
+                    color: COLOR_GOLD,
+                    fontWeight: 'bold',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                    marginBottom: '5px',
+                    animation: 'pulseText 2s infinite'
+                }}>
+                    🎤 ¡Presioná el mic y preguntame lo que quieras!
+                </div>
+
                 <div style={{
                     display: 'flex',
                     gap: '8px',
@@ -442,9 +551,9 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                         onClick={toggleListening}
                         className={isListening ? 'listening-pulse' : ''}
                         style={{
-                            background: isListening ? '#ff4444' : 'white',
-                            color: isListening ? 'white' : '#555',
-                            border: '1px solid #eee',
+                            background: isListening ? COLOR_RED : 'white',
+                            color: isListening ? 'white' : COLOR_BLUE,
+                            border: `2px solid ${isListening ? COLOR_GOLD : '#eee'}`,
                             borderRadius: '50%',
                             width: '44px',
                             height: '44px',
@@ -481,8 +590,8 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                         onClick={() => handleSend()}
                         disabled={isLoading || (!input.trim() && !isListening)}
                         style={{
-                            background: '#20B2AA',
-                            color: 'white',
+                            background: (isLoading || !input.trim()) ? 'rgba(255,255,255,0.1)' : COLOR_GOLD,
+                            color: (isLoading || !input.trim()) ? 'rgba(255,255,255,0.3)' : '#000',
                             border: 'none',
                             borderRadius: '50%',
                             width: '44px',
@@ -503,36 +612,44 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
             </div>
 
             <style jsx>{`
+                @keyframes floatSanti {
+                    0% { transform: translateY(0); }
+                    50% { transform: translateY(-15px); }
+                    100% { transform: translateY(0); }
+                }
+
                 .thought-bubble-popup {
-                    background: #fff;
-                    padding: 15px;
-                    border-radius: 25px;
-                    border-bottom-left-radius: 5px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-                    color: #333;
+                    background: ${COLOR_BLUE};
+                    padding: 20px;
+                    border-radius: 30px;
+                    border-bottom-left-radius: 8px;
+                    box-shadow: 0 15px 45px rgba(0,0,0,0.4);
+                    color: white;
                     position: relative;
-                    border: 2px solid #fff;
+                    border: 2px solid ${COLOR_GOLD}66;
                 }
 
                 .thought-bubble-popup::before {
                     content: '';
                     position: absolute;
-                    bottom: -10px;
-                    left: -10px;
-                    width: 20px;
-                    height: 20px;
-                    background: white;
+                    bottom: -12px;
+                    left: 20px;
+                    width: 25px;
+                    height: 25px;
+                    background: ${COLOR_BLUE};
                     border-radius: 50%;
+                    border: 2px solid ${COLOR_GOLD}33;
                 }
                  .thought-bubble-popup::after {
                     content: '';
                     position: absolute;
-                    bottom: -18px;
-                    left: -22px;
-                    width: 10px;
-                    height: 10px;
-                    background: white;
+                    bottom: -22px;
+                    left: 5px;
+                    width: 12px;
+                    height: 12px;
+                    background: ${COLOR_BLUE};
                     border-radius: 50%;
+                    border: 1px solid ${COLOR_GOLD}22;
                 }
 
                 @keyframes popIn {
@@ -553,15 +670,17 @@ const ChatInterface = ({ externalTrigger, externalStory }: { externalTrigger?: s
                     box-shadow: 0 2px 5px rgba(0,0,0,0.05);
                 }
                 .speech-bubble {
-                    background: #D2691E;
+                    background: ${COLOR_RED};
                     color: white;
                     border-bottom-right-radius: 4px;
+                    box-shadow: 0 4px 15px ${COLOR_RED}33;
                 }
                 .thought-bubble-list {
-                    background: white;
-                    color: #333;
-                    border: 1px solid #eee;
+                    background: ${COLOR_BLUE};
+                    color: white;
+                    border: 1px solid ${COLOR_BLUE}55;
                     border-bottom-left-radius: 4px;
+                    box-shadow: 0 4px 15px ${COLOR_BLUE}33;
                 }
                 
                 .thinking-dots {
