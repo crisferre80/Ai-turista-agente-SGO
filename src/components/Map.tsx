@@ -61,10 +61,15 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             m.addControl(geolocate, 'top-right');
             m.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
+            const hasGreetedRef = { current: false };
             geolocate.on('geolocate', (e: any) => {
                 const loc: [number, number] = [e.coords.longitude, e.coords.latitude];
                 setUserLocation(loc);
-                onNarrate?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.");
+
+                if (!hasGreetedRef.current) {
+                    onNarrate?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.");
+                    hasGreetedRef.current = true;
+                }
             });
 
             m.on('load', () => {
