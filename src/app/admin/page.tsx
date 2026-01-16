@@ -519,6 +519,6 @@ const placeCard = { border: '1px solid #eee', borderRadius: '16px', overflow: 'h
 const Input = ({ label, value, onChange }: { label: string, value: any, onChange: (v: string) => void }) => (
     <div style={{ width: '100%' }}>
         {label && <label style={labelStyle}>{label}</label>}
-        <input style={inputStyle} value={value} onChange={e => onChange(e.target.value)} />
+        <input style={inputStyle} value={value || ''} onChange={e => onChange(e.target.value)} />
     </div>
 );

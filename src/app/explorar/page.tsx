@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import ChatInterface from '@/components/ChatInterface';
+import GalleryModal from '@/components/GalleryModal';
 
 const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
@@ -22,12 +24,14 @@ type PlaceType = {
     gallery_urls?: string[];
 };
 
+
 export default function ExplorePage() {
     const [attractions, setAttractions] = useState<PlaceType[]>([]);
     const [businesses, setBusinesses] = useState<PlaceType[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'attractions' | 'businesses'>('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [galleryModal, setGalleryModal] = useState<{urls: string[], name: string} | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
     useEffect(() => {
@@ -206,9 +210,37 @@ export default function ExplorePage() {
                 >
                     Ver en el Mapa 🗺️
                 </button>
+                {place.gallery_urls && place.gallery_urls.length > 0 && (
+                    <button style={{
+                        background: `linear-gradient(135deg, ${COLOR_GOLD}, '#f39c12')`,
+                        color: COLOR_BLUE,
+                        border: 'none',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        marginTop: '8px',
+                        transition: 'all 0.2s ease'
+                    }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setGalleryModal({ urls: place.gallery_urls!, name: place.name });
+                        }}
+                    >
+                        Ver Galería 📸
+                    </button>
+                )}
             </div>
         </div>
     );
+
 
     return (
         <div style={{
@@ -253,7 +285,7 @@ export default function ExplorePage() {
                                 transition: 'all 0.2s ease',
                                 display: 'inline-block'
                             }}>
-                                ← Volver al Mapa
+                                ← Volver al Panel
                             </Link>
                         </div>
                         <h1 style={{
@@ -380,6 +412,53 @@ export default function ExplorePage() {
                 </div>
             </header>
 
+            {/* Quick Categories */}
+            <div style={{
+                background: 'rgba(255,255,255,0.95)',
+                padding: '20px',
+                borderRadius: '24px',
+                marginBottom: '30px',
+                boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
+                border: `2px solid ${COLOR_BLUE}11`
+            }}>
+                <h2 style={{ textAlign: 'center', color: COLOR_BLUE, marginBottom: '20px' }}>Categorías Destacadas</h2>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                    {['Hoteles', 'Gastronomía', 'Cultura', 'Entretenimiento'].map(cat => (
+                        <button
+                            key={cat}
+                            onClick={() => setSelectedCategory(categories.includes(cat) ? cat : 'all')}
+                            style={{
+                                background: 'rgba(255,255,255,0.8)',
+                                color: COLOR_BLUE,
+                                border: `2px solid ${COLOR_BLUE}22`,
+                                padding: '10px 20px',
+                                borderRadius: '50px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                    <button
+                        onClick={() => setSelectedCategory('all')}
+                        style={{
+                            background: 'rgba(255,255,255,0.8)',
+                            color: COLOR_BLUE,
+                            border: `2px solid ${COLOR_BLUE}22`,
+                            padding: '10px 20px',
+                            borderRadius: '50px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        Todas
+                    </button>
+                </div>
+            </div>
+
             {/* Main Content */}
             <main style={{
                 maxWidth: '1400px',
@@ -433,6 +512,17 @@ export default function ExplorePage() {
                     </div>
                 )}
             </main>
+
+            {/* Gallery Modal */}
+            {galleryModal && (
+                <GalleryModal
+                    urls={galleryModal.urls}
+                    name={galleryModal.name}
+                    onClose={() => setGalleryModal(null)}
+                />
+            )}
+
+            <ChatInterface />
 
             <style dangerouslySetInnerHTML={{
                 __html: `

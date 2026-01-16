@@ -6,6 +6,7 @@ import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
 import { santiSpeak, santiNarrate } from '@/lib/speech';
 import Image from 'next/image';
+import Link from 'next/link';
 
 // IMAGES PROVIDED BY USER
 const IMG_PATTERN = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg";
@@ -110,6 +111,54 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
   </button>
 );
 
+// Header superior acorde al rediseño de referencia
+const HeaderBar = () => (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 24px',
+    background: '#0e1f1dCC',
+    backdropFilter: 'blur(10px)',
+    borderBottom: `1px solid ${COLOR_WHITE}22`,
+    zIndex: 50
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 8, background: COLOR_GOLD, display: 'grid', placeItems: 'center', color: '#0e1f1d', fontWeight: 900 }}>S</div>
+      <div style={{ color: COLOR_WHITE, fontWeight: 900, letterSpacing: 0.5 }}>Santi IA · Guía Turístico</div>
+    </div>
+    <nav style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <Link href="/explorar" style={{ color: COLOR_WHITE, textDecoration: 'none', opacity: 0.9 }}>Explorar</Link>
+      <Link href="/login" style={{ color: COLOR_WHITE, textDecoration: 'none', opacity: 0.9 }}>Acceder</Link>
+      <Link href="/profile" style={{ color: '#0e1f1d', background: COLOR_GOLD, padding: '8px 14px', borderRadius: 999, fontWeight: 700, textDecoration: 'none' }}>Acreditados</Link>
+    </nav>
+  </div>
+);
+
+// Tarjeta simple para cuadrícula de atracciones del hero
+const AttractionTile = ({ title, img }: { title: string; img?: string }) => (
+  <div style={{
+    background: 'rgba(255,255,255,0.85)',
+    borderRadius: 20,
+    overflow: 'hidden',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    border: `1px solid ${COLOR_WHITE}22`
+  }}>
+    <Image src={img || IMG_PATTERN} alt={title} width={400} height={220} style={{ width: '100%', height: 220, objectFit: 'cover' }} />
+    <div style={{ padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h4 style={{ margin: 0, color: COLOR_WHITE }}>{title}</h4>
+        <Link href="/explorar" style={{ background: COLOR_GOLD, color: '#0e1f1d', borderRadius: 999, padding: '6px 12px', fontWeight: 700, textDecoration: 'none' }}>Explorar</Link>
+      </div>
+    </div>
+  </div>
+);
+
 export default function Home() {
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [narration] = useState<string | undefined>(undefined);
@@ -118,10 +167,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activePlace, setActivePlace] = useState<Attraction | null>(null);
   const [zoomImage, setZoomImage] = useState<string | undefined>(undefined);
-  const [showIntro, setShowIntro] = useState(true);
+  const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
     fetchData();
+
+    // Check intro
+    const introSeen = sessionStorage.getItem('santi_visual_intro_seen');
+    setShowIntro(!introSeen);
 
     // Check if we need to focus on a specific place
     const focusPlace = localStorage.getItem('focusPlace');
@@ -182,6 +235,7 @@ export default function Home() {
       position: 'relative',
       overflowX: 'hidden'
     }}>
+      <HeaderBar />
       {/* BACKGROUND LAYERS */}
       <div style={{
         position: 'fixed',
@@ -216,14 +270,40 @@ export default function Home() {
 
       {/* CONTENT WRAPPER */}
       <div style={{ position: 'relative', zIndex: 10, padding: '70px 20px 0 20px' }}>
-        {/* Top Header */}
-        <header style={{
-          padding: '20px 0',
-          textAlign: 'center',
-          color: '#1e293b'
+        {/* HERO superior con saludo, búsqueda y avatar Santi */}
+        <section style={{
+          marginTop: 20,
+          borderRadius: 24,
+          overflow: 'hidden',
+          position: 'relative',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
         }}>
-          {/* Vacío: El título ahora está junto a Santi */}
-        </header>
+          <Image src={IMG_PATTERN} alt="Fondo ciudad" width={1600} height={500} style={{ width: '100%', height: 380, objectFit: 'cover', filter: 'blur(0px) brightness(0.8)' }} />
+          <div style={{
+            position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: 24
+          }}>
+            <div style={{ maxWidth: 700 }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.10)',
+                border: `1px solid ${COLOR_WHITE}22`,
+                borderRadius: 16,
+                padding: '16px 18px',
+                color: COLOR_WHITE
+              }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>¡Hola! Soy Santi, tu guía interactivo.</div>
+                <div style={{ opacity: 0.9 }}>¿Necesitas ayuda para descubrir Santiago del Estero?</div>
+                <div style={{
+                  
+                }}>
+                  
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', placeItems: 'center', paddingRight: 12 }}>
+              <Image src="/santi-avatar.png" alt="Santi" width={240} height={340} style={{ filter: `drop-shadow(0 8px 30px ${COLOR_GOLD}66)` }} />
+            </div>
+          </div>
+        </section>
 
         {/* Responsive Styles Injection */}
         <style dangerouslySetInnerHTML={{
@@ -305,7 +385,62 @@ export default function Home() {
               onPlaceFocus={setActivePlace}
             />
           )}
+          {/* Panel de categorías lateral sobre el mapa */}
+          <div style={{
+            position: 'absolute',
+            left: 20,
+            top: 20,
+            width: 220,
+            background: 'rgba(3,10,15,0.6)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: 16,
+            padding: 16,
+            border: `1px solid ${COLOR_WHITE}22`,
+            color: COLOR_WHITE
+          }}>
+            <div style={{ fontWeight: 800, marginBottom: 12 }}>Explora</div>
+            {['Atracciones', 'Alojamientos', 'Gastronomía', 'Cultura'].map((t, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+                <span>{t}</span>
+                <div style={{ width: 34, height: 20, borderRadius: 999, background: `${COLOR_WHITE}22`, position: 'relative' }}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: COLOR_GOLD, position: 'absolute', top: 2, left: 2 }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
+
+        {/* Tarjetas de atracciones destacadas como en referencia */}
+        <section style={{ padding: '10px 0 20px 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+            {attractions.filter(a => a.image).slice(0, 4).map((a, idx) => (
+              <AttractionTile key={idx} title={a.name} img={a.image} />
+            ))}
+          </div>
+        </section>
+
+        {/* SECTION: Explore Button */}
+        <div style={{ textAlign: 'center', margin: '40px 0' }}>
+          <button
+            onClick={() => window.location.href = '/explorar'}
+            style={{
+              background: `linear-gradient(135deg, ${COLOR_BLUE}, ${COLOR_RED})`,
+              color: 'white',
+              border: 'none',
+              padding: '20px 40px',
+              borderRadius: '50px',
+              fontSize: '1.5rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: `0 10px 30px rgba(0,0,0,0.3)`,
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            🗺️ Explorar Lugares
+          </button>
+        </div>
 
         {/* MAIN CONTENT STACK */}
         <div className="content-stack" style={{
