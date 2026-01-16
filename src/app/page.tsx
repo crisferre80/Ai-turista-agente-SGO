@@ -4,10 +4,11 @@ import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
+import { santiSpeak, santiNarrate } from '@/lib/speech';
+import Image from 'next/image';
 
 // IMAGES PROVIDED BY USER
 const IMG_PATTERN = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg";
-const IMG_FLAG = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455530/HD-wallpaper-flag-of-santiago-del-estero-grunge-art-rhombus-grunge-texture-argentine-province-santiago-del-estero-flag-argentina-national-symbols-santiago-del-estero-provinces-of-argentina-creative-art_aiecgf.jpg";
 
 // COLORS EXTRACTED FROM FLAG
 const COLOR_RED = "#9E1B1B";
@@ -15,8 +16,25 @@ const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
 const COLOR_WHITE = "#FFFFFF";
 
+// Tipos
+interface Attraction {
+  name: string;
+  image?: string;
+  description?: string;
+  info?: string;
+  coords: [number, number];
+  isBusiness?: boolean;
+  gallery_urls?: string[];
+}
+
+interface Video {
+  id: string;
+  title: string;
+  video_url: string;
+}
+
 // Componentes UI Atómicos
-const GalleryCard = ({ title, img, color, onClick }: any) => (
+const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onClick: () => void }) => (
   <div
     onClick={onClick}
     style={{
@@ -41,7 +59,7 @@ const GalleryCard = ({ title, img, color, onClick }: any) => (
       e.currentTarget.style.borderColor = `${COLOR_BLUE}44`;
     }}
   >
-    <img src={img} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    <Image src={img || IMG_PATTERN} alt={title} width={160} height={220} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
     <div style={{
       position: 'absolute',
       bottom: 0, left: 0, right: 0,
@@ -55,7 +73,7 @@ const GalleryCard = ({ title, img, color, onClick }: any) => (
   </div>
 );
 
-const QuickActionBtn = ({ icon, label, onClick }: any) => (
+const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) => (
   <button
     onClick={onClick}
     style={{
@@ -93,12 +111,12 @@ const QuickActionBtn = ({ icon, label, onClick }: any) => (
 );
 
 export default function Home() {
-  const [attractions, setAttractions] = useState<any[]>([]);
-  const [narration, setNarration] = useState<string | undefined>(undefined);
+  const [attractions, setAttractions] = useState<Attraction[]>([]);
+  const [narration] = useState<string | undefined>(undefined);
   const [activeStory, setActiveStory] = useState<{ url: string; name: string } | undefined>(undefined);
-  const [videos, setVideos] = useState<any[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activePlace, setActivePlace] = useState<any>(null);
+  const [activePlace, setActivePlace] = useState<Attraction | null>(null);
   const [zoomImage, setZoomImage] = useState<string | undefined>(undefined);
   const [showIntro, setShowIntro] = useState(true);
 
@@ -111,8 +129,8 @@ export default function Home() {
       localStorage.removeItem('focusPlace');
       // Wait for map and data to load
       setTimeout(() => {
-        if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
-          (window as any).focusPlaceOnMap(focusPlace);
+        if (typeof window !== 'undefined' && window.focusPlaceOnMap) {
+          window.focusPlaceOnMap(focusPlace);
         }
       }, 2000);
     }
@@ -152,8 +170,7 @@ export default function Home() {
   };
 
   const handleNarration = (text: string) => {
-    // Use a non-AI-triggering narration method
-    (window as any).santiSpeak?.(text);
+    santiSpeak(text);
   };
 
   return (
@@ -191,7 +208,7 @@ export default function Home() {
             sessionStorage.setItem('santi_visual_intro_seen', 'true');
             // Small delay to let the overlay fade out before Santi speaks
             setTimeout(() => {
-              (window as any).santiNarrate?.("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
+              santiNarrate("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
             }, 500);
           }}
         />
@@ -343,10 +360,9 @@ export default function Home() {
               {attractions.filter(t => t.image).slice(0, 15).map((attr, i) => (
                 <div key={i} style={{ scrollSnapAlign: 'start' }}>
                   <GalleryCard
-                    color={COLOR_RED}
                     title={attr.name}
                     img={attr.image}
-                    onClick={() => (window as any).santiNarrate?.(`Contame un poco sobre ${attr.name}`)}
+                    onClick={() => santiNarrate(`Contame un poco sobre ${attr.name}`)}
                   />
                 </div>
               ))}
@@ -371,22 +387,22 @@ export default function Home() {
               <QuickActionBtn
                 icon="🍽️"
                 label="Gastronomía"
-                onClick={() => (window as any).santiNarrate?.("¿Qué lugares para comer hay registrados?")}
+                onClick={() => santiNarrate("¿Qué lugares para comer hay registrados?")}
               />
               <QuickActionBtn
                 icon="🏨"
                 label="Hotelería"
-                onClick={() => (window as any).santiNarrate?.("Recomendame hoteles registrados")}
+                onClick={() => santiNarrate("Recomendame hoteles registrados")}
               />
               <QuickActionBtn
                 icon="🎭"
                 label="Cultura"
-                onClick={() => (window as any).santiNarrate?.("¿Qué actividades culturales me sugeris?")}
+                onClick={() => santiNarrate("¿Qué actividades culturales me sugeris?")}
               />
               <QuickActionBtn
                 icon="👤"
                 label="Mi Perfil"
-                onClick={() => (window as any).santiNarrate?.("¿Cómo puedo crear mi perfil certificado?")}
+                onClick={() => santiNarrate("¿Cómo puedo crear mi perfil certificado?")}
               />
             </div>
 
@@ -439,9 +455,12 @@ export default function Home() {
               >
                 ✕
               </button>
-              <img
+              <Image
                 src={activePlace.image || IMG_PATTERN}
                 onClick={() => setZoomImage(activePlace.image)}
+                alt={activePlace.name}
+                width={550}
+                height={300}
                 style={{ width: '100%', height: '300px', objectFit: 'cover', cursor: 'zoom-in', borderBottom: `4px solid ${COLOR_GOLD}` }}
               />
               <div style={{ padding: '30px' }}>
@@ -465,10 +484,13 @@ export default function Home() {
                     <h4 style={{ marginBottom: '15px', color: COLOR_GOLD }}>📸 Galería de Fotos</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
                       {activePlace.gallery_urls.map((url: string, idx: number) => (
-                        <img
+                        <Image
                           key={idx}
                           src={url}
                           onClick={() => setZoomImage(url)}
+                          alt={`Imagen ${idx + 1} de ${activePlace.name}`}
+                          width={140}
+                          height={110}
                           style={{ width: '100%', height: '110px', objectFit: 'cover', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.3s', border: `1px solid ${COLOR_WHITE}22` }}
                           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
@@ -480,7 +502,7 @@ export default function Home() {
 
                 <button
                   onClick={() => {
-                    (window as any).requestRoute(activePlace.coords[0], activePlace.coords[1], activePlace.name);
+                  window.requestRoute?.(activePlace.coords[0], activePlace.coords[1], activePlace.name);
                     setActivePlace(null);
                   }}
                   style={{ width: '100%', marginTop: '40px', background: `linear-gradient(45deg, ${COLOR_RED}, ${COLOR_BLUE})`, color: 'white', border: 'none', padding: '20px', borderRadius: '20px', fontWeight: '900', fontSize: '1.3rem', cursor: 'pointer', boxShadow: `0 15px 35px ${COLOR_RED}66`, textTransform: 'uppercase', letterSpacing: '2px' }}
@@ -515,8 +537,11 @@ export default function Home() {
             >
               ✕
             </button>
-            <img
+            <Image
               src={zoomImage}
+              alt="Imagen ampliada"
+              width={800}
+              height={600}
               style={{ maxWidth: '95%', maxHeight: '95%', borderRadius: '12px', boxShadow: `0 0 100px ${COLOR_GOLD}33`, cursor: 'default', border: `2px solid ${COLOR_GOLD}33` }}
               onClick={e => e.stopPropagation()}
             />

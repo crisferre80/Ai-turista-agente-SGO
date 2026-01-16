@@ -25,6 +25,7 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
     const [isVisible, setIsVisible] = useState(true);
     const [images, setImages] = useState(INTRO_IMAGES);
     const audioRef = React.useRef<HTMLAudioElement | null>(null);
+    const [isSpeaking, setIsSpeaking] = useState(false);
 
     // Play welcome audio on mount
     useEffect(() => {
@@ -42,6 +43,9 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                     const url = URL.createObjectURL(blob);
                     if (audioRef.current) {
                         audioRef.current.src = url;
+                        audioRef.current.addEventListener('play', () => setIsSpeaking(true));
+                        audioRef.current.addEventListener('ended', () => setIsSpeaking(false));
+                        audioRef.current.addEventListener('pause', () => setIsSpeaking(false));
                         audioRef.current.play().catch(() => {
                             console.log("Autoplay blocked - waiting for user interaction");
                         });
@@ -133,18 +137,23 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                 }}>
                     {/* Animated Santi */}
                     <div style={{
-                        animation: 'floatSantiIntro 4s ease-in-out infinite',
+                        animation: isSpeaking ? 'none' : 'floatSantiIntro 4s ease-in-out infinite',
                         marginBottom: '20px'
                     }}>
                         <div style={{
                             position: 'relative'
                         }}>
                             <img
-                                src={SANTI_AVATAR}
+                                src={isSpeaking
+                                    ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
+                                    : SANTI_AVATAR
+                                }
                                 alt="Santi"
                                 style={{
-                                    height: 'clamp(200px, 30vh, 320px)',
-                                    filter: 'drop-shadow(0 0 40px rgba(255,255,255,0.4))'
+                                    height: isSpeaking ? 'clamp(350px, 50vh, 600px)' : 'clamp(250px, 35vh, 400px)',
+                                    filter: 'drop-shadow(0 0 40px rgba(255,255,255,0.4))',
+                                    transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                    transform: isSpeaking ? 'scale(1)' : 'scale(0.9)'
                                 }}
                             />
                             {/* Greeting Bubble */}

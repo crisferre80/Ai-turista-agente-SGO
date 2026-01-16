@@ -282,9 +282,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             // Speak the response
             playAudioResponse(botReply);
 
-            // Detect place in reply and focus map
-            if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
-                (window as any).focusPlaceOnMap(botReply);
+            // Detect if user asked for directions and extract destination from user message
+            const isDirectionQuery = /(?:cómo|como) (?:llegar|voy|llego)|indicame|direcciones?|ruta|camino/i.test(textToSend);
+            console.log('Direction query detected:', isDirectionQuery, 'for message:', textToSend);
+            if (isDirectionQuery && typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+                // Extract potential place names from user message
+                const placeMatch = textToSend.match(/(?:a\s+|al\s+|hacia\s+|para\s+|voy a\s+|ir a\s+)(.+?)(?:\?|$|\.|\s+y\s+)/i);
+                console.log('Place match:', placeMatch);
+                if (placeMatch) {
+                    const destination = placeMatch[1].trim();
+                    (window as any).focusPlaceOnMap(destination);
+                }
             }
 
         } catch (error) {
@@ -777,6 +785,12 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 @keyframes popIn {
                     0% { transform: scale(0.95) translateY(-10px); opacity: 0; }
                     100% { transform: scale(1) translateY(0); opacity: 1; }
+                }
+
+                @media (max-width: 768px) {
+                    .robot-container {
+                        bottom: 80px !important; /* Move avatar up on mobile */
+                    }
                 }
 
                 @keyframes popInBubble {

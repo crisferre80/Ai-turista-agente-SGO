@@ -21,6 +21,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
     const [isMapReady, setIsMapReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
 
     const [lng] = useState(-64.2599);
@@ -64,6 +65,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             const hasGreetedRef = { current: false };
             geolocate.on('geolocate', (e: any) => {
                 const loc: [number, number] = [e.coords.longitude, e.coords.latitude];
+                console.log('User location set:', loc);
                 setUserLocation(loc);
 
                 if (!hasGreetedRef.current) {
@@ -75,6 +77,20 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             m.on('load', () => {
                 map.current = m;
                 setIsMapReady(true);
+
+                // Intentar obtener ubicación inicial
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const loc: [number, number] = [position.coords.longitude, position.coords.latitude];
+                            setUserLocation(loc);
+                        },
+                        (error) => {
+                            // Silenciar errores iniciales
+                        },
+                        { enableHighAccuracy: true, timeout: 5000 }
+                    );
+                }
             });
 
             return () => {
@@ -87,15 +103,29 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
         }
     }, [lng, lat, zoom]);
 
+    // Effect to draw pending route when user location becomes available
+    useEffect(() => {
+        if (userLocation && pendingDestination && map.current) {
+            console.log('Drawing pending route to:', pendingDestination.name);
+            drawRoute(userLocation, pendingDestination.coords, pendingDestination.name);
+            setPendingDestination(null);
+        }
+    }, [userLocation, pendingDestination]);
+
     const drawRoute = async (start: [number, number], end: [number, number], destName: string) => {
         if (!map.current) return;
+        console.log('Drawing route from', start, 'to', end, 'for', destName);
         try {
             const query = await fetch(
                 `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&language=es&access_token=${mapboxgl.accessToken}`,
                 { method: 'GET' }
             );
             const json = await query.json();
-            if (json.code !== 'Ok') throw new Error("Route not found");
+            console.log('Route API response:', json);
+            if (json.code !== 'Ok') {
+                console.log('Route API failed with code:', json.code);
+                throw new Error("Route not found");
+            }
 
             const data = json.routes[0];
             const route = data.geometry.coordinates;
@@ -126,8 +156,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             const bounds = new mapboxgl.LngLatBounds(route[0], route[0]);
             route.forEach((coord: [number, number]) => bounds.extend(coord));
             map.current.fitBounds(bounds, { padding: 100, duration: 1500 });
+            console.log('Route drawn successfully');
         } catch (error) {
-            onNarrate?.("Tuve un problema con el GPS. ¿Habilitaste tu ubicación?");
+            console.error('Error drawing route:', error);
+            onNarrate?.("No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.");
         }
     };
 
@@ -163,7 +195,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             el.className = 'custom-circular-marker';
 
             const markerColor = attr.isBusiness ? '#20B2AA' : '#D2691E';
-            const imageUrl = attr.image || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png";
+            const imageUrl = attr.image || "https://via.placeholder.com/45x45/cccccc/000000?text=Img";
 
             el.style.cssText = `
                 width: 45px;
@@ -254,10 +286,14 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
         };
 
         (window as any).focusPlaceOnMap = (placeName: string) => {
-            const found = attractions.find(a =>
-                placeName.toLowerCase().includes(a.name.toLowerCase()) ||
-                a.name.toLowerCase().includes(placeName.toLowerCase())
-            );
+            console.log('focusPlaceOnMap called with:', placeName);
+            const normalize = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '');
+            const normalizedPlaceName = normalize(placeName);
+
+            const found = attractions.find(a => {
+                const normalizedName = normalize(a.name);
+                return normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
+            });
 
             if (found && found.coords) {
                 currentMap.flyTo({ center: found.coords as [number, number], zoom: 15 });
@@ -265,7 +301,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                 if (userLocation) {
                     drawRoute(userLocation, found.coords as [number, number], found.name);
                 } else {
-                    onNarrate?.("Para mostrarte cómo llegar, por favor activá tu ubicación tocando el botoncito de la brújula arriba a la derecha.");
+                    console.log('Setting pending destination:', found.name);
+                    setPendingDestination({ coords: found.coords as [number, number], name: found.name });
+                    onNarrate?.("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.");
                 }
 
                 const targetMarker = markersRef.current.find((m: any) => m.getElement()._attrId === found.id);
