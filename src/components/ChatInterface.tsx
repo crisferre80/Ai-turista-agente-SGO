@@ -549,6 +549,25 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                                 <span>{showHistory ? '📖' : '📘'}</span> {showHistory ? 'Cerrar Chat' : 'Ver Historial'}
                             </button>
                             <button
+                                onClick={() => window.location.href = '/explorar'}
+                                style={{
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    padding: '12px 15px',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    color: COLOR_BLUE,
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px'
+                                }}
+                            >
+                                <span>🗺️</span> Explorar Lugares
+                            </button>
+                            <button
                                 onClick={() => window.location.href = '/login'}
                                 style={{
                                     width: '100%',

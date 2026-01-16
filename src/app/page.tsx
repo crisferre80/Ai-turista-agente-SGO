@@ -104,6 +104,18 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
+
+    // Check if we need to focus on a specific place
+    const focusPlace = localStorage.getItem('focusPlace');
+    if (focusPlace) {
+      localStorage.removeItem('focusPlace');
+      // Wait for map and data to load
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+          (window as any).focusPlaceOnMap(focusPlace);
+        }
+      }, 2000);
+    }
   }, []);
 
   const fetchData = async () => {
