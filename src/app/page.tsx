@@ -16,6 +16,7 @@ const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
 const COLOR_WHITE = "#FFFFFF";
+const INTRO_KEY = 'santi_visual_intro_seen_v2';
 
 // Tipos
 interface Attraction {
@@ -173,7 +174,7 @@ export default function Home() {
     fetchData();
 
     // Check intro
-    const introSeen = sessionStorage.getItem('santi_visual_intro_seen');
+    const introSeen = sessionStorage.getItem(INTRO_KEY);
     setShowIntro(!introSeen);
 
     // Check if we need to focus on a specific place
@@ -259,7 +260,7 @@ export default function Home() {
         <IntroOverlay
           onComplete={() => {
             setShowIntro(false);
-            sessionStorage.setItem('santi_visual_intro_seen', 'true');
+            sessionStorage.setItem(INTRO_KEY, 'true');
             // Small delay to let the overlay fade out before Santi speaks
             setTimeout(() => {
               santiNarrate("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
