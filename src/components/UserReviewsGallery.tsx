@@ -1,0 +1,231 @@
+"use client";
+import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
+
+const COLOR_GOLD = '#F1C40F';
+const COLOR_BLUE = '#1A3A6C';
+
+interface UserReview {
+  id: string;
+  photo_url: string;
+  review_text: string;
+  rating: number;
+  location_name: string;
+  created_at: string;
+  profiles?: {
+    name: string;
+    avatar_url?: string;
+  };
+}
+
+export default function UserReviewsGallery() {
+  const [reviews, setReviews] = useState<UserReview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
+  const fetchReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_reviews')
+        .select(`
+          *,
+          profiles(name, avatar_url)
+        `)
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error de Supabase:', error.message, error.details, error.hint);
+        throw error;
+      }
+      setReviews(data || []);
+    } catch (err) {
+      console.error('Error cargando reseñas:', err instanceof Error ? err.message : String(err));
+      // Silently fail - table might not exist yet
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        textAlign: 'center',
+        padding: '60px 20px',
+        color: COLOR_BLUE,
+        fontWeight: 'bold',
+        fontSize: '18px'
+      }}>
+        Cargando experiencias...
+      </div>
+    );
+  }
+
+  if (reviews.length === 0) {
+    return (
+      <div style={{
+        textAlign: 'center',
+        padding: '60px 20px',
+        background: '#f8fafc',
+        borderRadius: '24px',
+        border: `3px dashed ${COLOR_GOLD}44`
+      }}>
+        <span style={{ fontSize: '48px' }}>📸</span>
+        <p style={{
+          color: '#64748b',
+          marginTop: '15px',
+          fontSize: '16px',
+          fontWeight: '500'
+        }}>
+          Todavía no hay experiencias compartidas. ¡Sé el primero!
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+      gap: '25px',
+      padding: '20px 0'
+    }}>
+      {reviews.map((review) => (
+        <div
+          key={review.id}
+          className="user-review-card"
+          style={{
+            background: 'white',
+            borderRadius: '24px',
+            overflow: 'hidden',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+            border: `2px solid ${COLOR_GOLD}22`,
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+        >
+          {/* Imagen */}
+          <div style={{ position: 'relative', paddingTop: '75%', overflow: 'hidden' }}>
+            <Image
+              src={review.photo_url}
+              alt={review.location_name}
+              fill
+              sizes="(max-width: 768px) 100vw, 33vw"
+              style={{ objectFit: 'cover' }}
+            />
+            <div style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              background: COLOR_GOLD,
+              color: COLOR_BLUE,
+              padding: '6px 12px',
+              borderRadius: '20px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              ⭐ {review.rating}
+            </div>
+          </div>
+
+          {/* Contenido */}
+          <div style={{ padding: '20px' }}>
+            <h4 style={{
+              margin: '0 0 10px 0',
+              fontSize: '1.1rem',
+              fontWeight: 'bold',
+              color: COLOR_BLUE
+            }}>
+              📍 {review.location_name}
+            </h4>
+            
+            <p style={{
+              margin: '0 0 15px 0',
+              fontSize: '0.9rem',
+              color: '#64748b',
+              lineHeight: 1.5,
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden'
+            }}>
+              &ldquo;{review.review_text}&rdquo;
+            </p>
+
+            {/* Usuario */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              paddingTop: '15px',
+              borderTop: `2px solid ${COLOR_GOLD}22`
+            }}>
+              {review.profiles?.avatar_url ? (
+                <Image
+                  src={review.profiles.avatar_url}
+                  alt={review.profiles.name || 'Usuario'}
+                  width={32}
+                  height={32}
+                  style={{
+                    borderRadius: '50%',
+                    border: `2px solid ${COLOR_GOLD}`
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: COLOR_GOLD,
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontWeight: 'bold',
+                  color: COLOR_BLUE
+                }}>
+                  {review.profiles?.name?.charAt(0) || '?'}
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  color: COLOR_BLUE
+                }}>
+                  {review.profiles?.name || 'Usuario'}
+                </div>
+                <div style={{
+                  fontSize: '0.75rem',
+                  color: '#94a3b8'
+                }}>
+                  {new Date(review.created_at).toLocaleDateString('es-AR', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric'
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <style jsx>{`
+        .user-review-card:hover {
+          transform: translateY(-8px);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+          border-color: ${COLOR_GOLD};
+        }
+      `}</style>
+    </div>
+  );
+}

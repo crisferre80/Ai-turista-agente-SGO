@@ -2,8 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
 import ChatInterface from '@/components/ChatInterface';
 import GalleryModal from '@/components/GalleryModal';
+import UserReviewModal from '@/components/UserReviewModal';
+import UserReviewsGallery from '@/components/UserReviewsGallery';
 
 const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
@@ -33,9 +36,27 @@ export default function ExplorePage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [galleryModal, setGalleryModal] = useState<{urls: string[], name: string} | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
+    const [highlightId, setHighlightId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchData();
+
+        // Check if a place was requested via marker 'Más info' button
+        const openPlaceId = typeof window !== 'undefined' ? localStorage.getItem('openPlaceId') : null;
+        if (openPlaceId) {
+            localStorage.removeItem('openPlaceId');
+            // Wait for DOM to render the list, then scroll and highlight
+            setTimeout(() => {
+                const el = document.getElementById(`place-${openPlaceId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setHighlightId(openPlaceId);
+                    setTimeout(() => setHighlightId(null), 4000);
+                }
+            }, 300);
+        }
+
     }, []);
 
     const fetchData = async () => {
@@ -76,17 +97,17 @@ export default function ExplorePage() {
     });
 
     const PlaceCard = ({ place }: { place: PlaceType }) => (
-        <div style={{
-            background: 'rgba(255,255,255,0.95)',
+        <div id={`place-${place.id}`} data-place-id={place.id} className="card-hover" style={{
+            background: highlightId === place.id ? 'linear-gradient(135deg,#fffde6,#fff)' : 'white',
             borderRadius: '24px',
             overflow: 'hidden',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-            border: `2px solid ${place.isBusiness ? COLOR_BLUE : COLOR_RED}22`,
-            transition: 'all 0.3s ease',
+            boxShadow: highlightId === place.id ? '0 25px 60px rgba(241,196,15,0.18)' : '0 10px 30px rgba(0,0,0,0.12)',
+            border: `2px solid ${place.isBusiness ? COLOR_BLUE : COLOR_GOLD}22`,
             cursor: 'pointer',
             height: '100%',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            transition: 'box-shadow .3s ease, transform .3s ease, background .3s ease'
         }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-8px)';
@@ -109,12 +130,12 @@ export default function ExplorePage() {
                 height: '220px',
                 overflow: 'hidden'
             }}>
-                <img
+                <Image
                     src={place.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg"}
                     alt={place.name}
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     style={{
-                        width: '100%',
-                        height: '100%',
                         objectFit: 'cover'
                     }}
                 />
@@ -212,7 +233,7 @@ export default function ExplorePage() {
                 </button>
                 {place.gallery_urls && place.gallery_urls.length > 0 && (
                     <button style={{
-                        background: `linear-gradient(135deg, ${COLOR_GOLD}, '#f39c12')`,
+                        background: `linear-gradient(135deg, ${COLOR_GOLD}, #f39c12)`,
                         color: COLOR_BLUE,
                         border: 'none',
                         padding: '12px',
@@ -237,6 +258,38 @@ export default function ExplorePage() {
                         Ver Galería 📸
                     </button>
                 )}
+                <button style={{
+                    background: 'white',
+                    color: COLOR_BLUE,
+                    border: `2px solid ${COLOR_GOLD}`,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    fontWeight: 'bold',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    marginTop: '8px',
+                    transition: 'all 0.2s ease'
+                }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.background = COLOR_GOLD;
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.background = 'white';
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setReviewModal({
+                            isOpen: true,
+                            attractionId: place.isBusiness ? undefined : place.id,
+                            businessId: place.isBusiness ? place.id : undefined,
+                            locationName: place.name
+                        });
+                    }}
+                >
+                    📸 Compartir Mi Experiencia
+                </button>
             </div>
         </div>
     );
@@ -245,19 +298,18 @@ export default function ExplorePage() {
     return (
         <div style={{
             minHeight: '100vh',
-            background: 'linear-gradient(135deg, #c5382e22 0%, #e2e8f0 100%)',
+            background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)',
             padding: '20px',
             fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
-            {/* Header */}
+            {/* Header REDISEÑO REFERENCIA.PNG */}
             <header style={{
-                background: 'rgba(255,255,255,0.95)',
-                backdropFilter: 'blur(20px)',
-                padding: '30px',
+                background: 'white',
+                padding: '35px',
                 borderRadius: '32px',
                 marginBottom: '30px',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-                border: `2px solid ${COLOR_BLUE}11`
+                boxShadow: '0 15px 50px rgba(0,0,0,0.12)',
+                border: `2px solid ${COLOR_GOLD}22`
             }}>
                 <div style={{
                     maxWidth: '1400px',
@@ -312,18 +364,17 @@ export default function ExplorePage() {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
-                                padding: '14px 20px',
+                                padding: '16px 22px',
                                 borderRadius: '50px',
                                 border: `2px solid ${COLOR_BLUE}22`,
                                 fontSize: '1rem',
-                                outline: 'none',
-                                transition: 'all 0.2s ease'
+                                outline: 'none'
                             }}
                         />
 
                         <select
                             value={filter}
-                            onChange={(e) => setFilter(e.target.value as any)}
+                            onChange={(e) => setFilter(e.target.value as 'all' | 'attractions' | 'businesses')}
                             style={{
                                 padding: '14px 20px',
                                 borderRadius: '50px',
@@ -367,17 +418,17 @@ export default function ExplorePage() {
                         justifyContent: 'center'
                     }}>
                         <div style={{
-                            background: `${COLOR_RED}11`,
-                            padding: '15px 25px',
+                            background: `${COLOR_GOLD}22`,
+                            padding: '18px 30px',
                             borderRadius: '20px',
                             textAlign: 'center',
-                            border: `2px solid ${COLOR_RED}22`
+                            border: `2px solid ${COLOR_GOLD}44`
                         }}>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: COLOR_RED }}>
+                            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: COLOR_BLUE }}>
                                 {attractions.length}
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>
-                                Atractivos Turísticos
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>
+                                Atractivos
                             </div>
                         </div>
                         <div style={{
@@ -395,16 +446,16 @@ export default function ExplorePage() {
                             </div>
                         </div>
                         <div style={{
-                            background: `${COLOR_GOLD}22`,
-                            padding: '15px 25px',
+                            background: 'white',
+                            padding: '18px 30px',
                             borderRadius: '20px',
                             textAlign: 'center',
-                            border: `2px solid ${COLOR_GOLD}44`
+                            border: `2px solid ${COLOR_GOLD}`
                         }}>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: COLOR_BLUE }}>
+                            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: COLOR_GOLD }}>
                                 {filteredPlaces.length}
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>
                                 Resultados
                             </div>
                         </div>
@@ -513,12 +564,46 @@ export default function ExplorePage() {
                 )}
             </main>
 
+            {/* Galería de Experiencias de Usuarios */}
+            <section style={{
+                maxWidth: '1400px',
+                margin: '60px auto',
+                padding: '40px 20px',
+                background: 'white',
+                borderRadius: '32px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                border: `2px solid ${COLOR_GOLD}33`
+            }}>
+                <h2 style={{
+                    fontSize: '2rem',
+                    fontWeight: '950',
+                    color: COLOR_BLUE,
+                    letterSpacing: '-0.5px',
+                    marginBottom: '30px',
+                    textAlign: 'center'
+                }}>
+                    🌟 Experiencias Compartidas por Viajeros
+                </h2>
+                <UserReviewsGallery />
+            </section>
+
             {/* Gallery Modal */}
             {galleryModal && (
                 <GalleryModal
                     urls={galleryModal.urls}
                     name={galleryModal.name}
                     onClose={() => setGalleryModal(null)}
+                />
+            )}
+
+            {/* Review Modal */}
+            {reviewModal && reviewModal.isOpen && (
+                <UserReviewModal
+                    isOpen={reviewModal.isOpen}
+                    onClose={() => setReviewModal(null)}
+                    attractionId={reviewModal.attractionId}
+                    businessId={reviewModal.businessId}
+                    locationName={reviewModal.locationName}
                 />
             )}
 

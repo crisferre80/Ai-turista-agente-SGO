@@ -1,11 +1,27 @@
-"use client";
-import React, { useState, useRef, useEffect } from 'react';
+﻿"use client";
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
+declare global {
+    interface Window {
+        santiNarrate?: (text: string) => void;
+        santiSpeak?: (text: string) => void;
+        focusPlaceOnMap?: (placeName: string) => void;
+        SpeechRecognition?: unknown;
+        webkitSpeechRecognition?: unknown;
+    }
+}
 
 const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
+
+// Business registration prompts that Santi may propose occasionally
+const BUSINESS_PROMPTS = [
+    "¿Tenés un negocio que te gustaría que aparezca en la app como destacado? Te explico cómo registrarlo: 1) Entrá a 'Mi Negocio' y completá la ficha con nombre, dirección, horario y contacto. 2) Subí varias fotos y el logo de tu establecimiento. 3) Adjuntá la documentación necesaria y solicitá la acreditación. 4) Nuestro equipo revisará la solicitud y, una vez aprobada, tu negocio podrá aparecer como 'Comercio Certificado' y ser destacado en la app. ¿Querés que te lleve ahora al formulario?",
+    "Si querés aparecer destacado en la app: abrí 'Mi Negocio' → Crear ficha → subí fotos y un texto breve sobre lo que los hace únicos. En 48-72h el equipo revisa y te avisa. ¿Deseás que te muestre cómo?"
+];
 
 const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
     externalTrigger?: string,
@@ -24,24 +40,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
     const [audioBlocked, setAudioBlocked] = useState(false); // Handle autoplay block
     const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
     const [isIdle, setIsIdle] = useState(false); // For auto-hide
+    const [isHovering, setIsHovering] = useState(false); // Hover state for bubble
+    const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
+    const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
 
-    useEffect(() => {
-        if (externalTrigger) {
-            triggerAssistantMessage(externalTrigger);
-        }
-    }, [externalTrigger]);
-
-    useEffect(() => {
-        if (externalStory) {
-            playUserStory(externalStory.url, externalStory.name);
-        }
-    }, [externalStory]);
-
+    // External triggers effects will be registered after callbacks are defined
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastInteractionRef = useRef(Date.now()); // Track inactivity
+    const micHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to auto-hide mic legend on touch
 
     const [engagementPrompts, setEngagementPrompts] = useState([
         "¿Hay algo en que pueda ayudarte?",
@@ -66,9 +75,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         }
     };
 
-
-
-
     // Scroll to bottom
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -85,85 +91,25 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
     }, [messages, isThinking, showHistory]);
 
     // Format messages for API
-    const getApiMessages = () => {
+    const getApiMessages = useCallback(() => {
         return messages.map(m => ({ role: m.role, content: m.content }));
-    };
+    }, [messages]);
 
     // Helper to get the content to show
-    const getLastAssistantMessage = () => {
+    const getLastAssistantMessage = useCallback(() => {
         const assistantMsgs = messages.filter(m => m.role === 'assistant');
         if (assistantMsgs.length === 0) return null;
         return assistantMsgs[assistantMsgs.length - 1].content;
-    };
+    }, [messages]);
 
-    // Intro Logic is now handled by IntroOverlay in page.tsx
+    // Idle / Auto-hide logic will be registered after callbacks are defined
 
-    // Idle / Auto-hide logic
-    useEffect(() => {
-        const checkInterval = setInterval(() => {
-            const timeSinceLast = Date.now() - lastInteractionRef.current;
-            const idleTime = 30000; // 30 seconds
+    // Global access for triggers will be registered after callbacks are defined
 
-            if (timeSinceLast >= idleTime && !isSpeaking && !isThinking && !isListening && !input.trim()) {
-                setIsIdle(true);
-                setShowHistory(false);
-            } else {
-                setIsIdle(false);
-            }
-
-            // Proactive Engagement
-            if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
-                const randomPrompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
-                triggerAssistantMessage(randomPrompt);
-                updateInteractionTime();
-            }
-        }, 5000);
-
-        return () => clearInterval(checkInterval);
-    }, [isSpeaking, isThinking, isListening, input, engagementPrompts]);
-
-    // Global access for triggers
-    useEffect(() => {
-        (window as any).santiNarrate = (text: string) => {
-            handleSend(text);
-        };
-        (window as any).santiSpeak = (text: string) => {
-            triggerAssistantMessage(text, true); // Skip focus to avoid loops
-        };
-        return () => {
-            delete (window as any).santiNarrate;
-            delete (window as any).santiSpeak;
-        };
-    }, []); // Only register once
-
-    // Typewriter Effect Logic
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-
-        if (isSpeaking) {
-            const fullText = getLastAssistantMessage() || "";
-            setDisplayedText("");
-            let currentIndex = 0;
-            const typingSpeed = 40;
-
-            interval = setInterval(() => {
-                if (currentIndex <= fullText.length) {
-                    setDisplayedText(fullText.slice(0, currentIndex));
-                    currentIndex++;
-                } else {
-                    clearInterval(interval);
-                }
-            }, typingSpeed);
-        } else {
-            setDisplayedText("");
-        }
-
-        return () => clearInterval(interval);
-    }, [isSpeaking, messages]);
-
+    // Typewriter Effect Logic will be registered after callbacks are defined
 
     // Text-to-Speech Helper
-    const playAudioResponse = async (text: string) => {
+    const playAudioResponse = useCallback(async (text: string) => {
         try {
             const response = await fetch('/api/speech', {
                 method: 'POST',
@@ -191,27 +137,26 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                     }
                 });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("TTS Error:", error);
-            if (error.message === "API_KEY_MISSING") {
+            if (typeof error === 'object' && error && (error as { message?: string }).message === "API_KEY_MISSING") {
                 alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
             }
         }
-    };
+    }, []);
 
-    const triggerAssistantMessage = (text: string, skipMapFocus = false) => {
+    const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
         playAudioResponse(text);
 
         // Trigger map focus if a place is mentioned and not explicitly skipped
-        if (!skipMapFocus && typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
-            (window as any).focusPlaceOnMap(text);
+        if (!skipMapFocus && typeof window !== 'undefined' && 'focusPlaceOnMap' in window && typeof (window as Window & typeof globalThis).focusPlaceOnMap === 'function') {
+            (window as Window & typeof globalThis).focusPlaceOnMap!(text);
         }
-    };
+    }, [playAudioResponse]);
 
-    const playUserStory = async (url: string, name: string) => {
-
+    const playUserStory = useCallback(async (url: string, name: string) => {
         updateInteractionTime();
         const intro = `¡Epa! Mirá lo que grabó un viajero sobre ${name}. Prestá atención...`;
 
@@ -244,12 +189,34 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         } catch (error) {
             console.error("Story Playback Error:", error);
         }
+    }, []);
+
+    // Helper: detect if a message is a business registration prompt
+    const isBusinessPromptText = (text?: string | null) => {
+        if (!text) return false;
+        const pattern = /(Mi Negocio|registrar un negocio|aparezca en la app|destacad|Comercio Certificado|registrarlo|Mi Negocio)/i;
+        return pattern.test(text) || BUSINESS_PROMPTS.some(p => (text || '').includes(p));
     };
 
-
+    // Handler for 'Llevame' button - redirect depending on auth state
+    const handleLlevameClick = async () => {
+        try {
+            // supabase.auth.getUser() returns { data: { user } }
+            const { data } = await supabase.auth.getUser();
+            const user = (data as { user?: unknown })?.user;
+            if (user) {
+                window.location.href = '/mi-negocio';
+            } else {
+                window.location.href = '/login?next=/mi-negocio';
+            }
+        } catch (err) {
+            console.error('Redirect error:', err);
+            window.location.href = '/login?next=/mi-negocio';
+        }
+    };
 
     // Send Message Logic
-    const handleSend = async (overrideText?: string) => {
+    const handleSend = useCallback(async (overrideText?: string) => {
         updateInteractionTime(); // Reset timer
         const textToSend = overrideText || input;
         if (!textToSend.trim()) return;
@@ -285,13 +252,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             // Detect if user asked for directions and extract destination from user message
             const isDirectionQuery = /(?:cómo|como) (?:llegar|voy|llego)|indicame|direcciones?|ruta|camino/i.test(textToSend);
             console.log('Direction query detected:', isDirectionQuery, 'for message:', textToSend);
-            if (isDirectionQuery && typeof window !== 'undefined' && (window as any).focusPlaceOnMap) {
+            if (isDirectionQuery && typeof window !== 'undefined' && 'focusPlaceOnMap' in window && typeof (window as Window & typeof globalThis).focusPlaceOnMap === 'function') {
                 // Extract potential place names from user message
                 const placeMatch = textToSend.match(/(?:a\s+|al\s+|hacia\s+|para\s+|voy a\s+|ir a\s+)(.+?)(?:\?|$|\.|\s+y\s+)/i);
                 console.log('Place match:', placeMatch);
                 if (placeMatch) {
                     const destination = placeMatch[1].trim();
-                    (window as any).focusPlaceOnMap(destination);
+                    (window as Window & typeof globalThis).focusPlaceOnMap!(destination);
                 }
             }
 
@@ -303,9 +270,110 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             setIsThinking(false);
             updateInteractionTime(); // Reset timer again after response
         }
-    };
+    }, [input, getApiMessages, playAudioResponse]);
+
+    // External triggers effects
+    useEffect(() => {
+        if (externalTrigger) {
+            triggerAssistantMessage(externalTrigger);
+        }
+    }, [externalTrigger, triggerAssistantMessage]);
+
+    useEffect(() => {
+        if (externalStory) {
+            playUserStory(externalStory.url, externalStory.name);
+        }
+    }, [externalStory, playUserStory]);
+
+    // Idle / Auto-hide logic
+    useEffect(() => {
+        const checkInterval = setInterval(() => {
+            const timeSinceLast = Date.now() - lastInteractionRef.current;
+            const idleTime = 30000; // 30 seconds
+
+            if (timeSinceLast >= idleTime && !isSpeaking && !isThinking && !isListening && !input.trim()) {
+                setIsIdle(true);
+                setShowHistory(false);
+            } else {
+                setIsIdle(false);
+            }
+
+            // Proactive Engagement (includes occasional business registration suggestions)
+            if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
+                // 25% chance to propose registering a business
+                const pickBusiness = Math.random() < 0.25;
+                const prompt = pickBusiness
+                    ? BUSINESS_PROMPTS[Math.floor(Math.random() * BUSINESS_PROMPTS.length)]
+                    : engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
+                triggerAssistantMessage(prompt);
+                updateInteractionTime();
+            }
+        }, 5000);
+
+        return () => clearInterval(checkInterval);
+    }, [isSpeaking, isThinking, isListening, input, engagementPrompts, triggerAssistantMessage]);
+
+    // Global access for triggers
+    useEffect(() => {
+        (window as Window & typeof globalThis).santiNarrate = (text: string) => {
+            handleSend(text);
+        };
+        (window as Window & typeof globalThis).santiSpeak = (text: string) => {
+            triggerAssistantMessage(text, true); // Skip focus to avoid loops
+        };
+        return () => {
+            if ((window as Window & typeof globalThis).santiNarrate) delete (window as Window & typeof globalThis).santiNarrate;
+            if ((window as Window & typeof globalThis).santiSpeak) delete (window as Window & typeof globalThis).santiSpeak;
+        };
+    }, [handleSend, triggerAssistantMessage]);
+
+    // Cleanup mic hover timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (micHoverTimeoutRef.current) {
+                clearTimeout(micHoverTimeoutRef.current);
+                micHoverTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
+    // Typewriter Effect Logic
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+
+        if (isSpeaking) {
+            const fullText = getLastAssistantMessage() || "";
+            setDisplayedText("");
+            let currentIndex = 0;
+            const typingSpeed = 40;
+
+            interval = setInterval(() => {
+                if (currentIndex <= fullText.length) {
+                    setDisplayedText(fullText.slice(0, currentIndex));
+                    currentIndex++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, typingSpeed);
+        } else {
+            setDisplayedText("");
+        }
+
+        return () => clearInterval(interval);
+    }, [isSpeaking, getLastAssistantMessage, messages]);
 
     // Voice Recognition (Speech-to-Text)
+    interface ISpeechRecognition {
+        lang: string;
+        continuous: boolean;
+        interimResults: boolean;
+        onstart: (() => void) | null;
+        onerror: ((event: { error?: string }) => void) | null;
+        onend: (() => void) | null;
+        onresult: ((event: { results: Array<Array<{ transcript: string }>> }) => void) | null;
+        start: () => void;
+    }
+
     const toggleListening = () => {
         updateInteractionTime();
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -319,13 +387,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         }
 
         // Initialize
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) {
+        const SR: unknown = (window as Window & typeof globalThis).SpeechRecognition || (window as Window & typeof globalThis).webkitSpeechRecognition;
+        if (typeof SR !== 'function') {
             alert("El motor de reconocimiento no está disponible.");
             return;
         }
 
-        const recognition = new SpeechRecognition();
+        const recognition = new (SR as new () => ISpeechRecognition)();
         recognition.lang = 'es-AR';
         recognition.continuous = false;
         recognition.interimResults = false;
@@ -335,7 +403,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             setIsListening(true);
         };
 
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: { error?: string }) => {
             setIsListening(false);
             if (event.error === 'no-speech') {
                 console.log("Speech recognition info: no-speech detected (user was silent)");
@@ -355,8 +423,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             updateInteractionTime();
         };
 
-        recognition.onresult = (event: any) => {
-            const transcript = event.results[0][0].transcript;
+        recognition.onresult = (event: { results: Array<Array<{ transcript: string }>> }) => {
+            const transcript = event.results?.[0]?.[0]?.transcript;
             console.log("Result received:", transcript);
             if (transcript) {
                 handleSend(transcript);
@@ -365,7 +433,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
 
         try {
             recognition.start();
-        } catch (e) {
+        } catch (e: unknown) {
             console.error("Start error:", e);
             setIsListening(false);
         }
@@ -396,18 +464,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 alignItems: 'flex-start',
                 transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
             }}>
-
-
-
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }} onMouseEnter={() => setIsHovering(true)} onMouseLeave={() => setIsHovering(false)}>
                     {/* The Robot (HOST POSITION - Always fixed and visible) */}
-                    <img
+                    <Image
                         className={`robot-avatar ${isSpeaking ? 'active' : 'idle'}`}
                         src={isSpeaking
                             ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp"
                             : "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                         }
                         alt="Robot Guia Santi"
+                        width={200}
+                        height={200}
+                        unoptimized
+                        onClick={() => { setShowBubbleManual(prev => !prev); setIsIdle(false); updateInteractionTime(); }}
                         style={{
                             height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
                             width: 'auto',
@@ -416,12 +485,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                             transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
                             opacity: 1,
                             transform: isSpeaking ? 'scale(1)' : 'scale(0.9)',
-                            pointerEvents: 'auto'
+                            pointerEvents: 'auto',
+                            cursor: 'pointer'
                         }}
                     />
 
-                    {/* The Floating Thought Bubble */}
-                    {!showHistory && (isThinking || isSpeaking || messages.length === 0 || audioBlocked) && (
+                    {/* The Floating Thought Bubble: only show when active, speaking, thinking, audioBlocked, hovered or manually toggled */}
+                    {!showHistory && (isThinking || isSpeaking || audioBlocked || displayedText || isHovering || showBubbleManual) && (
                         <div className="thought-bubble-popup" style={{
                             position: 'absolute',
                             left: '50px',
@@ -440,16 +510,43 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                                 setAudioBlocked(false);
                                 audioRef.current.play();
                             }
+                            // clicking the bubble counts as interaction and opens it
+                            setShowBubbleManual(true);
+                            updateInteractionTime();
                         }}>
                             {audioBlocked ? (
                                 <div style={{ color: '#D2691E', fontWeight: 'bold' }}>
                                     🔇 Clic para activar sonido
                                 </div>
                             ) : (
-                                <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.94rem', color: 'white' }}>
+                                <div 
+                                    style={{ 
+                                        maxHeight: '150px', 
+                                        overflowY: 'auto', 
+                                        fontSize: '0.94rem', 
+                                        color: 'white', 
+                                        opacity: (isThinking || displayedText || isHovering || showBubbleManual) ? 1 : 0, 
+                                        transition: 'opacity 0.3s ease' 
+                                    }} 
+                                    className="chat-hover-text"
+                                >
                                     {isThinking
                                         ? <span className="thinking-dots">🧠 Pensando...</span>
-                                        : <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText || "¿En qué te ayudo?"}</span>
+                                        : (
+                                            <div>
+                                                <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText || "¿En qué te ayudo?"}</span>
+                                                {isBusinessPromptText(getLastAssistantMessage()) && (
+                                                    <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                                                        <button
+                                                            onClick={handleLlevameClick}
+                                                            style={{ background: COLOR_GOLD, color: '#0e1f1d', border: 'none', padding: '8px 12px', borderRadius: 8, fontWeight: '800', cursor: 'pointer' }}
+                                                        >
+                                                            Llevame
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
                                     }
                                 </div>
                             )}
@@ -488,9 +585,66 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                         overflow: 'hidden',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                     }}>
-                        <img
+                        <Image
                             src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                             alt="Santi Logo"
+                            width={40}
+                            height={40}
+                            unoptimized
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                transform: 'scale(1.2) translateY(2px)'
+                            }}
+                        />
+                    </div>
+                    <h1 style={{
+                        fontSize: '1.2rem',
+                        fontWeight: '900',
+                        color: COLOR_BLUE,
+                        margin: 0,
+                        letterSpacing: '-0.5px'
+                    }}> IA Santi Guía </h1>
+                </div>
+            </div>
+
+            {/* NEW TOP HEADER WITH HAMBURGER MENU */}
+            <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '60px',
+                background: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(20px)',
+                borderBottom: `1px solid ${COLOR_BLUE}11`,
+                zIndex: 50000,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0 20px',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                        width: '40px',
+                        height: '40px',
+                        background: 'white',
+                        borderRadius: '50%',
+                        border: `2px solid ${COLOR_BLUE}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}>
+                        <Image
+                            src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
+                            alt="Santi Logo"
+                            width={40}
+                            height={40}
+                            unoptimized
                             style={{
                                 width: '100%',
                                 height: '100%',
@@ -557,25 +711,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                                 <span>{showHistory ? '📖' : '📘'}</span> {showHistory ? 'Cerrar Chat' : 'Ver Historial'}
                             </button>
                             <button
-                                onClick={() => window.location.href = '/explorar'}
-                                style={{
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    padding: '12px 15px',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    color: COLOR_BLUE,
-                                    fontWeight: 'bold',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px'
-                                }}
-                            >
-                                <span>🗺️</span> Explorar Lugares
-                            </button>
-                            <button
                                 onClick={() => window.location.href = '/login'}
                                 style={{
                                     width: '100%',
@@ -598,7 +733,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                     )}
                 </div>
             </div>
-
 
             {/* OPTIONAL HISTORY VIEW (Toggable Floating Panel) */}
             {showHistory && (
@@ -641,7 +775,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 </div>
             )}
 
-
             {/* INPUT AREA (Floating at bottom-right of footer) */}
             <div style={{
                 position: 'fixed',
@@ -655,19 +788,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 gap: '8px',
                 transition: 'all 0.5s ease'
             }}>
-                {/* Instruction Legend (Aligned Right) */}
-                <div style={{
-                    textAlign: 'right',
-                    fontSize: '0.8rem',
-                    color: COLOR_BLUE,
-                    fontWeight: '900',
-                    marginRight: '15px',
-                    animation: 'pulseText 2s infinite'
-                }}>
-                    ¡Presioná el mic y hablá! 👉
-                </div>
-
-
+                {/* Instruction Legend (Aligned Right) - only visible on mic hover/focus */}
+                {isMicHover && (
+                  <div style={{
+                      textAlign: 'right',
+                      fontSize: '0.8rem',
+                      color: COLOR_BLUE,
+                      fontWeight: '600',
+                      marginRight: '30px',
+                      animation: 'pulseText 2s infinite'
+                    }}>
+                      ¡Presioná el mic y hablá! 👉
+                  </div>
+                )}
 
                 <div style={{
                     display: 'flex',
@@ -720,6 +853,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
 
                     <button
                         onClick={toggleListening}
+                        onMouseEnter={() => setIsMicHover(true)}
+                        onMouseLeave={() => setIsMicHover(false)}
+                        onFocus={() => setIsMicHover(true)}
+                        onBlur={() => setIsMicHover(false)}
+                        onTouchStart={() => {
+                            // Show the legend briefly on touch devices
+                            setIsMicHover(true);
+                            if (micHoverTimeoutRef.current) clearTimeout(micHoverTimeoutRef.current);
+                            micHoverTimeoutRef.current = setTimeout(() => {
+                                setIsMicHover(false);
+                                micHoverTimeoutRef.current = null;
+                            }, 2500);
+                        }}
                         className={isListening ? 'listening-pulse' : ''}
                         style={{
                             background: isListening ? COLOR_RED : COLOR_GOLD,
@@ -746,6 +892,11 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                     0% { transform: translateY(0); }
                     50% { transform: translateY(-15px); }
                     100% { transform: translateY(0); }
+                }
+
+                /* Show text on hover */
+                .robot-container:hover .chat-hover-text {
+                    opacity: 1 !important;
                 }
 
                 .thought-bubble-popup {

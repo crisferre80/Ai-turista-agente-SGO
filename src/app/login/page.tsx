@@ -61,42 +61,76 @@ export default function LoginPage() {
         }
     };
 
+    const COLOR_GOLD = '#F1C40F';
+    const COLOR_BLUE = '#1A3A6C';
+    const COLOR_DARK = '#0e1f1d';
+
     return (
         <div style={{
-            height: '100vh',
+            minHeight: '100vh',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'linear-gradient(135deg, #20B2AA 0%, #D2691E 100%)',
-            fontFamily: 'system-ui, sans-serif',
+            background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
             padding: '20px'
         }}>
             <div style={{
                 background: 'white',
-                padding: '40px',
-                borderRadius: '24px',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+                padding: '50px',
+                borderRadius: '32px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
                 width: '100%',
-                maxWidth: '400px',
-                textAlign: 'center'
+                maxWidth: '460px',
+                textAlign: 'center',
+                border: `2px solid ${COLOR_GOLD}33`
             }}>
                 <img
                     src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                     alt="Santi"
-                    style={{ width: '80px', marginBottom: '15px' }}
+                    style={{ 
+                        width: '100px', 
+                        marginBottom: '20px',
+                        filter: 'drop-shadow(0 8px 20px rgba(241,196,15,0.4))'
+                    }}
                 />
-                <h1 style={{ color: '#333', fontSize: '22px', marginBottom: '5px' }}>Panel de Control</h1>
-                <p style={{ color: '#666', marginBottom: '25px', fontSize: '14px' }}>Gestión de Atractivos y Negocios</p>
+                <h1 style={{ 
+                    color: COLOR_BLUE, 
+                    fontSize: '28px', 
+                    marginBottom: '8px',
+                    fontWeight: '950',
+                    letterSpacing: '-0.5px'
+                }}>Panel de Control</h1>
+                <p style={{ 
+                    color: '#64748b', 
+                    marginBottom: '35px', 
+                    fontSize: '15px',
+                    fontWeight: '500'
+                }}>Gestión de Atractivos y Negocios</p>
 
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', background: '#f5f5f5', padding: '5px', borderRadius: '12px' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '12px', 
+                    marginBottom: '30px', 
+                    background: '#f8fafc', 
+                    padding: '6px', 
+                    borderRadius: '50px',
+                    border: `2px solid ${COLOR_GOLD}22`
+                }}>
                     <button
                         onClick={() => { setIsAdminMode(true); setIsRegistering(false); }}
                         style={{
-                            flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                            background: isAdminMode ? 'white' : 'transparent',
-                            fontWeight: isAdminMode ? 'bold' : 'normal',
+                            flex: 1, 
+                            padding: '14px 20px', 
+                            borderRadius: '50px', 
+                            border: 'none',
+                            background: isAdminMode ? COLOR_DARK : 'transparent',
+                            color: isAdminMode ? COLOR_GOLD : '#64748b',
+                            fontWeight: isAdminMode ? 'bold' : '600',
                             cursor: 'pointer',
-                            boxShadow: isAdminMode ? '0 2px 5px rgba(0,0,0,0.1)' : 'none'
+                            fontSize: '15px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: isAdminMode ? `0 8px 20px ${COLOR_DARK}44` : 'none'
                         }}
                     >
                         Admin
@@ -104,11 +138,17 @@ export default function LoginPage() {
                     <button
                         onClick={() => setIsAdminMode(false)}
                         style={{
-                            flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                            background: !isAdminMode ? 'white' : 'transparent',
-                            fontWeight: !isAdminMode ? 'bold' : 'normal',
+                            flex: 1, 
+                            padding: '14px 20px', 
+                            borderRadius: '50px', 
+                            border: 'none',
+                            background: !isAdminMode ? COLOR_BLUE : 'transparent',
+                            color: !isAdminMode ? 'white' : '#64748b',
+                            fontWeight: !isAdminMode ? 'bold' : '600',
                             cursor: 'pointer',
-                            boxShadow: !isAdminMode ? '0 2px 5px rgba(0,0,0,0.1)' : 'none'
+                            fontSize: '15px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: !isAdminMode ? `0 8px 20px ${COLOR_BLUE}44` : 'none'
                         }}
                     >
                         Negocio
@@ -142,15 +182,18 @@ export default function LoginPage() {
                         type="submit"
                         disabled={loading}
                         style={{
-                            background: isAdminMode ? '#D2691E' : '#20B2AA',
-                            color: 'white',
+                            background: `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)`,
+                            color: COLOR_DARK,
                             border: 'none',
-                            padding: '14px',
-                            borderRadius: '12px',
+                            padding: '16px',
+                            borderRadius: '50px',
                             fontWeight: 'bold',
                             cursor: 'pointer',
-                            fontSize: '16px',
-                            opacity: loading ? 0.7 : 1
+                            fontSize: '17px',
+                            opacity: loading ? 0.7 : 1,
+                            boxShadow: `0 10px 30px ${COLOR_GOLD}44`,
+                            transition: 'all 0.2s ease',
+                            letterSpacing: '0.3px'
                         }}
                     >
                         {loading ? 'Procesando...' : (isRegistering ? 'Registrarse' : 'Ingresar')}
@@ -161,28 +204,39 @@ export default function LoginPage() {
                     <div style={{ marginTop: '20px' }}>
                         <button
                             onClick={() => setIsRegistering(!isRegistering)}
-                            style={{ background: 'none', border: 'none', color: '#20B2AA', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}
+                            style={{ 
+                                background: 'none', 
+                                border: 'none', 
+                                color: COLOR_BLUE, 
+                                cursor: 'pointer', 
+                                fontSize: '14px', 
+                                textDecoration: 'underline',
+                                fontWeight: '600'
+                            }}
                         >
                             {isRegistering ? '¿Ya tenés cuenta? Ingresá' : '¿Sos un negocio nuevo? Registrate'}
                         </button>
                     </div>
                 )}
 
-                <div style={{ marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+                <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #f1f5f9' }}>
                     <button
                         onClick={() => router.push('/')}
                         style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#666',
+                            background: 'white',
+                            border: `2px solid ${COLOR_BLUE}22`,
+                            color: COLOR_BLUE,
                             cursor: 'pointer',
-                            fontSize: '13px',
+                            fontSize: '14px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '5px',
+                            gap: '8px',
                             width: '100%',
-                            fontWeight: '500'
+                            fontWeight: '700',
+                            padding: '14px',
+                            borderRadius: '50px',
+                            transition: 'all 0.2s ease'
                         }}
                     >
                         ← Volver al Inicio
@@ -194,9 +248,11 @@ export default function LoginPage() {
 }
 
 const inputStyle = {
-    padding: '12px 18px',
-    borderRadius: '12px',
-    border: '1px solid #ddd',
+    padding: '16px 22px',
+    borderRadius: '50px',
+    border: `2px solid #e2e8f0`,
     outline: 'none',
-    fontSize: '15px'
+    fontSize: '16px',
+    transition: 'all 0.2s ease',
+    fontWeight: '500'
 };

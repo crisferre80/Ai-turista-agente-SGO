@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { takePhoto } from '@/lib/photoService';
 
 export default function ProfilePage() {
+    const COLOR_GOLD = '#F1C40F';
+    const COLOR_BLUE = '#1A3A6C';
+    const COLOR_DARK = '#0e1f1d';
+    
     const router = useRouter();
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -93,19 +97,68 @@ export default function ProfilePage() {
         setLoading(false);
     };
 
-    if (loading) return <div style={{ color: 'white', textAlign: 'center', padding: '100px' }}>Cargando tu identidad...</div>;
+    if (loading) return <div style={{ 
+        color: COLOR_BLUE, 
+        textAlign: 'center', 
+        padding: '100px',
+        background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)',
+        minHeight: '100vh',
+        fontWeight: 'bold',
+        fontSize: '18px'
+    }}>Cargando tu identidad...</div>;
 
     return (
-        <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #20B2AA 0%, #D2691E 100%)', padding: '40px 20px', fontFamily: 'system-ui' }}>
-            <button onClick={() => router.push('/')} style={backBtn}>← Volver al Mapa</button>
+        <div style={{ 
+            minHeight: '100vh', 
+            background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)', 
+            padding: '40px 20px', 
+            fontFamily: 'system-ui, -apple-system, sans-serif' 
+        }}>
+            <button 
+                onClick={() => router.push('/')} 
+                style={{
+                    background: COLOR_GOLD,
+                    border: 'none',
+                    color: COLOR_DARK,
+                    padding: '14px 28px',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    marginBottom: '30px',
+                    fontWeight: 'bold',
+                    fontSize: '15px',
+                    boxShadow: `0 8px 20px ${COLOR_GOLD}44`,
+                    transition: 'all 0.2s ease'
+                }}
+            >← Volver al Mapa</button>
 
-            <div style={containerStyle}>
-                <div style={headerStyle}>
+            <div style={{
+                maxWidth: '700px',
+                margin: '0 auto',
+                background: 'white',
+                borderRadius: '32px',
+                padding: '50px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                border: `2px solid ${COLOR_GOLD}33`
+            }}>
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    marginBottom: '40px',
+                    textAlign: 'center'
+                }}>
                     <div style={{ position: 'relative' }}>
                         <img
                             src={profile.avatar_url || 'https://via.placeholder.com/150'}
                             alt="Avatar"
-                            style={avatarStyle}
+                            style={{
+                                width: '140px',
+                                height: '140px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: `4px solid ${COLOR_GOLD}`,
+                                boxShadow: `0 12px 30px ${COLOR_GOLD}44`
+                            }}
                         />
                         {editing && (
                             <div
@@ -117,41 +170,175 @@ export default function ProfilePage() {
                                         setProfile((prev: any) => ({ ...prev, avatar_url: URL.createObjectURL(file) }));
                                     }
                                 }}
-                                style={uploadOverlay}
+                                style={{
+                                    position: 'absolute',
+                                    bottom: '5px',
+                                    right: '5px',
+                                    background: COLOR_GOLD,
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    boxShadow: `0 4px 15px ${COLOR_GOLD}66`,
+                                    fontSize: '20px'
+                                }}
                             >
                                 📷
                             </div>
                         )}
                     </div>
-                    <h1 style={{ margin: '15px 0 5px 0', fontSize: '28px' }}>{newName || profile.name}</h1>
-                    <p style={{ color: '#666', fontStyle: 'italic' }}>{newBio || profile.bio}</p>
+                    <h1 style={{ 
+                        margin: '20px 0 8px 0', 
+                        fontSize: '32px',
+                        color: COLOR_BLUE,
+                        fontWeight: '950',
+                        letterSpacing: '-0.5px'
+                    }}>{newName || profile.name}</h1>
+                    <p style={{ 
+                        color: '#64748b', 
+                        fontStyle: 'italic',
+                        fontSize: '16px',
+                        fontWeight: '500'
+                    }}>{newBio || profile.bio}</p>
                 </div>
 
                 {editing ? (
-                    <form onSubmit={handleUpdate} style={formStyle}>
-                        <label style={labelStyle}>Tu Nombre</label>
-                        <input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)} placeholder="¿Cómo te decimos?" />
+                    <form onSubmit={handleUpdate} style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '20px'
+                    }}>
+                        <label style={{ 
+                            color: COLOR_BLUE, 
+                            fontSize: '15px', 
+                            fontWeight: 'bold'
+                        }}>Tu Nombre</label>
+                        <input 
+                            style={{
+                                padding: '16px 22px',
+                                border: `2px solid #e2e8f0`,
+                                borderRadius: '50px',
+                                outline: 'none',
+                                fontSize: '16px',
+                                transition: 'all 0.2s ease',
+                                fontWeight: '500'
+                            }} 
+                            value={newName} 
+                            onChange={e => setNewName(e.target.value)} 
+                            placeholder="¿Cómo te decimos?" 
+                        />
 
-                        <label style={labelStyle}>Sobre tí</label>
-                        <textarea style={textareaStyle} value={newBio} onChange={e => setNewBio(e.target.value)} placeholder="Contanos algo de vos..." rows={3} />
+                        <label style={{ 
+                            color: COLOR_BLUE, 
+                            fontSize: '15px', 
+                            fontWeight: 'bold'
+                        }}>Sobre tí</label>
+                        <textarea 
+                            style={{
+                                padding: '16px 22px',
+                                border: `2px solid #e2e8f0`,
+                                borderRadius: '24px',
+                                outline: 'none',
+                                fontFamily: 'inherit',
+                                fontSize: '16px',
+                                transition: 'all 0.2s ease',
+                                fontWeight: '500'
+                            }} 
+                            value={newBio} 
+                            onChange={e => setNewBio(e.target.value)} 
+                            placeholder="Contanos algo de vos..." 
+                            rows={4} 
+                        />
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                            <button type="submit" style={saveBtn}>Guardar Cambios</button>
-                            <button type="button" onClick={() => setEditing(false)} style={cancelBtn}>Cancelar</button>
+                        <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
+                            <button 
+                                type="submit" 
+                                style={{
+                                    flex: 1,
+                                    background: `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)`,
+                                    color: COLOR_DARK,
+                                    border: 'none',
+                                    padding: '16px',
+                                    borderRadius: '50px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    fontSize: '16px',
+                                    boxShadow: `0 10px 30px ${COLOR_GOLD}44`,
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >Guardar Cambios</button>
+                            <button 
+                                type="button" 
+                                onClick={() => setEditing(false)} 
+                                style={{
+                                    background: 'white',
+                                    color: COLOR_BLUE,
+                                    border: `2px solid ${COLOR_BLUE}22`,
+                                    padding: '16px 28px',
+                                    borderRadius: '50px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    fontSize: '16px',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >Cancelar</button>
                         </div>
                     </form>
                 ) : (
-                    <div style={{ textAlign: 'center', marginTop: '20px' }}>
-                        <button onClick={() => setEditing(true)} style={editBtn}>Editar Perfil</button>
+                    <div style={{ textAlign: 'center', marginTop: '25px' }}>
+                        <button 
+                            onClick={() => setEditing(true)} 
+                            style={{
+                                background: `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)`,
+                                color: COLOR_DARK,
+                                border: 'none',
+                                padding: '14px 36px',
+                                borderRadius: '50px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                boxShadow: `0 10px 30px ${COLOR_GOLD}44`,
+                                transition: 'all 0.2s ease'
+                            }}
+                        >Editar Perfil</button>
 
-                        <hr style={{ margin: '40px 0', border: 'none', borderTop: '1px solid #eee' }} />
+                        <hr style={{ 
+                            margin: '45px 0', 
+                            border: 'none', 
+                            borderTop: `2px solid ${COLOR_GOLD}22` 
+                        }} />
 
                         <div style={{ textAlign: 'left' }}>
-                            <h3>Mis Relatos 🎙️</h3>
-                            <p style={{ color: '#888', fontSize: '14px' }}>Aquí aparecerán las historias que grabes en los atractivos turísticos.</p>
-                            <div style={emptyStories}>
-                                <span style={{ fontSize: '30px' }}>🌵</span>
-                                <p>Todavía no has contado ninguna historia. ¡Anímate a grabar una en el mapa!</p>
+                            <h3 style={{ 
+                                color: COLOR_BLUE, 
+                                fontSize: '24px',
+                                fontWeight: 'bold',
+                                marginBottom: '12px'
+                            }}>Mis Relatos 🎙️</h3>
+                            <p style={{ 
+                                color: '#64748b', 
+                                fontSize: '15px',
+                                fontWeight: '500',
+                                marginBottom: '25px'
+                            }}>Aquí aparecerán las historias que grabes en los atractivos turísticos.</p>
+                            <div style={{
+                                background: '#f8fafc',
+                                borderRadius: '24px',
+                                padding: '50px',
+                                textAlign: 'center',
+                                marginTop: '20px',
+                                border: `3px dashed ${COLOR_GOLD}44`
+                            }}>
+                                <span style={{ fontSize: '48px' }}>🌵</span>
+                                <p style={{ 
+                                    color: '#64748b', 
+                                    marginTop: '15px',
+                                    fontSize: '16px',
+                                    fontWeight: '500'
+                                }}>Todavía no has contado ninguna historia. ¡Anímate a grabar una en el mapa!</p>
                             </div>
                         </div>
                     </div>
@@ -160,19 +347,3 @@ export default function ProfilePage() {
         </div>
     );
 }
-
-// Styles
-const backBtn = { background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' as const, padding: '10px 20px', borderRadius: '50px', cursor: 'pointer', marginBottom: '20px', fontWeight: 'bold' };
-const containerStyle = { maxWidth: '600px', margin: '0 auto', background: 'white', borderRadius: '24px', padding: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' };
-const headerStyle = { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', marginBottom: '30px', textAlign: 'center' as const };
-const avatarStyle = { width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover' as const, border: '4px solid #f0f0f0' };
-const uploadOverlay = { position: 'absolute' as const, bottom: '5px', right: '5px', background: 'white', width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', fontSize: '18px' };
-const formStyle = { display: 'flex', flexDirection: 'column' as const, gap: '15px' };
-
-const labelStyle = { color: '#555', fontSize: '14px', fontWeight: 'bold' };
-const inputStyle = { padding: '12px', border: '1px solid #ddd', borderRadius: '12px', outline: 'none' };
-const textareaStyle = { padding: '12px', border: '1px solid #ddd', borderRadius: '12px', outline: 'none', fontFamily: 'inherit' };
-const saveBtn = { flex: 1, background: '#D2691E', color: 'white', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const cancelBtn = { background: '#f0f0f0', color: '#555', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const editBtn = { background: '#20B2AA', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const emptyStories = { background: '#fafafa', borderRadius: '16px', padding: '40px', textAlign: 'center' as const, marginTop: '20px', border: '2px dashed #eee' };

@@ -56,7 +56,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             const geolocate = new mapboxgl.GeolocateControl({
                 positionOptions: { enableHighAccuracy: true },
                 trackUserLocation: true,
-                showUserHeading: true
+                showUserHeading: true,
+                // Evitar círculo azul grande de precisión
+                // @ts-expect-error: algunas versiones de mapbox-gl aceptan esta opción
+                showAccuracyCircle: false
             });
 
             m.addControl(geolocate, 'top-right');
@@ -77,6 +80,16 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             m.on('load', () => {
                 map.current = m;
                 setIsMapReady(true);
+
+                // Intentar remover capas de círculo de precisión si existen
+                try {
+                    if (m.getLayer('mapboxgl-user-location-accuracy-circle')) {
+                        m.removeLayer('mapboxgl-user-location-accuracy-circle');
+                    }
+                    if (m.getLayer('mapboxgl-user-location-accuracy-circle-stroke')) {
+                        m.removeLayer('mapboxgl-user-location-accuracy-circle-stroke');
+                    }
+                } catch {}
 
                 // Intentar obtener ubicación inicial
                 if (navigator.geolocation) {
@@ -222,37 +235,70 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             };
 
             const galleryCount = attr.gallery_urls?.length || 0;
-            const popupContent = `
-                <div style="color: #333; padding: 0; min-width: 240px; overflow: hidden; border-radius: 12px; font-family: system-ui;">
-                    <div style="position: relative">
-                        <img src="${imageUrl}" style="width: 100%; height: 130px; object-fit: cover; border-bottom: 2px solid #eee" />
-                        ${galleryCount > 0 ? '<span style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">+' + galleryCount + ' fotos</span>' : ''}
-                    </div>
-                    <div style="padding: 12px">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px">
-                            <h4 style="margin: 0; font-size: 17px; font-weight: 800; color: ${markerColor}">${attr.name}</h4>
-                            <span style="font-size: 10px; background: #eee; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">${attr.category || 'Lugar'}</span>
-                        </div>
-                        <p style="margin: 0 0 12px 0; font-size: 13px; line-height: 1.5; color: #555">${attr.description}</p>
-                        
-                        <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" 
-                            style="background: ${markerColor}; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 8px">
-                            🚀 ¡Ir ahora!
-                        </button>
 
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-                            <button onclick="window.requestRecord('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
-                                style="background: white; color: #777; border: 1px solid #ddd; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 11px">
-                                🎙️ Grabar
-                            </button>
-                            <button onclick="window.requestPlayStories('${attr.id}', '${attr.name.replace(/'/g, "\\'")}')" 
-                                style="background: #f5f5f5; color: #333; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 11px">
-                                👂 Historias
-                            </button>
-                        </div>
+            // Tooltip element for hover title
+            const tooltip = document.createElement('div');
+            tooltip.className = 'marker-tooltip';
+            tooltip.textContent = attr.name;
+            tooltip.style.cssText = `
+                position: absolute;
+                bottom: 60px;
+                left: 50%;
+                transform: translateX(-50%) translateY(6px);
+                background: rgba(0,0,0,0.75);
+                color: white;
+                padding: 6px 10px;
+                border-radius: 10px;
+                font-size: 0.85rem;
+                white-space: nowrap;
+                pointer-events: none;
+                opacity: 0;
+                transition: all 0.18s ease;
+                z-index: 99999;
+            `;
+            wrapper.appendChild(tooltip);
+
+            el.onmouseenter = () => {
+                el.style.transform = 'scale(1.2) translateY(-5px)';
+                el.style.boxShadow = `0 0 20px ${markerColor}aa`;
+                tooltip.style.opacity = '1';
+                tooltip.style.transform = 'translateX(-50%) translateY(0)';
+            };
+            el.onmouseleave = () => {
+                el.style.transform = 'scale(1) translateY(0)';
+                el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                tooltip.style.opacity = '0';
+                tooltip.style.transform = 'translateX(-50%) translateY(6px)';
+            };
+
+            const compactContent = `
+                <div style="font-family: system-ui; min-width: 200px;">
+                  <div style="display:flex; gap:10px; align-items:center;">
+                    <img src="${imageUrl}" style="width:80px; height:60px; object-fit:cover; border-radius:8px;" />
+                    <div style="flex:1;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <strong style="color: ${markerColor}; font-size: 15px;">${attr.name}</strong>
+                        <span style="font-size:11px; color:#666; background:#f0f0f0; padding:4px 8px; border-radius:8px;">${attr.category || 'Lugar'}</span>
+                      </div>
+                      <div style="font-size:12px; color:#666; margin-top:6px;">${(attr.description || '').slice(0, 70)}${(attr.description && attr.description.length > 70) ? '...' : ''}</div>
                     </div>
+                  </div>
+                  <div style="display:flex; gap:8px; margin-top:10px;">
+                    <button onclick="(function(){ localStorage.setItem('openPlaceId', '${attr.id}'); window.location.href='/explorar'; })()" style="flex:1; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
+                    <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Ir</button>
+                  </div>
                 </div>
             `;
+
+            try {
+                const marker = new mapboxgl.Marker(wrapper)
+                    .setLngLat(attr.coords as [number, number])
+                    .setPopup(new mapboxgl.Popup({ offset: 35, maxWidth: '320px' }).setHTML(compactContent))
+                    .addTo(currentMap);
+
+                (wrapper as any)._attrId = attr.id;
+                markersRef.current.push(marker);
+            } catch (e) { }
 
             try {
                 const marker = new mapboxgl.Marker(wrapper)

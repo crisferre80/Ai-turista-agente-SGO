@@ -24,6 +24,7 @@ interface Attraction {
   image?: string;
   description?: string;
   info?: string;
+  category?: string;
   coords: [number, number];
   isBusiness?: boolean;
   gallery_urls?: string[];
@@ -112,56 +113,113 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
   </button>
 );
 
-// Header superior acorde al rediseño de referencia
+// Header ESTILO REFERENCIA.PNG - oscuro limpio
 const HeaderBar = () => (
   <div style={{
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
-    height: 64,
+    height: 70,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 24px',
-    background: '#0e1f1dCC',
-    backdropFilter: 'blur(10px)',
-    borderBottom: `1px solid ${COLOR_WHITE}22`,
-    zIndex: 50
+    padding: '0 40px',
+    background: '#0e1f1d',
+    borderBottom: `1px solid ${COLOR_GOLD}33`,
+    zIndex: 5000,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
   }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 8, background: COLOR_GOLD, display: 'grid', placeItems: 'center', color: '#0e1f1d', fontWeight: 900 }}>S</div>
-      <div style={{ color: COLOR_WHITE, fontWeight: 900, letterSpacing: 0.5 }}>Santi IA · Guía Turístico</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+      <div style={{
+        width: 42,
+        height: 42,
+        borderRadius: 10,
+        overflow: 'hidden',
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: `0 4px 12px ${COLOR_GOLD}44`,
+        border: `2px solid ${COLOR_WHITE}`
+      }}>
+        <Image
+          src="/santi-avatar.png"
+          alt="Santi"
+          width={42}
+          height={42}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.05) translateY(1px)' }}
+        />
+      </div>
+      <div style={{ 
+        color: COLOR_WHITE, 
+        fontWeight: 900, 
+        fontSize: '1.1rem',
+        letterSpacing: 0.5 
+      }}>
+        Santi IA
+      </div>
     </div>
-    <nav style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-      <Link href="/explorar" style={{ color: COLOR_WHITE, textDecoration: 'none', opacity: 0.9 }}>Explorar</Link>
-      <Link href="/login" style={{ color: COLOR_WHITE, textDecoration: 'none', opacity: 0.9 }}>Acceder</Link>
-      <Link href="/profile" style={{ color: '#0e1f1d', background: COLOR_GOLD, padding: '8px 14px', borderRadius: 999, fontWeight: 700, textDecoration: 'none' }}>Acreditados</Link>
+    <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <Link href="/explorar" style={{ 
+        color: COLOR_WHITE, 
+        textDecoration: 'none', 
+        fontWeight: 600,
+        transition: 'color 0.2s'
+      }}>
+        Explorar
+      </Link>
+      <Link href="/profile" style={{ 
+        color: '#0e1f1d', 
+        background: COLOR_GOLD, 
+        padding: '10px 20px', 
+        borderRadius: 8, 
+        fontWeight: 800, 
+        textDecoration: 'none',
+        boxShadow: `0 4px 15px ${COLOR_GOLD}44`,
+        transition: 'transform 0.2s'
+      }}>
+        Acreditación
+      </Link>
     </nav>
   </div>
 );
 
-// Tarjeta simple para cuadrícula de atracciones del hero
-const AttractionTile = ({ title, img }: { title: string; img?: string }) => (
-  <div style={{
-    background: 'rgba(255,255,255,0.85)',
-    borderRadius: 20,
+// Tarjeta destacada con animaciones modernas
+const FeaturedCard = ({ title, img }: { title: string; img?: string }) => (
+  <div className="featured-card" style={{
+    position: 'relative',
+    borderRadius: 24,
     overflow: 'hidden',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-    border: `1px solid ${COLOR_WHITE}22`
+    background: '#0b1220',
+    border: `1px solid ${COLOR_WHITE}14`,
+    boxShadow: '0 15px 40px rgba(0,0,0,0.35)'
   }}>
-    <Image src={img || IMG_PATTERN} alt={title} width={400} height={220} style={{ width: '100%', height: 220, objectFit: 'cover' }} />
-    <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h4 style={{ margin: 0, color: COLOR_WHITE }}>{title}</h4>
-        <Link href="/explorar" style={{ background: COLOR_GOLD, color: '#0e1f1d', borderRadius: 999, padding: '6px 12px', fontWeight: 700, textDecoration: 'none' }}>Explorar</Link>
+    <div style={{ position: 'relative', width: '100%', paddingTop: '62%' }}>
+      <Image
+        src={img || IMG_PATTERN}
+        alt={title}
+        fill
+        sizes="(max-width: 768px) 100vw, 33vw"
+        style={{ objectFit: 'cover', filter: 'saturate(1.1) contrast(1.05) brightness(0.95)', transform: 'scale(1.02)' }}
+      />
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 10%, rgba(0,0,0,0.15) 70%, transparent)',
+        pointerEvents: 'none'
+      }} />
+    </div>
+    <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <h4 style={{ margin: 0, color: '#eef2ff', textShadow: '0 2px 10px rgba(0,0,0,0.6)', fontWeight: 900, letterSpacing: 0.3 }}>{title}</h4>
+        <Link href="/explorar" style={{ background: COLOR_GOLD, color: '#0e1f1d', borderRadius: 999, padding: '8px 14px', fontWeight: 800, textDecoration: 'none', boxShadow: `0 10px 25px ${COLOR_GOLD}44` }}>Explorar</Link>
       </div>
     </div>
+    <div className="featured-card__glow" style={{ position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none' }} />
   </div>
 );
 
 export default function Home() {
   const [attractions, setAttractions] = useState<Attraction[]>([]);
+  const [filters, setFilters] = useState({ atracciones: true, alojamientos: true, gastronomia: true, cultura: true });
   const [narration] = useState<string | undefined>(undefined);
   const [activeStory, setActiveStory] = useState<{ url: string; name: string } | undefined>(undefined);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -169,6 +227,8 @@ export default function Home() {
   const [activePlace, setActivePlace] = useState<Attraction | null>(null);
   const [zoomImage, setZoomImage] = useState<string | undefined>(undefined);
   const [showIntro, setShowIntro] = useState(false);
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const [carouselPhotos, setCarouselPhotos] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -196,6 +256,7 @@ export default function Home() {
       const { data: attrs } = await supabase.from('attractions').select('*');
       const { data: vids } = await supabase.from('app_videos').select('*');
       const { data: biz } = await supabase.from('businesses').select('*');
+      const { data: carousel } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
 
       const mappedBiz = (biz || []).map(b => ({
         ...b,
@@ -216,6 +277,23 @@ export default function Home() {
       const allPlaces = [...mappedAttrs, ...mappedBiz];
       setAttractions(allPlaces);
       setVideos(vids || []);
+      
+      // Set carousel photos, fallback to static if empty
+      const carouselUrls = carousel && carousel.length > 0 
+        ? carousel.map((c: { image_url: string }) => c.image_url)
+        : [
+            '/fotos/ciudadsgo.jpg',
+            '/fotos/dique.jfif',
+            '/fotos/estadio.jpg',
+            '/fotos/pergola.jpg',
+            '/fotos/termas costanera.jpg',
+            '/fotos/parqueencuentro1-1.jpeg',
+            '/fotos/municapi_plazasarmiento.jpg',
+            '/fotos/ccb.jpg',
+            '/fotos/unnamed (1).jpg',
+            '/fotos/unnamed (2).jpg'
+          ];
+      setCarouselPhotos(carouselUrls);
     } catch (e) {
       console.error(e);
     } finally {
@@ -227,81 +305,150 @@ export default function Home() {
     santiSpeak(text);
   };
 
+  // Map filtered attractions according to overlay filters
+  const filteredAttractions = React.useMemo(() => {
+    const anyOn = Object.values(filters).some(Boolean);
+    if (!anyOn) return attractions; // si nada seleccionado, mostrar todo
+
+    const includes = (value?: string, substr?: string) => (value || '').toLowerCase().includes((substr || '').toLowerCase());
+
+    return attractions.filter(a => {
+      const cat = a.category || '';
+      const isBiz = !!a.isBusiness;
+
+      const matchAtracciones = !isBiz;
+      const matchAlojamientos = isBiz && (includes(cat, 'hotel') || includes(cat, 'aloj'));
+      const matchGastronomia = (isBiz && (includes(cat, 'rest') || includes(cat, 'gastr'))) || (!isBiz && includes(cat, 'gastr'));
+      const matchCultura = (!isBiz && (includes(cat, 'histor') || includes(cat, 'cultur'))) || (isBiz && includes(cat, 'artes'));
+
+      return (
+        (filters.atracciones && matchAtracciones) ||
+        (filters.alojamientos && matchAlojamientos) ||
+        (filters.gastronomia && matchGastronomia) ||
+        (filters.cultura && matchCultura)
+      );
+    });
+  }, [attractions, filters]);
+
+  // Mostrar la intro primero, sobre cualquier otro contenido
+  if (showIntro) {
+    return (
+      <IntroOverlay
+        onComplete={() => {
+          setShowIntro(false);
+          sessionStorage.setItem(INTRO_KEY, 'true');
+          setTimeout(() => {
+            santiNarrate("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
+          }, 500);
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
-      background: `#0f172a`,
-      color: 'white',
+      background: `linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)`,
+      color: '#1e293b',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       position: 'relative',
       overflowX: 'hidden'
     }}>
       <HeaderBar />
-      {/* BACKGROUND LAYERS */}
-      <div style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        background: 'linear-gradient(135deg, #c5382eff 0%, #e2e8f0 100%)',
-        zIndex: 0
-      }} />
-      <div style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundImage: `url(${IMG_PATTERN})`,
-        backgroundSize: '400px',
-        opacity: 0.1,
-        zIndex: 1,
-        pointerEvents: 'none',
-        mixBlendMode: 'multiply'
-      }} />
-
-      {/* INTRO OVERLAY (Root Level for Priority) */}
-      {showIntro && (
-        <IntroOverlay
-          onComplete={() => {
-            setShowIntro(false);
-            sessionStorage.setItem(INTRO_KEY, 'true');
-            // Small delay to let the overlay fade out before Santi speaks
-            setTimeout(() => {
-              santiNarrate("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
-            }, 500);
-          }}
-        />
-      )}
-
+      
       {/* CONTENT WRAPPER */}
-      <div style={{ position: 'relative', zIndex: 10, padding: '70px 20px 0 20px' }}>
-        {/* HERO superior con saludo, búsqueda y avatar Santi */}
+      <div style={{ position: 'relative', zIndex: 10, padding: '90px 40px 40px 40px', maxWidth: 1400, margin: '0 auto' }}>
+        {/* CARRUSEL DE POSTALES DE LA PROVINCIA */}
         <section style={{
           marginTop: 20,
-          borderRadius: 24,
+          marginBottom: 40,
+          borderRadius: 10,
           overflow: 'hidden',
           position: 'relative',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
+          boxShadow: '0 25px 95px rgba(0,0,0,0.45)',
+          background: 'white',
+          padding: '10px',
+          border: `2px solid ${COLOR_GOLD}22`
         }}>
-          <Image src={IMG_PATTERN} alt="Fondo ciudad" width={1600} height={500} style={{ width: '100%', height: 380, objectFit: 'cover', filter: 'blur(0px) brightness(0.8)' }} />
-          <div style={{
-            position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: 24
+          <h3 style={{
+            margin: '0 0 5px 0',
+            fontSize: '1.5rem',
+            fontWeight: '950',
+            color: COLOR_BLUE,
+            letterSpacing: '-0.2px',
+            textAlign: 'center'
+          }}>📸 Postales de Santiago del Estero</h3>
+          <div className="carousel-container" style={{
+            position: 'relative',
+            height: '280px',
+            overflow: 'hidden',
+            borderRadius: 0,
+            width: '100vw',
+            marginLeft: 'calc(50% - 50vw)',
+            marginRight: 'calc(50% - 50vw)',
+            background: 'transparent',
+            boxShadow: 'none'
           }}>
-            <div style={{ maxWidth: 700 }}>
-              <div style={{
-                background: 'rgba(255,255,255,0.10)',
-                border: `1px solid ${COLOR_WHITE}22`,
-                borderRadius: 16,
-                padding: '16px 18px',
-                color: COLOR_WHITE
-              }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>¡Hola! Soy Santi, tu guía interactivo.</div>
-                <div style={{ opacity: 0.9 }}>¿Necesitas ayuda para descubrir Santiago del Estero?</div>
-                <div style={{
-                  
+            <div className="carousel-track" style={{
+              display: 'flex',
+              height: '100%',
+              animation: 'carouselScroll 25s linear infinite'
+            }}>
+              {carouselPhotos.map((src, idx) => (
+                <div key={idx} style={{
+                  flex: '0 0 25%',
+                  height: '100%',
+                  padding: '0 8px',
+                  boxSizing: 'border-box'
                 }}>
-                  
+                  <div style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: 0,
+                    overflow: 'hidden',
+                    boxShadow: 'none'
+                  }}>
+                    <Image
+                      src={src}
+                      alt={`Postal ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 24vw"
+                      style={{
+                        objectFit: 'cover'
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div style={{ display: 'grid', placeItems: 'center', paddingRight: 12 }}>
-              <Image src="/santi-avatar.png" alt="Santi" width={240} height={340} style={{ filter: `drop-shadow(0 8px 30px ${COLOR_GOLD}66)` }} />
+              ))}
+              {/* Duplicate for seamless loop */}
+              {carouselPhotos.slice(0, Math.ceil(carouselPhotos.length / 2)).map((src, idx) => (
+                <div key={`dup-${idx}`} style={{
+                  flex: '0 0 25%',
+                  height: '100%',
+                  padding: '0 8px',
+                  boxSizing: 'border-box'
+                }}>
+                  <div style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: 0,
+                    overflow: 'hidden',
+                    boxShadow: 'none'
+                  }}>
+                    <Image
+                      src={src}
+                      alt={`Postal ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 568px) 100vw, 24vw"
+                      style={{
+                        objectFit: 'cover'
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -309,6 +456,18 @@ export default function Home() {
         {/* Responsive Styles Injection */}
         <style dangerouslySetInnerHTML={{
           __html: `
+          @keyframes carouselScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .carousel-container:hover .carousel-track {
+            animation-play-state: paused;
+          }
+          .featured-card { transition: transform .3s ease, box-shadow .3s ease; }
+          .featured-card:hover { transform: translateY(-6px); box-shadow: 0 25px 60px rgba(0,0,0,0.5); }
+          .featured-card__glow { box-shadow: inset 0 0 0 0 rgba(241,196,15,0.0); transition: box-shadow .4s ease; }
+          .featured-card:hover .featured-card__glow { box-shadow: inset 0 0 0 2px rgba(241,196,15,0.35); }
+          .featured-card:hover img { transform: scale(1.06) !important; transition: transform .6s ease; }
           .multimedia-card { 
             padding: 40px; 
             border-radius: 40px; 
@@ -317,7 +476,7 @@ export default function Home() {
           }
           .scroll-container {
             display: flex;
-            gap: 24px;
+            gap: 15px;
             overflow-x: auto;
             scroll-snap-type: x mandatory;
             -webkit-overflow-scrolling: touch;
@@ -336,6 +495,10 @@ export default function Home() {
             scroll-snap-align: start;
           }
           @media (max-width: 768px) {
+            .carousel-container { height: 140px !important; }
+            .carousel-track { animation: carouselScroll 20s linear infinite !important; }
+            .carousel-track > div { flex: 0 0 45% !important; padding: 0 6px !important; }
+            section:has(.carousel-container) { padding: 15px !important; border-radius: 16px !important; }
             .multimedia-card { 
               padding: 24px 16px; 
               border-radius: 24px; 
@@ -356,6 +519,9 @@ export default function Home() {
             .multimedia-card h3 {
               font-size: 1.4rem !important;
               margin-bottom: 15px !important;
+            }
+            .hero-map { 
+              height: 80vh !important;
             }
           }
         `}} />
@@ -380,42 +546,159 @@ export default function Home() {
             </div>
           ) : (
             <Map
-              attractions={attractions}
+              attractions={filteredAttractions}
               onNarrate={handleNarration}
               onStoryPlay={(url, name) => setActiveStory({ url, name })}
               onPlaceFocus={setActivePlace}
             />
           )}
-          {/* Panel de categorías lateral sobre el mapa */}
-          <div style={{
-            position: 'absolute',
-            left: 20,
-            top: 20,
-            width: 220,
-            background: 'rgba(3,10,15,0.6)',
-            backdropFilter: 'blur(10px)',
-            borderRadius: 16,
-            padding: 16,
-            border: `1px solid ${COLOR_WHITE}22`,
-            color: COLOR_WHITE
-          }}>
-            <div style={{ fontWeight: 800, marginBottom: 12 }}>Explora</div>
-            {['Atracciones', 'Alojamientos', 'Gastronomía', 'Cultura'].map((t, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
-                <span>{t}</span>
-                <div style={{ width: 34, height: 20, borderRadius: 999, background: `${COLOR_WHITE}22`, position: 'relative' }}>
-                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: COLOR_GOLD, position: 'absolute', top: 2, left: 2 }} />
-                </div>
+          {/* Panel lateral EXPLORA mejorado */}
+          {!mapMenuOpen ? (
+            <div
+              onClick={() => setMapMenuOpen(true)}
+              title="Abrir opciones"
+              style={{
+                position: 'absolute',
+                left: 20,
+                top: 20,
+                width: 58,
+                height: 58,
+                borderRadius: 12,
+                background: '#0e1f1d',
+                border: `2px solid ${COLOR_GOLD}`,
+                display: 'grid',
+                placeItems: 'center',
+                color: COLOR_GOLD,
+                cursor: 'pointer',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                zIndex: 5,
+                fontSize: '1.5rem',
+                fontWeight: 'bold'
+              }}
+            >
+              ☰
+            </div>
+          ) : (
+            <div style={{
+              position: 'absolute',
+              left: 20,
+              top: 20,
+              width: 280,
+              background: 'white',
+              borderRadius: 20,
+              padding: 20,
+              border: `2px solid ${COLOR_GOLD}`,
+              color: '#1e293b',
+              zIndex: 5,
+              boxShadow: '0 15px 50px rgba(0,0,0,0.4)'
+            }}>
+              {/* Header del panel EXPLORA */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 20,
+                paddingBottom: 15,
+                borderBottom: `2px solid ${COLOR_GOLD}44`
+              }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontWeight: 900, 
+                  fontSize: '1.3rem',
+                  color: COLOR_BLUE 
+                }}>
+                  EXPLORA
+                </h3>
+                <button
+                  onClick={() => setMapMenuOpen(false)}
+                  aria-label="Cerrar panel"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: COLOR_RED,
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
-            ))}
-          </div>
+
+              {/* Toggles estilo REFERENCIA */}
+              {([
+                { key: 'atracciones', label: 'Atracciones', icon: '📍' },
+                { key: 'alojamientos', label: 'Alojamientos', icon: '🏨' },
+                { key: 'gastronomia', label: 'Gastronomía', icon: '🍽️' },
+                { key: 'cultura', label: 'Cultura', icon: '🎭' },
+              ] as const).map((item) => {
+                const active = filters[item.key];
+                return (
+                  <div key={item.key} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '12px 0',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
+                      <span style={{ fontWeight: 600, color: '#334155' }}>{item.label}</span>
+                    </div>
+                    <div
+                      onClick={() => setFilters(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                      style={{
+                        width: 50,
+                        height: 28,
+                        borderRadius: 999,
+                        background: active ? COLOR_GOLD : '#cbd5e1',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        boxShadow: active ? `0 4px 12px ${COLOR_GOLD}66` : 'none'
+                      }}
+                    >
+                      <div style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        background: 'white',
+                        position: 'absolute',
+                        top: 3,
+                        left: active ? 25 : 3,
+                        transition: 'left 0.3s ease',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
-        {/* Tarjetas de atracciones destacadas como en referencia */}
-        <section style={{ padding: '10px 0 20px 0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+        {/* Tarjetas destacadas ESTILO REFERENCIA.PNG */}
+        <section style={{ padding: '30px 0 40px 0' }}>
+          <h2 style={{
+            fontSize: '2rem',
+            fontWeight: '900',
+            color: 'white',
+            marginBottom: 25,
+            textAlign: 'center',
+            textShadow: '0 2px 10px rgba(0,0,0,0.3)'
+          }}>
+            Lugares Destacados
+          </h2>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+            gap: 24 
+          }}>
             {attractions.filter(a => a.image).slice(0, 4).map((a, idx) => (
-              <AttractionTile key={idx} title={a.name} img={a.image} />
+              <FeaturedCard key={idx} title={a.name} img={a.image} />
             ))}
           </div>
         </section>

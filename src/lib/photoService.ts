@@ -1,4 +1,5 @@
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 
 export interface PhotoResult {
     blob: Blob;
@@ -6,8 +7,39 @@ export interface PhotoResult {
     format: string;
 }
 
+// Check if we're running in native app or web
+const isNative = Capacitor.isNativePlatform();
+
 export const takePhoto = async (): Promise<PhotoResult | null> => {
     try {
+        // For web, use standard file input with camera
+        if (!isNative) {
+            return new Promise((resolve) => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.capture = 'environment' as any; // Request camera on mobile web
+                
+                input.onchange = async (e: Event) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    const url = URL.createObjectURL(file);
+                    const blob = await file.arrayBuffer().then(ab => new Blob([ab], { type: file.type }));
+                    const format = file.type.split('/')[1] || 'jpeg';
+                    
+                    resolve({ blob, url, format });
+                };
+                
+                input.oncancel = () => resolve(null);
+                input.click();
+            });
+        }
+        
+        // For native apps, use Capacitor Camera
         const image = await Camera.getPhoto({
             quality: 90,
             allowEditing: false,

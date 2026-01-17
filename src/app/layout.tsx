@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Sant IA Go",
   description: "Tu asistente turístico virtual",
+  icons: {
+    icon: '/santi-avatar.png',
+    apple: '/santi-avatar.png'
+  }
 };
 
 export default function RootLayout({
