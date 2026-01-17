@@ -58,7 +58,6 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                 trackUserLocation: true,
                 showUserHeading: true,
                 // Evitar círculo azul grande de precisión
-                // @ts-expect-error: algunas versiones de mapbox-gl aceptan esta opción
                 showAccuracyCircle: false
             });
 
@@ -300,15 +299,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                 markersRef.current.push(marker);
             } catch (e) { }
 
-            try {
-                const marker = new mapboxgl.Marker(wrapper)
-                    .setLngLat(attr.coords as [number, number])
-                    .setPopup(new mapboxgl.Popup({ offset: 35, maxWidth: '280px' }).setHTML(popupContent))
-                    .addTo(currentMap);
 
-                (wrapper as any)._attrId = attr.id;
-                markersRef.current.push(marker);
-            } catch (e) { }
         });
 
     }, [attractions, isMapReady]);
