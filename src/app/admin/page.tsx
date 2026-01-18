@@ -755,7 +755,7 @@ export default function AdminDashboard() {
                                             marginTop: '12px'
                                         }}>
                                             <button 
-                                                onClick={() => toggleCarouselPhotoStatus(photo.id, photo.is_active)}
+                                                onClick={() => toggleCarouselPhotoStatus(photo.id, !!photo.is_active)}
                                                 style={{
                                                     flex: 1,
                                                     padding: '8px',
