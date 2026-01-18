@@ -18,7 +18,8 @@ export const takePhoto = async (): Promise<PhotoResult | null> => {
                 const input = document.createElement('input');
                 input.type = 'file';
                 input.accept = 'image/*';
-                input.capture = 'environment' as any; // Request camera on mobile web
+                // Request camera on mobile web (some browsers use the 'capture' attribute)
+                input.setAttribute('capture', 'environment'); // avoids casting to any
                 
                 input.onchange = async (e: Event) => {
                     const file = (e.target as HTMLInputElement).files?.[0];

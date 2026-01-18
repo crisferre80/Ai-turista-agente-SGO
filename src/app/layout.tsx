@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import PwaInstall from '@/components/PwaInstall';
+import OneSignalConsent from '@/components/OneSignalConsent';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,8 +30,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1A3A6C" />
+        <link rel="apple-touch-icon" href="/santi-avatar.png" />
+
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
+        <OneSignalConsent />
+        <PwaInstall />
       </body>
     </html>
   );

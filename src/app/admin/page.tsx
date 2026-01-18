@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import { takePhoto } from '@/lib/photoService';
+import EmailManager from '@/email/EmailManager';
 
 // Tipos básicos usados en este panel
 interface PlaceRecord {
@@ -31,6 +32,15 @@ interface BusinessRecord {
     lng: number;
 }
 
+interface CarouselPhoto {
+    id: string;
+    image_url: string;
+    title?: string;
+    description?: string;
+    order_position?: number;
+    is_active?: boolean;
+}
+
 export default function AdminDashboard() {
     const COLOR_GOLD = '#F1C40F';
     const COLOR_BLUE = '#1A3A6C';
@@ -46,7 +56,7 @@ export default function AdminDashboard() {
     const [places, setPlaces] = useState<PlaceRecord[]>([]);
     const [videos, setVideos] = useState<VideoRecord[]>([]);
     const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
-    const [carouselPhotos, setCarouselPhotos] = useState<any[]>([]);
+    const [carouselPhotos, setCarouselPhotos] = useState<CarouselPhoto[]>([]);
 
     // Form States
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,12 +73,7 @@ export default function AdminDashboard() {
     const [carouselFile, setCarouselFile] = useState<File | null>(null);
     const [newCarouselPhoto, setNewCarouselPhoto] = useState({ title: '', description: '' });
 
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
+    const checkAuth = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         const legacyAuth = localStorage.getItem('adminToken');
 
@@ -78,7 +83,11 @@ export default function AdminDashboard() {
             setIsAuthorized(true);
             fetchData();
         }
-    };
+    }, [router]);
+
+    useEffect(() => {
+        checkAuth();
+    }, [checkAuth]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -141,8 +150,9 @@ export default function AdminDashboard() {
 
             const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
             return publicUrl;
-        } catch (e: any) {
-            alert('Error subiendo: ' + e.message);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert('Error subiendo: ' + msg);
             return null;
         }
     };
@@ -466,6 +476,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('negocios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'negocios')}>🏢 Negocios</button>
                     <button onClick={() => { setActiveTab('frases'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'frases')}>💬 Frases</button>
                     <button onClick={() => { setActiveTab('relatos'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'relatos')}>🎙️ Relatos</button>
+                    <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -499,7 +510,8 @@ export default function AdminDashboard() {
                     }}>
                         {activeTab === 'lugares' ? (editingId ? 'Editando Lugar' : 'Atractivos') :
                             activeTab === 'negocios' ? 'Directorio de Negocios' :
-                                activeTab === 'videos' ? 'Multimedia' : 'Santi'}
+                                activeTab === 'videos' ? 'Multimedia' :
+                                activeTab === 'emails' ? 'Emails' : 'Santi'}
                     </h1>
                     {loading && <span className="loading-spinner"></span>}
                 </header>
@@ -685,7 +697,7 @@ export default function AdminDashboard() {
                             gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
                             gap: '20px' 
                         }}>
-                            {carouselPhotos.map((photo: any) => (
+                            {carouselPhotos.map((photo: CarouselPhoto) => (
                                 <div key={photo.id} style={{
                                     background: 'white',
                                     borderRadius: '20px',
@@ -882,6 +894,14 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                 )}
+
+                {/* Tab: EMAILS */}
+                {activeTab === 'emails' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>📧 Gestión de Emails</h3>
+                        <EmailManager />
+                    </div>
+                )}
             </div>
 
             <style jsx global>{`
@@ -1042,7 +1062,7 @@ const placeCard = {
 };
 
 
-const Input = ({ label, value, onChange }: { label: string, value: any, onChange: (v: string) => void }) => (
+const Input = ({ label, value, onChange }: { label: string, value: string | number, onChange: (v: string) => void }) => (
     <div style={{ width: '100%' }}>
         {label && <label style={labelStyle}>{label}</label>}
         <input style={inputStyle} value={value || ''} onChange={e => onChange(e.target.value)} />

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -7,6 +8,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isAdminMode, setIsAdminMode] = useState(true);
+    const [isTourist, setIsTourist] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -28,6 +30,11 @@ export default function LoginPage() {
                 } else {
                     setError('Clave incorrecta, chango.');
                 }
+            } else if (isTourist) {
+                // Tourist: send magic link via Supabase
+                const { data, error: authError } = await supabase.auth.signInWithOtp({ email });
+                if (authError) throw authError;
+                setSuccess('Te enviamos un enlace de acceso a tu email. Revisalo y hacé click para ingresar.');
             } else {
                 if (isRegistering) {
                     // Sign Up Business
@@ -118,7 +125,7 @@ export default function LoginPage() {
                     border: `2px solid ${COLOR_GOLD}22`
                 }}>
                     <button
-                        onClick={() => { setIsAdminMode(true); setIsRegistering(false); }}
+                        onClick={() => { setIsAdminMode(true); setIsRegistering(false); setIsTourist(false); }}
                         style={{
                             flex: 1, 
                             padding: '14px 20px', 
@@ -136,44 +143,76 @@ export default function LoginPage() {
                         Admin
                     </button>
                     <button
-                        onClick={() => setIsAdminMode(false)}
+                        onClick={() => { setIsAdminMode(false); setIsRegistering(false); setIsTourist(false); }}
                         style={{
                             flex: 1, 
                             padding: '14px 20px', 
                             borderRadius: '50px', 
                             border: 'none',
-                            background: !isAdminMode ? COLOR_BLUE : 'transparent',
-                            color: !isAdminMode ? 'white' : '#64748b',
-                            fontWeight: !isAdminMode ? 'bold' : '600',
+                            background: (!isAdminMode && !isTourist) ? COLOR_BLUE : 'transparent',
+                            color: (!isAdminMode && !isTourist) ? 'white' : '#64748b',
+                            fontWeight: (!isAdminMode && !isTourist) ? 'bold' : '600',
                             cursor: 'pointer',
                             fontSize: '15px',
                             transition: 'all 0.2s ease',
-                            boxShadow: !isAdminMode ? `0 8px 20px ${COLOR_BLUE}44` : 'none'
+                            boxShadow: (!isAdminMode && !isTourist) ? `0 8px 20px ${COLOR_BLUE}44` : 'none'
                         }}
                     >
                         Negocio
                     </button>
+                    <button
+                        onClick={() => { setIsAdminMode(false); setIsRegistering(false); setIsTourist(true); }}
+                        style={{
+                            flex: 1, 
+                            padding: '14px 20px', 
+                            borderRadius: '50px', 
+                            border: 'none',
+                            background: isTourist ? '#20B2AA' : 'transparent',
+                            color: isTourist ? 'white' : '#64748b',
+                            fontWeight: isTourist ? 'bold' : '600',
+                            cursor: 'pointer',
+                            fontSize: '15px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: isTourist ? `0 8px 20px #20B2AA44` : 'none'
+                        }}
+                    >
+                        Turista
+                    </button>
                 </div>
 
                 <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {!isAdminMode && (
-                        <input
-                            type="email"
-                            placeholder="Email del negocio"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            style={inputStyle}
-                            required
-                        />
-                    )}
+{!isAdminMode && !isTourist && (
                     <input
-                        type="password"
-                        placeholder={isAdminMode ? "Clave maestra" : "Contraseña"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        type="email"
+                        placeholder="Email del negocio"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                         style={inputStyle}
                         required
                     />
+                )}
+
+                {isTourist && (
+                  <input
+                    type="email"
+                    placeholder="Tu email (te enviaremos enlace de acceso)"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                )}
+
+                {!isTourist && (
+                  <input
+                    type="password"
+                    placeholder={isAdminMode ? "Clave maestra" : "Contraseña"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                )}
 
                     {error && <p style={{ color: '#ff4444', fontSize: '12px', margin: 0 }}>{error}</p>}
                     {success && <p style={{ color: '#20B2AA', fontSize: '12px', margin: 0 }}>{success}</p>}
@@ -196,11 +235,11 @@ export default function LoginPage() {
                             letterSpacing: '0.3px'
                         }}
                     >
-                        {loading ? 'Procesando...' : (isRegistering ? 'Registrarse' : 'Ingresar')}
+                        {loading ? 'Procesando...' : (isRegistering ? 'Registrarse' : (isTourist ? 'Enviar enlace' : 'Ingresar'))}
                     </button>
                 </form>
 
-                {!isAdminMode && (
+                {!isAdminMode && !isTourist && (
                     <div style={{ marginTop: '20px' }}>
                         <button
                             onClick={() => setIsRegistering(!isRegistering)}
@@ -241,6 +280,12 @@ export default function LoginPage() {
                     >
                         ← Volver al Inicio
                     </button>
+
+                    {isTourist && (
+                      <div style={{ marginTop: 12 }}>
+                        <Link href="/explorar" style={{ color: COLOR_BLUE, textDecoration: 'underline', fontWeight: 700 }}>Ingresar como Invitado</Link>
+                      </div>
+                    )}
                 </div>
             </div>
         </div>
