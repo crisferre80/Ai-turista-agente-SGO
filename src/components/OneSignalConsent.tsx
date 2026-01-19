@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 const APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
 
@@ -20,7 +20,7 @@ export default function OneSignalConsent() {
 
   const enableInDev = Boolean(process.env.NEXT_PUBLIC_ONESIGNAL_ENABLE_IN_DEV);
 
-  const loadAndInit = async () => {
+  const loadAndInit = useCallback(async () => {
     // Avoid initializing OneSignal in development unless explicitly enabled for testing
     if (process.env.NODE_ENV !== 'production' && !enableInDev) {
       console.warn('Skipping OneSignal init in non-production environment (set NEXT_PUBLIC_ONESIGNAL_ENABLE_IN_DEV to enable).');
@@ -88,7 +88,7 @@ export default function OneSignalConsent() {
       console.error('Failed to load/initialize OneSignal', err);
       setStatus('dismissed');
     }
-  };
+  }, [enableInDev]);
 
   useEffect(() => {
     const existing = localStorage.getItem('onesignal-consent');

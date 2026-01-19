@@ -26,7 +26,7 @@ export default function EmailManager() {
     setLoading(false);
   };
 
-  const [contacts, setContacts] = useState<Array<{id?: string; name?: string; email?: string}>>([]);
+  const [contacts, setContacts] = useState<Array<{id?: string; name?: string; email?: string; source?: string}>>([]);
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [opLoading, setOpLoading] = useState(false);
