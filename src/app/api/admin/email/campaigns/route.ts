@@ -18,17 +18,21 @@ async function sendViaOneSignal(template: TemplateRecord): Promise<Record<string
 
   const payload = {
     app_id: appId,
-    included_segments: ['Subscribed Users'], // adjust target as needed
-    email_subject: template.subject,
-    contents: { en: template.subject },
-    email_body: template.html
+    email_subject: template.subject || template.name || 'No subject',
+    email_body: template.html || template.subject || '<p></p>',
+    contents: { en: template.subject || template.name || '' },
+    included_segments: ['Subscribed Users']
   };
 
-  const res = await fetch('https://onesignal.com/api/v1/notifications', {
+  try { console.debug('OneSignal send (email, campaigns): app_id present=', !!appId, 'payloadKeys=', Object.keys(payload)); } catch {}
+
+  const url = 'https://api.onesignal.com/notifications?c=email';
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json;charset=utf-8',
-      'Authorization': `Basic ${apiKey}`
+      'Accept': 'application/json',
+      'Authorization': `Key ${apiKey}`
     },
     body: JSON.stringify(payload)
   });

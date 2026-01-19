@@ -393,7 +393,6 @@ export default function AdminDashboard() {
 
             {/* Mobile Header */}
             <div style={{ 
-                display: 'none', 
                 position: 'fixed', 
                 top: 0, 
                 width: '100%', 
@@ -429,7 +428,7 @@ export default function AdminDashboard() {
                 flexDirection: 'column', 
                 gap: '25px',
                 boxShadow: '6px 0 30px rgba(0,0,0,0.15)'
-            }} className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+            }} className={`sidebar admin-sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
                 <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -450,6 +449,7 @@ export default function AdminDashboard() {
                         alt="Santi" 
                     />
                     <h2 style={{ fontSize: '22px', margin: 0, color: COLOR_GOLD, fontWeight: 'bold' }}>Santi Admin</h2>
+                    <button className="mobile-close-btn" onClick={() => setIsMobileMenuOpen(false)} style={{ display: 'none', background: 'transparent', border: 'none', color: 'white', fontSize: 22, marginLeft: 8 }}>✕</button>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -489,7 +489,7 @@ export default function AdminDashboard() {
                 flex: 1, 
                 padding: '50px', 
                 overflowY: 'auto' 
-            }} className="main-content">
+            }} className="main-content admin-main">
                 <header style={{ 
                     display: 'flex', 
                     justifyContent: 'space-between', 
@@ -519,11 +519,11 @@ export default function AdminDashboard() {
                 {/* Tab: LUGARES */}
                 {activeTab === 'lugares' && (
                     <div style={cardStyle}>
-                        <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px' }}>
+                        <div className="form-grid">
                             <form onSubmit={handleAddPlace} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                 <Input label="Nombre" value={newPlace.name} onChange={v => setNewPlace({ ...newPlace, name: v })} />
-                                <div style={{ display: 'flex', gap: '15px' }}>
-                                    <div style={{ flex: 1 }}>
+                                <div className="responsive-row" style={{ gap: '15px' }}>
+                                    <div className="responsive-col">
                                         <label style={labelStyle}>Categoría</label>
                                         <select style={inputStyle} value={newPlace.category} onChange={e => setNewPlace({ ...newPlace, category: e.target.value })}>
                                             <option value="historico">Histórico</option>
@@ -573,11 +573,11 @@ export default function AdminDashboard() {
 
                         <hr style={{ margin: '40px 0', border: 'none', borderTop: '1px solid #eee' }} />
                         <h3>Explorar y Editar Atractivos</h3>
-                        <div className="content-grid" style={gridList}>
+                        <div className="content-grid">
                             {places.map(p => (
                                 <div key={p.id} style={placeCard} onClick={() => startEditing(p)}>
                                     <div style={{ position: 'relative' }}>
-                                        <NextImage src={p.image_url || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300"} width={300} height={120} style={{ width: '100%', height: '120px', objectFit: 'cover' }} alt={p.name} />
+                                        <NextImage src={p.image_url || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300"} width={300} height={120} style={{ maxWidth: '100%', width: 'auto', height: '120px', objectFit: 'cover' }} alt={p.name} />
                                         <span style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(0,0,0,0.5)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px' }}>{p.category}</span>
                                     </div>
                                     <div style={{ padding: '12px' }}>
@@ -819,8 +819,8 @@ export default function AdminDashboard() {
                         <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px', marginBottom: '40px' }}>
                             <form onSubmit={handleAddBusiness} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                 <Input label="Nombre del Negocio" value={newBusiness.name} onChange={v => setNewBusiness({ ...newBusiness, name: v })} />
-                                <div style={{ display: 'flex', gap: '15px' }}>
-                                    <div style={{ flex: 1 }}>
+                                <div className="responsive-row" style={{ gap: '15px' }}>
+                                    <div className="responsive-col">
                                         <label style={labelStyle}>Categoría</label>
                                         <select style={inputStyle} value={newBusiness.category} onChange={e => setNewBusiness({ ...newBusiness, category: e.target.value })}>
                                             <option value="restaurante">Restaurante / Comida</option>
@@ -832,7 +832,7 @@ export default function AdminDashboard() {
                                 </div>
                                 <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '10px' }}>
                                     <label style={labelStyle}>Foto del Negocio</label>
-                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                                    <div className="responsive-row row-center" style={{ marginBottom: '10px' }}>
                                         <input type="file" accept="image/*" onChange={e => setBusinessFile(e.target.files?.[0] || null)} style={{ flex: 1 }} />
                                         <button type="button" onClick={() => captureImage('business')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
                                     </div>
@@ -858,7 +858,7 @@ export default function AdminDashboard() {
                         <div style={{ display: 'grid', gap: '15px' }}>
                             {businesses.map(b => (
                                 <div key={b.id} style={listItem}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                    <div className="responsive-row row-center">
                                         <NextImage src={b.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"} width={45} height={45} style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} alt={b.name || 'Negocio'} />
                                         <div>
                                             <strong style={{ fontSize: '1rem' }}>{b.name}</strong>

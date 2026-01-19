@@ -111,8 +111,114 @@ button:active {
   html, body {
     font-size: 14px;
   }
-  
+
   :root {
     --spacing-lg: 1rem;
   }
+
+  /* Mobile admin tweaks */
+  .mobile-only-header { display: flex !important; }
+  .sidebar { display: none !important; }
+  .sidebar.open { display: block !important; position: fixed; z-index: 2200; left: 0; top: 70px; bottom: 0; width: 100%; overflow-y: auto; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+  .mobile-close-btn { display: inline-block; }
+  .admin-main { padding: 20px !important; }
+}
+
+/* Form grid used in admin forms */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 30px;
+  align-items: start;
+}
+
+/* Content grid for lists/cards */
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 768px) {
+  .form-grid { grid-template-columns: 1fr; gap: 16px; }
+  .content-grid { grid-template-columns: 1fr; }
+}
+/* Admin layout and responsive helpers */
+.admin-layout * { min-width: 0; }
+
+.admin-main input, .admin-main textarea, .admin-main select { width: 100%; box-sizing: border-box; }
+
+.admin-footer { padding: var(--spacing-md); }
+
+.admin-layout {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: flex-start;
+  width: 100%;
+}
+
+.admin-main {
+  flex: 1 1 0;
+  min-width: 0; /* allow children to shrink properly */
+  padding: var(--spacing-md);
+}
+
+.admin-sidebar {
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 220px;
+}
+
+/* Utility row that wraps on small screens */
+.responsive-row {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+/* Row variant: center vertically */
+.row-center {
+  align-items: center;
+}
+
+/* Columns that shrink and avoid overflow */
+.responsive-col {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+/* Image helper */
+.responsive-img, img {
+  max-width: 100%;
+  height: auto;
+  width: auto;
+}
+
+/* List items that wrap in mobile */
+.list-item {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+/* Pre and code blocks should not overflow the page */
+pre, code {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.list-item .item-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 768px) {
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar { width: 100%; flex: 0 0 auto; }
+  .responsive-row { flex-direction: column; }
+  .list-item { justify-content: flex-start; }
 }

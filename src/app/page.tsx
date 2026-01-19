@@ -62,7 +62,7 @@ const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onC
       e.currentTarget.style.borderColor = `${COLOR_BLUE}44`;
     }}
   >
-    <Image src={img || IMG_PATTERN} alt={title} width={160} height={220} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    <Image src={img || IMG_PATTERN} alt={title} width={160} height={220} style={{ maxWidth: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
     <div style={{
       position: 'absolute',
       bottom: 0, left: 0, right: 0,
@@ -925,7 +925,7 @@ export default function Home() {
                 alt={activePlace.name}
                 width={550}
                 height={300}
-                style={{ width: '100%', height: '300px', objectFit: 'cover', cursor: 'zoom-in', borderBottom: `4px solid ${COLOR_GOLD}` }}
+                style={{ maxWidth: '100%', width: '100%', height: '300px', objectFit: 'cover', cursor: 'zoom-in', borderBottom: `4px solid ${COLOR_GOLD}` }}
               />
               <div style={{ padding: '30px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>

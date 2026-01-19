@@ -1,0 +1,65 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const getAdmin = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Supabase admin not configured');
+  return createClient(url, key, { auth: { persistSession: false } });
+};
+
+// Public endpoint called after registration to send welcome email and register contact
+export async function POST(request: Request) {
+  try {
+    const { email, name } = await request.json();
+    if (!email) return NextResponse.json({ error: 'Missing email' }, { status: 400 });
+
+    const admin = getAdmin();
+
+    // Find welcome template (prefer profile/business template if found)
+    const { data: templates } = await admin.from('email_templates').select('*').order('created_at', { ascending: false });
+    type TemplateRow = { id?: string; name?: string; subject?: string; html?: string };
+    const welcomeTpl = (templates || []).find((t: TemplateRow) => String(t.name).toLowerCase().includes('bienvenida')) as TemplateRow | undefined || (templates || [])[0];
+
+    if (!welcomeTpl) return NextResponse.json({ error: 'No welcome template available' }, { status: 500 });
+
+    // Personalize template simple token replacement
+    const personalizedHtml = (welcomeTpl.html || '').replace(/{{\s*name\s*}}/gi, name || '');
+    const personalizedSubject = (welcomeTpl.subject || '').replace(/{{\s*name\s*}}/gi, name || '');
+
+    // Send via OneSignal Email API
+    const apiKey = process.env.ONESIGNAL_REST_KEY;
+    const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
+    if (!apiKey || !appId) throw new Error('OneSignal not configured');
+
+    const payload = {
+      app_id: appId,
+      email_subject: personalizedSubject || 'Bienvenido',
+      email_body: personalizedHtml || personalizedSubject,
+      email_to: [String(email)],
+    } as unknown;
+
+    const url = 'https://api.onesignal.com/notifications?c=email';
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${apiKey}` }, body: JSON.stringify(payload) });
+    const text = await res.text();
+    let json: unknown = text;
+    try { json = text ? JSON.parse(text) : text; } catch { /* ignore */ }
+
+    if (!res.ok) {
+      return NextResponse.json({ error: `OneSignal error ${res.status}: ${typeof json === 'string' ? json : JSON.stringify(json)}` }, { status: 500 });
+    }
+
+    // Upsert contact into email_contacts table for tracking
+    try {
+      const { data: existing } = await admin.from('email_contacts').select('*').eq('email', email).limit(1).maybeSingle();
+      if (!existing) {
+        await admin.from('email_contacts').insert([{ name: name || null, email }]);
+      }
+    } catch { /* don't block on db error */ }
+
+    return NextResponse.json({ ok: true, result: json });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

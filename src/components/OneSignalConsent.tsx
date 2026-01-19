@@ -18,9 +18,10 @@ function loadScript(src: string): Promise<void> {
 export default function OneSignalConsent() {
   const [status, setStatus] = useState<'unknown' | 'granted' | 'dismissed' | 'loading' | 'ready'>('unknown');
 
+  const enableInDev = Boolean(process.env.NEXT_PUBLIC_ONESIGNAL_ENABLE_IN_DEV);
+
   const loadAndInit = async () => {
     // Avoid initializing OneSignal in development unless explicitly enabled for testing
-    const enableInDev = Boolean(process.env.NEXT_PUBLIC_ONESIGNAL_ENABLE_IN_DEV);
     if (process.env.NODE_ENV !== 'production' && !enableInDev) {
       console.warn('Skipping OneSignal init in non-production environment (set NEXT_PUBLIC_ONESIGNAL_ENABLE_IN_DEV to enable).');
       setStatus('dismissed');
@@ -53,6 +54,36 @@ export default function OneSignalConsent() {
       }
 
       setStatus('ready');
+
+      // Diagnostic: log service worker registrations and try a ping to active SW
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          console.debug('SW registrations:', regs.map(r => ({ scope: r.scope, scriptURL: r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || null, active: !!r.active })));
+          const foundOneSignal = regs.find(r => {
+            const script = (r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '');
+            return typeof script === 'string' && (script.includes('OneSignalSDKWorker') || script.includes('OneSignalSDKUpdaterWorker') || script.includes('OneSignalSDK'));
+          });
+          console.debug('Detected OneSignal service worker script:', foundOneSignal ? (foundOneSignal.active?.scriptURL || foundOneSignal.installing?.scriptURL || foundOneSignal.waiting?.scriptURL) : null);
+          const reg = await navigator.serviceWorker.getRegistration('/');
+          console.debug('SW registration for /:', reg?.scope, reg?.active?.scriptURL || null, 'active=', !!reg?.active);
+          if (reg?.active) {
+            try {
+              reg.active.postMessage({ type: 'PING_FROM_APP' });
+              console.debug('Posted PING to active SW');
+            } catch (e) {
+              console.warn('Failed to postMessage to SW:', e);
+            }
+          } else {
+            console.warn('No active service worker to postMessage to.');
+          }
+        } else {
+          console.warn('ServiceWorker not supported in navigator');
+        }
+      } catch (e) {
+        console.warn('SW diagnostic error:', e);
+      }
+
     } catch (err) {
       console.error('Failed to load/initialize OneSignal', err);
       setStatus('dismissed');
@@ -68,7 +99,7 @@ export default function OneSignalConsent() {
       const t = setTimeout(() => setStatus('dismissed'), 0);
       return () => clearTimeout(t);
     }
-  }, []);
+  }, [loadAndInit]);
 
   const accept = () => {
     localStorage.setItem('onesignal-consent', 'granted');
@@ -82,7 +113,17 @@ export default function OneSignalConsent() {
   };
 
   // Don't render if consent already accepted/loading/ready or explicitly dismissed
-  if (status === 'granted' || status === 'loading' || status === 'ready' || status === 'dismissed') return null;
+  if (status === 'granted' || status === 'loading' || status === 'ready' || status === 'dismissed') {
+    // If in dev and explicitly enabled, show a small Dev Init button instead of the consent card
+    if (process.env.NODE_ENV !== 'production' && enableInDev) {
+      return (
+        <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 9999 }}>
+          <button onClick={() => { setStatus('loading'); void loadAndInit(); }} style={{ padding: '8px 12px', borderRadius: 8, background: '#1A3A6C', color: '#fff', border: 'none' }}>Inicializar OneSignal (Dev)</button>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div style={{

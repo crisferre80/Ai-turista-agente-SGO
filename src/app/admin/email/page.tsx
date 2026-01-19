@@ -97,12 +97,12 @@ export default function AdminEmailPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="responsive-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>📧 Gestión de Emails</h1>
           <p style={{ color: '#6b7280', marginBottom: 18 }}>Administra contactos, campañas, plantillas y envíos masivos</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="responsive-row" style={{ gap: 8, alignItems: 'center' }}>
           <button onClick={runDebug} disabled={debugLoading} style={{ padding: '8px 12px', borderRadius: 8, background: '#0e1f1d', color: '#fff', border: 'none', cursor: 'pointer' }}>
             {debugLoading ? 'Comprobando...' : 'Comprobar BD (dev)'}
           </button>

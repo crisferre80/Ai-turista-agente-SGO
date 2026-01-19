@@ -49,6 +49,11 @@ export default function LoginPage() {
                     });
                     if (authError) throw authError;
                     setSuccess('¡Registro exitoso! Revisa tu email para confirmar la cuenta.');
+
+                    // Trigger welcome email (server-side) with basic personalization
+                    try {
+                      await fetch('/api/email/welcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, name: '' }) });
+                    } catch (e) { console.warn('Failed to call welcome email endpoint', e); }
                 } else {
                     // Login Business
                     const { data, error: authError } = await supabase.auth.signInWithPassword({

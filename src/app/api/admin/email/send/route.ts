@@ -16,26 +16,39 @@ async function sendViaOneSignal(template: TemplateRecord): Promise<Record<string
   const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
   if (!apiKey || !appId) throw new Error('OneSignal API key or App ID not configured');
 
+  // Build payload according to OneSignal Email API requirements (POST /notifications?c=email)
   const payload = {
     app_id: appId,
-    included_segments: ['Subscribed Users'],
-    email_subject: template.subject,
-    contents: { en: template.subject },
-    email_body: template.html
+    email_subject: template.subject || template.name || 'No subject',
+    email_body: template.html || template.subject || '<p></p>',
+    // Keep contents for backward compatibility, but main fields are email_subject/email_body
+    contents: { en: template.subject || template.name || '' },
+    // Targeting: by default send to subscribed users; you can override with email_to or include_aliases
+    included_segments: ['Subscribed Users']
   };
 
-  const res = await fetch('https://onesignal.com/api/v1/notifications', {
+  // Diagnostic: log non-sensitive payload info to help debug parsing errors
+  try {
+    console.debug('OneSignal send (email): app_id present=', !!appId, 'payloadKeys=', Object.keys(payload));
+  } catch { /* ignore logging errors */ }
+
+  // Use the documented API host + query param for email
+  const url = 'https://api.onesignal.com/notifications?c=email';
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json;charset=utf-8',
-      'Authorization': `Basic ${apiKey}`
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Key ${apiKey}`
     },
     body: JSON.stringify(payload)
   });
 
-  const json = await res.json();
-  if (!res.ok) throw new Error(JSON.stringify(json));
-  return json;
+  const text = await res.text();
+  let json: unknown = text;
+  try { json = text ? JSON.parse(text) : text; } catch { /* not JSON */ }
+  if (!res.ok) throw new Error(`OneSignal API error ${res.status}: ${typeof json === 'string' ? json : JSON.stringify(json)}`);
+  return json as Record<string, unknown>;
 }
 
 export async function POST(request: Request) {
@@ -55,11 +68,17 @@ export async function POST(request: Request) {
     const tplRec = tpl as TemplateRecord | null;
     if (!tplRec) throw new Error('Template not found');
 
-    const r = await sendViaOneSignal(tplRec);
-
-    await admin.from('email_campaigns').update({ status: 'sent', external_id: (r as Record<string, unknown>).id ?? null }).eq('id', campaignRec.id);
-
-    return NextResponse.json({ ok: true, result: r });
+    let r: Record<string, unknown> | null = null;
+    try {
+      r = await sendViaOneSignal(tplRec);
+      await admin.from('email_campaigns').update({ status: 'sent', external_id: (r as Record<string, unknown>).id ?? null }).eq('id', campaignRec.id);
+      return NextResponse.json({ ok: true, result: r });
+    } catch (sendErr: unknown) {
+      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      console.error('Failed to send campaign via OneSignal:', msg);
+      await admin.from('email_campaigns').update({ status: 'failed' }).eq('id', campaignRec.id);
+      return NextResponse.json({ error: 'OneSignal send failed: ' + msg }, { status: 500 });
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
