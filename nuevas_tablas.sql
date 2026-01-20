@@ -61,3 +61,31 @@ CREATE POLICY "Usuarios pueden actualizar sus propias reseñas"
 CREATE POLICY "Usuarios pueden eliminar sus propias reseñas"
   ON user_reviews FOR DELETE
   USING (auth.uid() = user_id);
+
+-- TABLA DE PROMOCIONES PARA LUGARES Y NEGOCIOS
+CREATE TABLE promotions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  place_id UUID,
+  title TEXT NOT NULL,
+  description TEXT,
+  image_url TEXT,
+  terms TEXT,
+  starts_at TIMESTAMP WITH TIME ZONE,
+  ends_at TIMESTAMP WITH TIME ZONE,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_promotions_place ON promotions(place_id);
+
+-- RLS básico para promociones
+ALTER TABLE promotions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Ver promociones activas"
+  ON promotions FOR SELECT
+  USING (is_active = true);
+
+CREATE POLICY "Admins pueden gestionar promociones"
+  ON promotions FOR ALL
+  USING (auth.jwt() ->> 'role' = 'admin');

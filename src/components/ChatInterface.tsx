@@ -1,6 +1,7 @@
 ﻿"use client";
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 declare global {
@@ -28,6 +29,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
     externalStory?: { url: string, name: string },
     isModalOpen?: boolean
 }) => {
+    const router = useRouter();
+    
     // State
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
     const [input, setInput] = useState('');
@@ -124,21 +127,50 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             const url = URL.createObjectURL(blob);
 
             if (audioRef.current) {
-                // Clear state and pause to avoid AbortError
+                // Clear previous handlers
                 audioRef.current.onended = null;
+                audioRef.current.onerror = null;
                 audioRef.current.pause();
                 audioRef.current.currentTime = 0;
                 audioRef.current.src = url;
+                
+                // Set up end handler to emit event
+                audioRef.current.onended = () => {
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                    }
+                    URL.revokeObjectURL(url);
+                };
+                
+                audioRef.current.onerror = () => {
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                    }
+                };
 
-                audioRef.current.play().catch(err => {
+                // Play and emit start event ONLY after successful play
+                audioRef.current.play().then(() => {
+                    // Emit start event for other components AFTER audio starts
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
+                    }
+                }).catch(err => {
                     if (err.name !== 'AbortError') {
                         console.warn("Autoplay blocked:", err);
                         setAudioBlocked(true);
+                        // Still emit start for UI purposes
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
+                        }
                     }
                 });
             }
         } catch (error: unknown) {
             console.error("TTS Error:", error);
+            // Emit end event on error
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('santi:narration:end'));
+            }
             if (typeof error === 'object' && error && (error as { message?: string }).message === "API_KEY_MISSING") {
                 alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
             }
@@ -242,12 +274,51 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
 
             const data = await response.json();
             const botReply = data.reply || "Lo siento, tuve un problema al pensar. ¿Podrías repetir?";
+            const placeId = data.placeId;
+            const placeName = data.placeName;
 
             // Add Assistant Message
             setMessages(prev => [...prev, { role: 'assistant', content: botReply }]);
 
+            // If navigating to a place, keep thinking state until narration starts there
+            // Otherwise turn off thinking after a short delay
+            if (!placeId) {
+                setTimeout(() => {
+                    setIsThinking(false);
+                }, 600);
+            }
+            // If there's a placeId, isThinking will be turned off by the narration:start event
+
             // Speak the response
             playAudioResponse(botReply);
+            
+            // If a place was mentioned, navigate to its detail page automatically
+            if (placeId && typeof window !== 'undefined') {
+                // Store that we're narrating about this place
+                // Use sessionStorage as fallback if localStorage is blocked
+                const setStorage = (key: string, value: string) => {
+                    try {
+                        localStorage.setItem(key, value);
+                    } catch (e) {
+                        try {
+                            sessionStorage.setItem(key, value);
+                        } catch (e2) {
+                            console.warn('Storage blocked, narration may not show on detail page');
+                        }
+                    }
+                };
+                
+                try {
+                    setStorage('santi:narratingPlace', placeId);
+                    setStorage('santi:narratingText', botReply);
+                    // Navigate after a short delay to let audio start - use Next.js router for SPA navigation
+                    setTimeout(() => {
+                        router.push(`/explorar/${placeId}`);
+                    }, 800);
+                } catch (err) {
+                    console.error('Navigation error:', err);
+                }
+            }
 
             // Detect if user asked for directions and extract destination from user message
             const isDirectionQuery = /(?:cómo|como) (?:llegar|voy|llego)|indicame|direcciones?|ruta|camino/i.test(textToSend);
@@ -265,9 +336,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
         } catch (error) {
             console.error(error);
             setMessages(prev => [...prev, { role: 'assistant', content: "Ocurrió un error al contactar a mi cerebro digital. Intenta más tarde." }]);
+            setIsThinking(false);
         } finally {
             setIsLoading(false);
-            setIsThinking(false);
             updateInteractionTime(); // Reset timer again after response
         }
     }, [input, getApiMessages, playAudioResponse]);
@@ -315,6 +386,14 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
 
     // Global access for triggers
     useEffect(() => {
+        // Turn off thinking modal when narration starts (even on other pages)
+        const handleNarrationStart = () => {
+            console.log('ChatInterface: Narration started, hiding thinking modal');
+            setIsThinking(false);
+        };
+        
+        window.addEventListener('santi:narration:start', handleNarrationStart);
+        
         (window as Window & typeof globalThis).santiNarrate = (text: string) => {
             handleSend(text);
         };
@@ -322,6 +401,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
             triggerAssistantMessage(text, true); // Skip focus to avoid loops
         };
         return () => {
+            window.removeEventListener('santi:narration:start', handleNarrationStart);
             if ((window as Window & typeof globalThis).santiNarrate) delete (window as Window & typeof globalThis).santiNarrate;
             if ((window as Window & typeof globalThis).santiSpeak) delete (window as Window & typeof globalThis).santiSpeak;
         };
@@ -451,6 +531,95 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 onEnded={() => setIsSpeaking(false)}
                 onPause={() => setIsSpeaking(false)}
             />
+
+            {/* THINKING MODAL */}
+            {isThinking && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 99999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(8px)',
+                    animation: 'fadeIn 0.3s ease-out'
+                }}>
+                    <div style={{
+                        background: 'white',
+                        borderRadius: 24,
+                        padding: '40px',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 20,
+                        maxWidth: '90%',
+                        animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                    }}>
+                        <Image
+                            src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768537502/bombo_alpha_ud09ok.webp"
+                            alt="Santi pensando"
+                            width={120}
+                            height={120}
+                            unoptimized
+                            style={{
+                                width: 120,
+                                height: 120,
+                                objectFit: 'contain',
+                                filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))'
+                            }}
+                        />
+                        <div style={{
+                            textAlign: 'center'
+                        }}>
+                            <h3 style={{
+                                margin: 0,
+                                fontSize: '1.4rem',
+                                fontWeight: 900,
+                                color: COLOR_BLUE,
+                                marginBottom: 8
+                            }}>
+                                Santi está pensando...
+                            </h3>
+                            <p style={{
+                                margin: 0,
+                                fontSize: '1rem',
+                                color: '#64748b',
+                                fontWeight: 500
+                            }}>
+                                Esperá un momento, estoy buscando la mejor respuesta para vos
+                            </p>
+                        </div>
+                        <div style={{
+                            display: 'flex',
+                            gap: 8
+                        }}>
+                            <div style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                background: COLOR_GOLD,
+                                animation: 'bounce 1.4s infinite ease-in-out'
+                            }} />
+                            <div style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                background: COLOR_RED,
+                                animation: 'bounce 1.4s infinite ease-in-out 0.2s'
+                            }} />
+                            <div style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                background: COLOR_BLUE,
+                                animation: 'bounce 1.4s infinite ease-in-out 0.4s'
+                            }} />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MAIN ROBOT DISPLAY & FLOATING BUBBLE */}
             <div className="robot-container" style={{
@@ -993,6 +1162,35 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 }
                 .listening-pulse {
                     animation: pulse 1.5s infinite;
+                }
+                
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                    }
+                    to {
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes scaleIn {
+                    from {
+                        transform: scale(0.8);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: scale(1);
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes bounce {
+                    0%, 80%, 100% {
+                        transform: translateY(0);
+                    }
+                    40% {
+                        transform: translateY(-12px);
+                    }
                 }
             `}</style>
         </div>

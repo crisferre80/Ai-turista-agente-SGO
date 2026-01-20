@@ -32,6 +32,14 @@ export const getSelectedVoice = (): SpeechSynthesisVoice | null => {
 };
 
 export const santiSpeak = (text: string): void => {
+  try {
+    if (typeof window !== 'undefined') {
+      // Announce narration to any listeners (e.g., Map) so they can react and navigate
+      window.dispatchEvent(new CustomEvent('santi:narrate', { detail: { text } }));
+      window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
+    }
+  } catch (e) { /* ignore dispatch errors */ }
+
   fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -48,9 +56,22 @@ export const santiSpeak = (text: string): void => {
       audio.play().catch(err => {
         console.warn("Autoplay blocked:", err);
       });
+      audio.onended = () => {
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:end'));
+          }
+        } catch (e) { /* ignore */ }
+        URL.revokeObjectURL(url);
+      };
     })
     .catch(error => {
       console.error("TTS Error:", error);
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('santi:narration:end'));
+        }
+      } catch (e) { /* ignore */ }
       if (error.message === "API_KEY_MISSING") {
         alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
       }

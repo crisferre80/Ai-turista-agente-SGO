@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { createRoot } from 'react-dom/client';
@@ -27,6 +28,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
     const [lng] = useState(-64.2599);
     const [lat] = useState(-27.7834);
     const [zoom] = useState(13);
+    const router = useRouter();
 
     useEffect(() => {
         if (!MAPBOX_TOKEN) {
@@ -207,7 +209,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             el.className = 'custom-circular-marker';
 
             const markerColor = attr.isBusiness ? '#20B2AA' : '#D2691E';
-            const imageUrl = attr.image || "https://via.placeholder.com/45x45/cccccc/000000?text=Img";
+            const imageUrl = attr.image || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg";
 
             el.style.cssText = `
                 width: 45px;
@@ -283,7 +285,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                     </div>
                   </div>
                   <div style="display:flex; gap:8px; margin-top:10px;">
-                    <button onclick="(function(){ localStorage.setItem('openPlaceId', '${attr.id}'); window.location.href='/explorar'; })()" style="flex:1; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
+                    <button onclick="(function(){ window.location.href='/explorar/${attr.id}'; })()" style="flex:1; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
                     <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Ir</button>
                   </div>
                 </div>
@@ -322,7 +324,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
             else onNarrate?.(`Aún no hay historias para ${name}.`);
         };
 
-        (window as any).focusPlaceOnMap = (placeName: string) => {
+
+    (window as any).focusPlaceOnMap = (placeName: string) => {
             console.log('focusPlaceOnMap called with:', placeName);
             const normalize = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '');
             const normalizedPlaceName = normalize(placeName);
@@ -352,6 +355,26 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                 return found;
             }
             return null;
+        };
+
+        // Listen to Santi narrations so we can navigate to a place detail when he mentions a known place
+        const onNarration = (ev: Event) => {
+            try {
+                const detail = (ev as CustomEvent).detail as { text: string } | undefined;
+                const text = detail?.text || '';
+                if (!text) return;
+                const found = (window as any).focusPlaceOnMap(text);
+                if (found && found.id) {
+                    // Navigate to the place detail page while Santi narrates
+                    router.push(`/explorar/${found.id}`);
+                }
+            } catch (e) { /* ignore */ }
+        };
+
+        window.addEventListener('santi:narrate', onNarration as EventListener);
+        // Remove listener on cleanup
+        return () => {
+            window.removeEventListener('santi:narrate', onNarration as EventListener);
         };
     }, [isMapReady, attractions, userLocation]);
 

@@ -16,8 +16,8 @@ export async function POST(req: Request) {
         }
 
         // 1. Fetch Local Data for Context
-        const { data: attractions } = await supabase.from('attractions').select('name, description, info_extra, category');
-        const { data: businesses } = await supabase.from('businesses').select('name, category, website_url, contact_info');
+        const { data: attractions } = await supabase.from('attractions').select('id, name, description, info_extra, category');
+        const { data: businesses } = await supabase.from('businesses').select('id, name, category, website_url, contact_info');
 
         const localContext = `
         INFORMACIÓN LOCAL REGISTRADA (PRIORIDAD ALTA):
@@ -59,7 +59,37 @@ export async function POST(req: Request) {
         });
 
         const reply = response.choices[0].message.content;
-        return NextResponse.json({ reply });
+        
+        // Detect if a specific place is mentioned in the reply
+        let placeId = null;
+        let placeName = null;
+        
+        if (reply) {
+            // Check attractions first
+            for (const attraction of (attractions || [])) {
+                const name = attraction.name as string;
+                // Case-insensitive partial match
+                if (reply.toLowerCase().includes(name.toLowerCase())) {
+                    placeId = attraction.id;
+                    placeName = name;
+                    break;
+                }
+            }
+            
+            // If not found in attractions, check businesses
+            if (!placeId) {
+                for (const business of (businesses || [])) {
+                    const name = business.name as string;
+                    if (reply.toLowerCase().includes(name.toLowerCase())) {
+                        placeId = business.id;
+                        placeName = name;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return NextResponse.json({ reply, placeId, placeName });
 
     } catch (error) {
         console.error('Error in chat route:', error);

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+import UserReviewModal from './UserReviewModal';
 
 const COLOR_GOLD = '#F1C40F';
 const COLOR_BLUE = '#1A3A6C';
@@ -19,25 +20,28 @@ interface UserReview {
   };
 }
 
-export default function UserReviewsGallery() {
+export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: string; isBusiness?: boolean } = {}) {
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     fetchReviews();
-  }, []);
+  }, [placeId, isBusiness]);
 
   const fetchReviews = async () => {
     try {
-      const { data, error } = await supabase
-        .from('user_reviews')
-        .select(`
+      let query = supabase.from('user_reviews').select(`
           *,
           profiles(name, avatar_url)
-        `)
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-        .limit(20);
+        `).eq('is_public', true).order('created_at', { ascending: false }).limit(20);
+
+      if (placeId) {
+        if (isBusiness) query = query.eq('business_id', placeId);
+        else query = query.eq('attraction_id', placeId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error de Supabase:', error.message, error.details, error.hint);
@@ -85,6 +89,15 @@ export default function UserReviewsGallery() {
         }}>
           Todavía no hay experiencias compartidas. ¡Sé el primero!
         </p>
+        {placeId && (
+          <div style={{ marginTop: 12 }}>
+            <button onClick={() => setShowModal(true)} style={{ padding: '10px 14px', borderRadius: 10, background: '#1A3A6C', color: 'white', border: 'none' }}>Escribir reseña</button>
+          </div>
+        )}
+        {showModal && (
+          // @ts-ignore - dynamic modal component
+          <UserReviewModal isOpen={true} onClose={() => { setShowModal(false); fetchReviews(); }} attractionId={!isBusiness ? placeId : undefined} businessId={isBusiness ? placeId : undefined} locationName={reviews[0]?.location_name || ''} />
+        )}
       </div>
     );
   }
