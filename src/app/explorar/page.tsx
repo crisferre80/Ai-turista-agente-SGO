@@ -97,18 +97,25 @@ export default function ExplorePage() {
     });
 
     const PlaceCard = ({ place }: { place: PlaceType }) => (
-        <div id={`place-${place.id}`} data-place-id={place.id} className="card-hover" style={{
-            background: highlightId === place.id ? 'linear-gradient(135deg,#fffde6,#fff)' : 'white',
-            borderRadius: '24px',
-            overflow: 'hidden',
-            boxShadow: highlightId === place.id ? '0 25px 60px rgba(241,196,15,0.18)' : '0 10px 30px rgba(0,0,0,0.12)',
-            border: `2px solid ${place.isBusiness ? COLOR_BLUE : COLOR_GOLD}22`,
-            cursor: 'pointer',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            transition: 'box-shadow .3s ease, transform .3s ease, background .3s ease'
-        }}
+        <Link 
+            href={`/explorar/${place.id}`}
+            id={`place-${place.id}`} 
+            data-place-id={place.id} 
+            className="card-hover" 
+            style={{
+                background: highlightId === place.id ? 'linear-gradient(135deg,#fffde6,#fff)' : 'white',
+                borderRadius: '24px',
+                overflow: 'hidden',
+                boxShadow: highlightId === place.id ? '0 25px 60px rgba(241,196,15,0.18)' : '0 10px 30px rgba(0,0,0,0.12)',
+                border: `2px solid ${place.isBusiness ? COLOR_BLUE : COLOR_GOLD}22`,
+                cursor: 'pointer',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'box-shadow .3s ease, transform .3s ease, background .3s ease',
+                textDecoration: 'none',
+                color: 'inherit'
+            }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-8px)';
                 e.currentTarget.style.boxShadow = `0 20px 40px ${place.isBusiness ? COLOR_BLUE : COLOR_RED}44`;
@@ -116,13 +123,6 @@ export default function ExplorePage() {
             onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
-            }}
-            onClick={() => {
-                // Navigate to main page and focus on this place
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('focusPlace', place.name);
-                    window.location.href = '/';
-                }
             }}
         >
             <div style={{
@@ -291,7 +291,7 @@ export default function ExplorePage() {
                     📸 Compartir Mi Experiencia
                 </button>
             </div>
-        </div>
+        </Link>
     );
 
 
