@@ -39,6 +39,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef(false); // Track if audio is already playing to avoid duplicates
   const hasPlayedRef = useRef(false); // Track if we've already played audio for this page load
+  const isEndingRef = useRef(false); // Track if narration end event is already in progress to prevent loops
 
   const openGallery = (index = 0) => setGalleryOpen({ open: true, index });
   const closeGallery = () => setGalleryOpen({ open: false, index: 0 });
@@ -81,23 +82,36 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
     };
     
     const handleNarrationEnd = () => {
+      // Prevent loop: if already ending, ignore this call
+      if (isEndingRef.current) {
+        console.log('PlaceDetailClient: Narration end already in progress, ignoring');
+        return;
+      }
+      
+      isEndingRef.current = true;
       console.log('PlaceDetailClient: Narration end event received');
       setSantiNarrating(false);
       isPlayingRef.current = false; // Reset playing flag
+      
       // Clean up storage
       removeStorage('santi:narratingPlace');
       removeStorage('santi:narratingText');
       
-      // Stop local audio if playing
+      // Stop local audio if playing, but DON'T clear src (causes onerror loop)
       if (audioRef.current) {
         try {
           audioRef.current.pause();
           audioRef.current.currentTime = 0;
-          audioRef.current.src = '';
+          // Don't set src to '' - it causes an error event that triggers this again
         } catch {
           // Ignore cleanup errors
         }
       }
+      
+      // Reset ending flag after a small delay
+      setTimeout(() => {
+        isEndingRef.current = false;
+      }, 100);
     };
     
     // Function to play audio locally
@@ -173,6 +187,12 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         };
         
         audioRef.current.onerror = (e) => {
+          // Prevent loop: don't dispatch end event if already ending
+          if (isEndingRef.current) {
+            console.log('PlaceDetailClient: Audio error during end event, ignoring to prevent loop');
+            return;
+          }
+          
           console.error('PlaceDetailClient: Audio onerror triggered');
           console.error('PlaceDetailClient: Event:', e);
           
@@ -271,10 +291,11 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       
       // Cleanup audio on unmount
       isPlayingRef.current = false;
+      isEndingRef.current = false;
       if (audioRef.current) {
         try {
           audioRef.current.pause();
-          audioRef.current.src = '';
+          // Don't clear src on unmount either - just pause
         } catch {
           // Ignore cleanup errors
         }
