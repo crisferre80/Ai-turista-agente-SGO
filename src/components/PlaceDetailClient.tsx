@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import UserReviewsGallery from './UserReviewsGallery';
+import { supabase } from '@/lib/supabase';
 
 type PlaceSerializable = {
   id: string;
@@ -32,6 +33,10 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a very flexible reference to the map. We'll cast locally when needed.
   const mapRef = useRef<unknown>(null);
+  
+  // Rating promedio state
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [totalReviews, setTotalReviews] = useState(0);
   
   // Santi narration state
   const [santiNarrating, setSantiNarrating] = useState(false);
@@ -303,6 +308,44 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
     };
   }, [place.id]);
 
+  // Calculate average rating
+  useEffect(() => {
+    const fetchAverageRating = async () => {
+      try {
+        let query = supabase.from('user_reviews').select('rating').eq('is_public', true);
+
+        if (place.isBusiness) {
+          query = query.eq('business_id', place.id);
+        } else {
+          query = query.eq('attraction_id', place.id);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('Error fetching ratings:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const ratings = data.map(r => r.rating);
+          const average = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+          setAverageRating(Math.round(average * 10) / 10); // Round to 1 decimal
+          setTotalReviews(ratings.length);
+        } else {
+          setAverageRating(null);
+          setTotalReviews(0);
+        }
+      } catch (error) {
+        console.error('Error calculating average rating:', error);
+      }
+    };
+
+    if (place.id) {
+      fetchAverageRating();
+    }
+  }, [place.id, place.isBusiness]);
+
   const handleShare = async () => {
     const url = typeof window !== 'undefined' ? window.location.href : '';
     if (navigator.share) {
@@ -337,42 +380,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
     };
   }, [place.lat, place.lng]);
 
-  const initRoute = async () => {
-    if (!navigator.geolocation) { alert('Tu navegador no soporta geolocalización'); return; }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const userLng = pos.coords.longitude;
-      const userLat = pos.coords.latitude;
-      try {
-        const token = (process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '').trim();
-        if (!token) { alert('MAPBOX token no disponible'); return; }
-        const q = `https://api.mapbox.com/directions/v5/mapbox/driving/${userLng},${userLat};${place.lng},${place.lat}?geometries=geojson&access_token=${token}`;
-        const r = await fetch(q);
-        const j = await r.json();
-        if (!j.routes || j.routes.length === 0) { alert('No se encontró ruta'); return; }
-        const coords = j.routes[0].geometry.coordinates;
-        if (!mapRef.current) return;
-        // Update or add geojson route source (cast to any for small localized operation)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mr = mapRef.current as any;
-        if (mr?.getSource && mr.getSource('route')) {
-          mr.getSource('route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
-        } else if (mr?.addSource) {
-          mr.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } } });
-          mr.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#007cbf', 'line-width': 6 } });
-        }
-
-        // Calculate simple bounds from coords without using mapbox types
-        const lons = coords.map((c: [number, number]) => c[0]);
-        const lats = coords.map((c: [number, number]) => c[1]);
-        const minLng = Math.min(...lons);
-        const maxLng = Math.max(...lons);
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (mapRef.current as any)?.fitBounds?.([[minLng, minLat], [maxLng, maxLat]], { padding: 60, duration: 1200 });
-      } catch (err) { console.error('Error calculando ruta', err); alert('No pude calcular la ruta'); }
-    }, () => { alert('Permite compartir ubicación para calcular la ruta'); });
-  };
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
@@ -436,23 +443,81 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
               transform: scale(1.1);
             }
           }
+          @media (max-width: 768px) {
+            .place-detail-container {
+              padding: 16px 12px !important;
+            }
+            .hero-section {
+              height: 300px !important;
+            }
+            .hero-title {
+              font-size: 1.8rem !important;
+            }
+            .main-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+            .sidebar {
+              display: flex !important;
+              flex-direction: column !important;
+              gap: 12px !important;
+              margin-top: 20px !important;
+              width: 100% !important;
+            }
+            .gallery-grid {
+              grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+            }
+            .video-container {
+              min-width: 180px !important;
+              height: 100px !important;
+            }
+            .promotion-item {
+              flex-direction: column !important;
+              text-align: center;
+            }
+            .promotion-image {
+              width: 100% !important;
+              height: 120px !important;
+            }
+            .modal-content {
+              width: 95% !important;
+              height: 85% !important;
+            }
+            .narrating-modal {
+              left: 16px !important;
+              bottom: 16px !important;
+              max-width: calc(100vw - 32px) !important;
+              padding: 16px !important;
+            }
+          @media (min-width: 769px) {
+            .sidebar {
+              max-width: 300px;
+            }
+          }
         `
       }} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }} className="place-detail-container">
         {/* Hero */}
-        <div style={{ position: 'relative', height: 520, borderRadius: 16, overflow: 'hidden', boxShadow: '0 25px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ position: 'relative', height: 520, borderRadius: 16, overflow: 'hidden', boxShadow: '0 25px 60px rgba(0,0,0,0.15)' }} className="hero-section">
           <Image src={place.image_url || 'https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg'} alt={place.name} fill style={{ objectFit: 'cover' }} />
           <div style={{ position: 'absolute', left: 24, bottom: 24, color: 'white', textShadow: '0 6px 28px rgba(0,0,0,0.6)' }}>
-            <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900 }}>{place.name}</h1>
-            <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900 }} className="hero-title">{place.name}</h1>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {place.category && <span style={{ background: 'rgba(255,255,255,0.9)', color: '#1A3A6C', padding: '6px 10px', borderRadius: 10, fontWeight: 700 }}>{place.category}</span>}
               <button onClick={handleShare} style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.45)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Compartir</button>
+              {place.lat && place.lng && (
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`} target="_blank" rel="noreferrer">
+                  <button style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.45)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🗺️ Google Maps
+                  </button>
+                </a>
+              )}
             </div>
           </div>
         </div>
 
         {/* Main Info / Side panel */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }} className="main-grid">
           <div style={{ background: 'white', padding: 18, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
             <h2 style={{ marginTop: 0, color: '#1A3A6C' }}>Descripción</h2>
             <p style={{ color: '#333', lineHeight: 1.7 }}>{place.description || 'No hay descripción disponible.'}</p>
@@ -461,7 +526,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             {place.gallery_urls && place.gallery_urls.length > 0 && (
               <section style={{ marginTop: 18 }}>
                 <h3 style={{ margin: 0, marginBottom: 8 }}>Galería</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }} className="gallery-grid">
                   {place.gallery_urls.map((u, i) => (
                     <div key={i} onClick={() => openGallery(i)} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', height: 100, position: 'relative' }}>
                       <Image src={u} alt={`${place.name} foto ${i + 1}`} fill style={{ objectFit: 'cover' }} />
@@ -477,7 +542,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                 <h3 style={{ margin: 0, marginBottom: 8 }}>Videos</h3>
                 <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8 }}>
                   {place.video_urls.map((v, i) => (
-                    <div key={i} style={{ minWidth: 220, height: 130, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative' }} onClick={() => openVideo(v)}>
+                    <div key={i} style={{ minWidth: 220, height: 130, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative' }} className="video-container" onClick={() => openVideo(v)}>
                       <video src={v} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <div style={{ background: 'rgba(0,0,0,0.4)', padding: 10, borderRadius: 999 }}>&#9658;</div>
@@ -494,8 +559,8 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                 <h3 style={{ margin: 0, marginBottom: 8 }}>Promociones</h3>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {promotions.map(p => (
-                    <div key={p.id} style={{ display: 'flex', gap: 12, background: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }}>
-                      {p.image_url && <div style={{ width: 120, height: 80, position: 'relative', borderRadius: 8, overflow: 'hidden' }}><Image src={p.image_url} alt={p.title || 'Promo'} fill style={{ objectFit: 'cover' }} /></div>}
+                    <div key={p.id} style={{ display: 'flex', gap: 12, background: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="promotion-item">
+                      {p.image_url && <div style={{ width: 120, height: 80, position: 'relative', borderRadius: 8, overflow: 'hidden' }} className="promotion-image"><Image src={p.image_url} alt={p.title || 'Promo'} fill style={{ objectFit: 'cover' }} /></div>}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 800 }}>{p.title}</div>
                         <div style={{ color: '#666' }}>{p.description}</div>
@@ -512,13 +577,20 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
             {/* Reviews for this place */}
             <section style={{ marginTop: 18 }}>
-              <h3 style={{ margin: 0, marginBottom: 8 }}>Experiencias de visitantes</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h3 style={{ margin: 0 }}>Experiencias de visitantes</h3>
+                {averageRating !== null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#F1C40F', color: '#1A3A6C', padding: '4px 8px', borderRadius: 8, fontSize: '0.9rem', fontWeight: 700 }}>
+                    ⭐ {averageRating} ({totalReviews} reseñas)
+                  </div>
+                )}
+              </div>
               <UserReviewsGallery placeId={place.id} isBusiness={!!place.isBusiness} />
             </section>
 
           </div>
 
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="sidebar">
             <div style={{ background: 'white', padding: 16, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 12, color: '#666' }}>{place.isBusiness ? 'Negocio' : 'Atractivo'}</div>
@@ -526,11 +598,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
               </div>
               {place.contact_info && <div style={{ marginTop: 12 }}><strong>Contacto:</strong><br /> <a href={`tel:${place.contact_info}`} style={{ color: '#1A3A6C', fontWeight: 700 }}>{place.contact_info}</a></div>}
               {place.website_url && <div style={{ marginTop: 8 }}><a href={place.website_url} target="_blank" rel="noreferrer" style={{ color: '#1A3A6C', fontWeight: 700 }}>Visitar sitio web</a></div>}
-
-              <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-                <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat || ''},${place.lng || ''}`} target="_blank" rel="noreferrer"><button style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #eee', background: '#fff', cursor: 'pointer' }}>Ver en Mapas</button></a>
-                <button onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Enlace copiado'); }} style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #eee', background: '#fff', cursor: 'pointer' }}>Copiar enlace</button>
-              </div>
 
               {place.isBusiness && (
                 <div style={{ marginTop: 12 }}>
@@ -541,11 +608,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
               {/* Mini map */}
               {place.lat && place.lng && (
                 <div style={{ marginTop: 12 }}>
-                  <div id={`place-mini-map-${place.id}`} style={{ width: '100%', height: 160, borderRadius: 10, overflow: 'hidden' }} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button onClick={() => initRoute()} style={{ padding: '8px 12px', borderRadius: 8, background: '#14b8a6', color: 'white', border: 'none' }}>Calcular ruta</button>
-                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`} target="_blank" rel="noreferrer"><button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #eee' }}>Abrir en Google Maps</button></a>
-                  </div>
+                  <div ref={mapContainerRef} id={`place-mini-map-${place.id}`} style={{ width: '100%', height: 160, borderRadius: 10, overflow: 'hidden' }} className="mini-map" />
                 </div>
               )}
             </div>
@@ -567,7 +630,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       {/* Gallery Modal */}
       {galleryOpen.open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeGallery}>
-          <div style={{ width: '90%', maxWidth: 1100, height: '80%', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ width: '90%', maxWidth: 1100, height: '80%', position: 'relative' }} className="modal-content" onClick={(e) => e.stopPropagation()}>
             <Image src={place.gallery_urls?.[galleryOpen.index] || place.image_url || ''} alt="Galería" fill style={{ objectFit: 'contain' }} />
             <button onClick={() => setGalleryOpen(g => ({ ...g, index: Math.max(0, g.index - 1) }))} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.9)', border: 'none', padding: 10, borderRadius: 999 }}>&lt;</button>
             <button onClick={() => setGalleryOpen(g => ({ ...g, index: Math.min((place.gallery_urls?.length || 1) - 1, g.index + 1) }))} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.9)', border: 'none', padding: 10, borderRadius: 999 }}>&gt;</button>
@@ -579,7 +642,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       {/* Video Modal */}
       {videoOpen.open && videoOpen.src && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeVideo}>
-          <div style={{ width: '90%', maxWidth: 1000, height: '70%', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ width: '90%', maxWidth: 1000, height: '70%', position: 'relative' }} className="modal-content" onClick={(e) => e.stopPropagation()}>
             <video src={videoOpen.src} controls style={{ width: '100%', height: '100%', background: '#000' }} />
             <button onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
           </div>

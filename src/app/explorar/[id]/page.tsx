@@ -1,8 +1,21 @@
 import React from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import Image from 'next/image';
 
+type Promotion = {
+  id: string;
+  title?: string;
+  description?: string;
+  place_id?: string;
+  [key: string]: unknown;
+};
+
+type PlaceDetailClientProps = {
+  place: Place;
+  promotions: Promotion[];
+};
+
+type ChatInterfaceProps = Record<string, never>;
 
 type Place = {
   id: string;
@@ -81,7 +94,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   // Load promotions for place (silent fallback if table missing)
-  let promotions: any[] = [];
+  let promotions: Promotion[] = [];
   try {
     const { data: prom } = await (await import('@/lib/supabase')).supabase.from('promotions').select('*').eq('place_id', id);
     promotions = prom || [];
@@ -91,10 +104,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   // Dynamic import client component for the heavy-place detail (split bundle)
   const PlaceDetailClientModule = await import('@/components/PlaceDetailClient');
-  const PlaceDetailClient = (PlaceDetailClientModule as any).default || PlaceDetailClientModule;
-  // Dynamic load chat client component safely (cast to any to avoid type conflicts)
+  const PlaceDetailClient = PlaceDetailClientModule.default as React.ComponentType<PlaceDetailClientProps>;
+  // Dynamic load chat client component safely
   const ChatModule = await import('@/components/ChatInterface');
-  const ChatComp = (ChatModule as any).default || ChatModule;
+  const ChatComp = ChatModule.default as React.ComponentType<ChatInterfaceProps>;
   return (
     <>
       <header style={{ background: 'white', padding: '24px 20px', borderBottom: '1px solid #eee', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60000 }}>

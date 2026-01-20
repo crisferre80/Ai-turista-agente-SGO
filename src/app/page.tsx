@@ -8,9 +8,6 @@ import { santiSpeak, santiNarrate } from '@/lib/speech';
 import Image from 'next/image';
 import Link from 'next/link';
 
-// IMAGES PROVIDED BY USER
-const IMG_PATTERN = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg";
-
 // COLORS EXTRACTED FROM FLAG
 const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
@@ -18,63 +15,112 @@ const COLOR_GOLD = "#F1C40F";
 const COLOR_WHITE = "#FFFFFF";
 const INTRO_KEY = 'santi_visual_intro_seen_v2';
 
-// Tipos
+// Placeholder image for missing images
+const IMG_PATTERN = 'https://via.placeholder.com/400x300?text=Imagen+no+disponible';
+
+// Tipo para lugares/attractions
 interface Attraction {
+  id: string;
   name: string;
-  image?: string;
-  description?: string;
-  info?: string;
-  category?: string;
+  image: string;
+  description: string;
   coords: [number, number];
   isBusiness?: boolean;
+  info?: string;
+  category?: string;
+  contact_info?: string;
   gallery_urls?: string[];
 }
 
+// Tipo para videos
 interface Video {
   id: string;
-  title: string;
   video_url: string;
+  title: string;
+  description?: string;
 }
 
-// Componentes UI Atómicos
-const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onClick: () => void }) => (
-  <div
-    onClick={onClick}
-    style={{
-      flex: '0 0 160px',
-      height: '220px',
-      borderRadius: '20px',
-      overflow: 'hidden',
-      position: 'relative',
-      cursor: 'pointer',
-      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-      boxShadow: '0 10px 20px rgba(0,0,0,0.3)',
-      border: `2px solid ${COLOR_BLUE}44`
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.transform = 'translateY(-10px) scale(1.05)';
-      e.currentTarget.style.boxShadow = `0 20px 40px ${COLOR_RED}44`;
-      e.currentTarget.style.borderColor = COLOR_RED;
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.transform = 'translateY(0) scale(1)';
-      e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.3)';
-      e.currentTarget.style.borderColor = `${COLOR_BLUE}44`;
-    }}
-  >
-    <Image src={img || IMG_PATTERN} alt={title} width={160} height={220} style={{ maxWidth: '100%', width: '100%', height: '100%', objectFit: 'cover' }} />
-    <div style={{
-      position: 'absolute',
-      bottom: 0, left: 0, right: 0,
-      background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
-      padding: '15px',
-      color: 'white'
-    }}>
-      <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>{title}</h4>
-      <div style={{ width: '20px', height: '3px', background: COLOR_RED, marginTop: '8px', borderRadius: '2px' }} />
+const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onClick: () => void }) => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const cardWidth = isMobile ? 140 : 160;
+  const cardHeight = isMobile ? 190 : 220;
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        flex: `0 0 ${cardWidth}px`,
+        width: `${cardWidth}px`,
+        height: `${cardHeight}px`,
+        borderRadius: '20px',
+        overflow: 'hidden',
+        position: 'relative',
+        cursor: 'pointer',
+        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        boxShadow: '0 10px 20px rgba(0,0,0,0.3)',
+        border: `2px solid ${COLOR_BLUE}44`
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-10px) scale(1.05)';
+        e.currentTarget.style.boxShadow = `0 20px 40px ${COLOR_RED}44`;
+        e.currentTarget.style.borderColor = COLOR_RED;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.3)';
+        e.currentTarget.style.borderColor = `${COLOR_BLUE}44`;
+      }}
+    >
+      <Image
+        src={img || IMG_PATTERN}
+        alt={title}
+        width={cardWidth}
+        height={cardHeight}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transition: 'transform 0.4s ease'
+        }}
+      />
+      <div style={{
+        position: 'absolute',
+        bottom: 0, left: 0, right: 0,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
+        padding: isMobile ? '12px' : '15px',
+        color: 'white'
+      }}>
+        <h4 style={{
+          margin: 0,
+          fontSize: isMobile ? '0.8rem' : '0.9rem',
+          fontWeight: 'bold',
+          lineHeight: '1.2',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
+          {title}
+        </h4>
+        <div style={{
+          width: isMobile ? '16px' : '20px',
+          height: '3px',
+          background: COLOR_RED,
+          marginTop: '6px',
+          borderRadius: '2px'
+        }} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) => (
   <button
@@ -85,31 +131,33 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
       alignItems: 'center',
       justifyContent: 'center',
       gap: '12px',
-      background: 'rgba(255,255,255,0.03)',
+      background: 'rgba(255,255,255,0.9)',
       backdropFilter: 'blur(10px)',
-      border: `1px solid ${COLOR_WHITE}22`,
+      border: `2px solid ${COLOR_BLUE}33`,
       borderRadius: '24px',
       padding: '20px',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
-      color: 'white',
-      boxShadow: `0 4px 15px rgba(0,0,0,0.2)`
+      color: COLOR_BLUE,
+      boxShadow: `0 4px 15px rgba(0,0,0,0.1)`
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.background = `${COLOR_BLUE}44`;
+      e.currentTarget.style.background = COLOR_BLUE;
       e.currentTarget.style.borderColor = COLOR_GOLD;
+      e.currentTarget.style.color = 'white';
       e.currentTarget.style.transform = 'translateY(-5px)';
-      e.currentTarget.style.boxShadow = `0 10px 25px ${COLOR_BLUE}66`;
+      e.currentTarget.style.boxShadow = `0 10px 25px ${COLOR_BLUE}33`;
     }}
     onMouseLeave={(e) => {
-      e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-      e.currentTarget.style.borderColor = `${COLOR_WHITE}22`;
+      e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+      e.currentTarget.style.borderColor = `${COLOR_BLUE}33`;
+      e.currentTarget.style.color = COLOR_BLUE;
       e.currentTarget.style.transform = 'translateY(0)';
-      e.currentTarget.style.boxShadow = `0 4px 15px rgba(0,0,0,0.2)`;
+      e.currentTarget.style.boxShadow = `0 4px 15px rgba(0,0,0,0.1)`;
     }}
   >
     <span style={{ fontSize: '2.5rem', filter: `drop-shadow(0 0 10px ${COLOR_GOLD}44)` }}>{icon}</span>
-    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: COLOR_WHITE }}>{label}</span>
+    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
   </button>
 );
 
@@ -393,7 +441,8 @@ export default function Home() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: `linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)`,
+      background: `url('/fotos/ciudadsgo.jpg') center/cover no-repeat fixed, linear-gradient(135deg, rgba(232, 244, 248, 0.85) 0%, rgba(254, 243, 224, 0.85) 100%)`,
+      backgroundBlendMode: 'overlay',
       color: '#1e293b',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       position: 'relative',
@@ -402,7 +451,15 @@ export default function Home() {
       <HeaderBar />
       
       {/* CONTENT WRAPPER */}
-      <div style={{ position: 'relative', zIndex: 10, padding: '90px 40px 40px 40px', maxWidth: 1400, margin: '0 auto' }}>
+      <div style={{ 
+        position: 'relative', 
+        zIndex: 10, 
+        padding: '90px clamp(20px, 5vw, 60px) 40px clamp(20px, 5vw, 60px)', 
+        maxWidth: '1600px', 
+        margin: '0 auto',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
         {/* CARRUSEL DE POSTALES DE LA PROVINCIA */}
         <section style={{
           marginTop: 20,
@@ -746,6 +803,8 @@ export default function Home() {
               <FeaturedCard key={idx} title={a.name} img={a.image} />
             ))}
           </div>
+
+
         </section>
 
         {/* SECTION: Explore Button */}
@@ -836,8 +895,8 @@ export default function Home() {
           {/* SECTION 2: Quick Actions & Chat Housing */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-            gap: '30px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(300px, 40vw, 500px), 1fr))',
+            gap: 'clamp(20px, 4vw, 40px)'
           }}>
             <div style={{
               display: 'grid',
@@ -849,30 +908,29 @@ export default function Home() {
               border: `1px solid ${COLOR_BLUE}11`
             }}>
               <QuickActionBtn
-                icon="🍽️"
+                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935115/gastronomia_jjitbf.png"
                 label="Gastronomía"
                 onClick={() => santiNarrate("¿Qué lugares para comer hay registrados?")}
               />
               <QuickActionBtn
-                icon="🏨"
+                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935120/Hoteles_kgufif.png"
                 label="Hotelería"
                 onClick={() => santiNarrate("Recomendame hoteles registrados")}
               />
               <QuickActionBtn
-                icon="🎭"
+                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935116/cultura_trx5ji.png"
                 label="Cultura"
                 onClick={() => santiNarrate("¿Qué actividades culturales me sugeris?")}
               />
               <QuickActionBtn
-                icon="👤"
-                label="Mi Perfil"
-                onClick={() => santiNarrate("¿Cómo puedo crear mi perfil certificado?")}
+                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935117/lugares_rzfnrh.png"
+                label="Lugares"
+                onClick={() => santiNarrate("¿Qué lugares turísticos me recomiendas visitar?")}
               />
             </div>
 
           </div>
         </div>
-
 
         {/* PROTAGONIST CHAT INTERFACE (Fixed at root for perfect positioning) */}
         <ChatInterface
@@ -1015,17 +1073,20 @@ export default function Home() {
         {/* Subtle Footer */}
         <footer style={{
           marginTop: 'auto',
-          padding: '60px 20px',
+          padding: '70px 20px',
           textAlign: 'center',
-          color: 'rgba(255,255,255,0.4)',
-          fontSize: '0.9rem'
+          color: 'rgba(30, 31, 73, 0.86)',
+          fontSize: '0.9rem',
+          background: 'rgba(255,255,255,0.9)',
+          borderRadius: '20px 20px 0 0',
+          margin: '40px -20px 0 -20px'
         }}>
           <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>🌵🧉🎻</div>
           <p>© 2026 Agente Turístico Santiago del Estero. <br />Diseñado con orgullo para la Madre de Ciudades.</p>
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
             <a href="/login" style={{ color: COLOR_GOLD, textDecoration: 'none', fontWeight: 'bold' }}>Acceso Staff</a>
             <span>|</span>
-            <a href="#" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none' }}>Protocolo Turístico</a>
+            <a href="#" style={{ color: 'rgba(29, 28, 112, 0.4)', textDecoration: 'none' }}>Protocolo Turístico</a>
           </div>
         </footer>
       </div>

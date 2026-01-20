@@ -8,9 +8,11 @@ import GalleryModal from '@/components/GalleryModal';
 import UserReviewModal from '@/components/UserReviewModal';
 import UserReviewsGallery from '@/components/UserReviewsGallery';
 
-const COLOR_RED = "#9E1B1B";
-const COLOR_BLUE = "#1A3A6C";
-const COLOR_GOLD = "#F1C40F";
+const COLOR_PRIMARY = "#2563eb"; // Azul profesional
+const COLOR_SECONDARY = "#64748b"; // Gris azulado
+const COLOR_ACCENT = "#f1f5f9"; // Gris muy claro
+const COLOR_TEXT = "#1e293b"; // Gris oscuro
+const COLOR_BACKGROUND = "#ffffff"; // Blanco
 
 type PlaceType = {
     id: string;
@@ -38,6 +40,7 @@ export default function ExplorePage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
+    const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -57,6 +60,16 @@ export default function ExplorePage() {
             }, 300);
         }
 
+        // Detect mobile screen
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+
+        if (typeof window !== 'undefined') {
+            checkMobile();
+            window.addEventListener('resize', checkMobile);
+            return () => window.removeEventListener('resize', checkMobile);
+        }
     }, []);
 
     const fetchData = async () => {
@@ -103,31 +116,31 @@ export default function ExplorePage() {
             data-place-id={place.id} 
             className="card-hover" 
             style={{
-                background: highlightId === place.id ? 'linear-gradient(135deg,#fffde6,#fff)' : 'white',
-                borderRadius: '24px',
+                background: highlightId === place.id ? '#fef3c7' : 'white',
+                borderRadius: '12px',
                 overflow: 'hidden',
-                boxShadow: highlightId === place.id ? '0 25px 60px rgba(241,196,15,0.18)' : '0 10px 30px rgba(0,0,0,0.12)',
-                border: `2px solid ${place.isBusiness ? COLOR_BLUE : COLOR_GOLD}22`,
+                boxShadow: highlightId === place.id ? '0 10px 25px rgba(37, 99, 235, 0.15)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e2e8f0',
                 cursor: 'pointer',
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'box-shadow .3s ease, transform .3s ease, background .3s ease',
+                transition: 'all 0.2s ease',
                 textDecoration: 'none',
                 color: 'inherit'
             }}
             onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-8px)';
-                e.currentTarget.style.boxShadow = `0 20px 40px ${place.isBusiness ? COLOR_BLUE : COLOR_RED}44`;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.1)';
             }}
             onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
             }}
         >
             <div style={{
                 position: 'relative',
-                height: '220px',
+                height: '180px',
                 overflow: 'hidden'
             }}>
                 <Image
@@ -139,157 +152,118 @@ export default function ExplorePage() {
                         objectFit: 'cover'
                     }}
                 />
-                <div style={{
-                    position: 'absolute',
-                    top: '12px',
-                    right: '12px',
-                    background: place.isBusiness ? COLOR_BLUE : COLOR_RED,
-                    color: 'white',
-                    padding: '6px 14px',
-                    borderRadius: '20px',
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    textTransform: 'uppercase',
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                }}>
-                    {place.isBusiness ? '🏢 Negocio' : '⭐ Atractivo'}
-                </div>
-                {place.gallery_urls && place.gallery_urls.length > 0 && (
-                    <div style={{
+                {place.category && (
+                    <span style={{
                         position: 'absolute',
-                        bottom: '12px',
-                        left: '12px',
-                        background: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        padding: '4px 10px',
-                        borderRadius: '12px',
-                        fontSize: '0.7rem',
-                        fontWeight: 'bold'
+                        top: '4px',
+                        right: '4px',
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        color: COLOR_TEXT,
+                        padding: '4px 4px',
+                        borderRadius: '2px',
+                        fontSize: '0.75rem',
+                        fontWeight: '500',
+                        backdropFilter: 'blur(4px)',
+                        border: '1px solid rgba(231, 23, 23, 0.2)'
                     }}>
-                        📸 +{place.gallery_urls.length} fotos
-                    </div>
+                        {place.category}
+                    </span>
                 )}
             </div>
             <div style={{
-                padding: '20px',
+                padding: '12px',
                 flex: 1,
                 display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
+                flexDirection: 'column'
             }}>
                 <h3 style={{
-                    margin: 0,
-                    fontSize: '1.3rem',
-                    fontWeight: '900',
-                    color: COLOR_BLUE,
-                    lineHeight: '1.3'
+                    margin: '0 0 4px 0',
+                    fontSize: '1.125rem',
+                    fontWeight: '600',
+                    color: COLOR_TEXT,
+                    lineHeight: '1.4'
                 }}>
                     {place.name}
                 </h3>
                 {place.category && (
                     <span style={{
                         alignSelf: 'flex-start',
-                        background: `${COLOR_GOLD}22`,
-                        color: COLOR_BLUE,
-                        padding: '4px 12px',
-                        borderRadius: '12px',
+                        background: COLOR_ACCENT,
+                        color: COLOR_SECONDARY,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
                         fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                        textTransform: 'uppercase'
+                        fontWeight: '500',
+                        marginBottom: '8px'
                     }}>
                         {place.category}
                     </span>
                 )}
                 <p style={{
                     margin: 0,
-                    fontSize: '0.95rem',
-                    color: '#555',
-                    lineHeight: '1.6',
-                    flex: 1
+                    fontSize: '0.875rem',
+                    color: COLOR_SECONDARY,
+                    lineHeight: '1.5',
+                    flex: 1,
+                    marginBottom: '12px'
                 }}>
                     {place.description?.substring(0, 120)}
                     {place.description && place.description.length > 120 ? '...' : ''}
                 </p>
-                <button style={{
-                    background: `linear-gradient(135deg, ${place.isBusiness ? COLOR_BLUE : COLOR_RED}, ${place.isBusiness ? '#0d2442' : '#7a1515'})`,
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    fontWeight: 'bold',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer',
-                    marginTop: 'auto',
-                    transition: 'all 0.2s ease'
-                }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                >
-                    Ver en el Mapa 🗺️
-                </button>
-                {place.gallery_urls && place.gallery_urls.length > 0 && (
+                <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap'
+                }}>
                     <button style={{
-                        background: `linear-gradient(135deg, ${COLOR_GOLD}, #f39c12)`,
-                        color: COLOR_BLUE,
+                        background: COLOR_PRIMARY,
+                        color: 'white',
                         border: 'none',
-                        padding: '12px',
-                        borderRadius: '12px',
-                        fontWeight: 'bold',
-                        fontSize: '0.9rem',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        fontWeight: '500',
+                        fontSize: '0.75rem',
                         cursor: 'pointer',
-                        marginTop: '8px',
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        flex: 1,
+                        minWidth: '80px'
                     }}
                         onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'scale(1.05)';
+                            e.currentTarget.style.background = '#1d4ed8';
                         }}
                         onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'scale(1)';
-                        }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setGalleryModal({ urls: place.gallery_urls!, name: place.name });
+                            e.currentTarget.style.background = COLOR_PRIMARY;
                         }}
                     >
-                        Ver Galería 📸
+                        Ver detalles
                     </button>
-                )}
-                <button style={{
-                    background: 'white',
-                    color: COLOR_BLUE,
-                    border: `2px solid ${COLOR_GOLD}`,
-                    padding: '12px',
-                    borderRadius: '12px',
-                    fontWeight: 'bold',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer',
-                    marginTop: '8px',
-                    transition: 'all 0.2s ease'
-                }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                        e.currentTarget.style.background = COLOR_GOLD;
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.background = 'white';
-                    }}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setReviewModal({
-                            isOpen: true,
-                            attractionId: place.isBusiness ? undefined : place.id,
-                            businessId: place.isBusiness ? place.id : undefined,
-                            locationName: place.name
-                        });
-                    }}
-                >
-                    📸 Compartir Mi Experiencia
-                </button>
+                    {place.gallery_urls && place.gallery_urls.length > 0 && (
+                        <button style={{
+                            background: COLOR_ACCENT,
+                            color: COLOR_TEXT,
+                            border: '1px solid #e2e8f0',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            fontWeight: '500',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#f1f5f9';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = COLOR_ACCENT;
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setGalleryModal({ urls: place.gallery_urls!, name: place.name });
+                            }}
+                        >
+                            📷
+                        </button>
+                    )}
+                </div>
             </div>
         </Link>
     );
@@ -298,165 +272,203 @@ export default function ExplorePage() {
     return (
         <div style={{
             minHeight: '100vh',
-            background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)',
-            padding: '20px',
+            background: '#f8fafc',
+            padding: '16px',
             fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
-            {/* Header REDISEÑO REFERENCIA.PNG */}
+            {/* Header - Rediseño Profesional */}
             <header style={{
-                background: 'white',
-                padding: '35px',
-                borderRadius: '32px',
-                marginBottom: '30px',
-                boxShadow: '0 15px 50px rgba(0,0,0,0.12)',
-                border: `2px solid ${COLOR_GOLD}22`
+                background: COLOR_BACKGROUND,
+                padding: '24px',
+                borderRadius: '16px',
+                marginBottom: '24px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e2e8f0'
             }}>
                 <div style={{
-                    maxWidth: '1400px',
-                    margin: '0 auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '20px'
+                    maxWidth: '1200px',
+                    margin: '0 auto'
                 }}>
+                    {/* Header Top */}
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        marginBottom: '20px',
                         flexWrap: 'wrap',
-                        gap: '15px'
+                        gap: '12px'
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <Link href="/" style={{
-                                textDecoration: 'none',
-                                background: COLOR_GOLD,
-                                color: COLOR_BLUE,
-                                padding: '10px 20px',
-                                borderRadius: '50px',
-                                fontWeight: 'bold',
-                                fontSize: '0.9rem',
-                                transition: 'all 0.2s ease',
-                                display: 'inline-block'
-                            }}>
-                                ← Volver al Panel
-                            </Link>
-                        </div>
+                        <Link href="/" style={{
+                            textDecoration: 'none',
+                            background: COLOR_ACCENT,
+                            color: COLOR_TEXT,
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            fontWeight: '500',
+                            fontSize: '0.875rem',
+                            transition: 'all 0.2s ease',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            ← Volver
+                        </Link>
+
                         <h1 style={{
                             margin: 0,
-                            fontSize: 'clamp(1.8rem, 5vw, 3rem)',
-                            fontWeight: '950',
-                            color: COLOR_BLUE,
-                            letterSpacing: '-1px'
+                            fontSize: 'clamp(1.5rem, 4vw, 2.25rem)',
+                            fontWeight: '700',
+                            color: COLOR_TEXT,
+                            letterSpacing: '-0.025em'
                         }}>
-                            🗺️ Explorar Santiago
+                            Explorar Santiago
                         </h1>
+
+                        <div style={{ width: '100px' }}></div> {/* Spacer for mobile balance */}
                     </div>
 
                     {/* Search and Filters */}
                     <div style={{
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                        gap: '15px',
+                        gap: '12px',
                         alignItems: 'center'
                     }}>
-                        <input
-                            type="text"
-                            placeholder="🔍 Buscar lugares..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{
-                                padding: '16px 22px',
-                                borderRadius: '50px',
-                                border: `2px solid ${COLOR_BLUE}22`,
-                                fontSize: '1rem',
-                                outline: 'none'
-                            }}
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type="text"
+                                placeholder="Buscar lugares..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 16px',
+                                    paddingLeft: '40px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #d1d5db',
+                                    fontSize: '0.875rem',
+                                    outline: 'none',
+                                    background: COLOR_BACKGROUND,
+                                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = COLOR_PRIMARY;
+                                    e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = '#d1d5db';
+                                    e.target.style.boxShadow = 'none';
+                                }}
+                            />
+                            <div style={{
+                                position: 'absolute',
+                                left: '12px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                color: COLOR_SECONDARY,
+                                fontSize: '0.875rem'
+                            }}>
+                                🔍
+                            </div>
+                        </div>
 
                         <select
                             value={filter}
                             onChange={(e) => setFilter(e.target.value as 'all' | 'attractions' | 'businesses')}
                             style={{
-                                padding: '14px 20px',
-                                borderRadius: '50px',
-                                border: `2px solid ${COLOR_BLUE}22`,
-                                fontSize: '1rem',
+                                padding: '12px 16px',
+                                borderRadius: '8px',
+                                border: '1px solid #d1d5db',
+                                fontSize: '0.875rem',
                                 outline: 'none',
-                                background: 'white',
-                                cursor: 'pointer'
+                                background: COLOR_BACKGROUND,
+                                cursor: 'pointer',
+                                color: COLOR_TEXT,
+                                transition: 'border-color 0.2s ease'
                             }}
                         >
-                            <option value="all">📍 Todos</option>
-                            <option value="attractions">⭐ Atractivos</option>
-                            <option value="businesses">🏢 Negocios</option>
+                            <option value="all">Todos los lugares</option>
+                            <option value="attractions">Atractivos turísticos</option>
+                            <option value="businesses">Negocios</option>
                         </select>
 
                         <select
                             value={selectedCategory}
                             onChange={(e) => setSelectedCategory(e.target.value)}
                             style={{
-                                padding: '14px 20px',
-                                borderRadius: '50px',
-                                border: `2px solid ${COLOR_BLUE}22`,
-                                fontSize: '1rem',
+                                padding: '12px 16px',
+                                borderRadius: '8px',
+                                border: '1px solid #d1d5db',
+                                fontSize: '0.875rem',
                                 outline: 'none',
-                                background: 'white',
-                                cursor: 'pointer'
+                                background: COLOR_BACKGROUND,
+                                cursor: 'pointer',
+                                color: COLOR_TEXT,
+                                transition: 'border-color 0.2s ease'
                             }}
                         >
-                            <option value="all">🏷️ Todas las categorías</option>
+                            <option value="all">Todas las categorías</option>
                             {categories.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
                         </select>
                     </div>
 
-                    {/* Stats */}
+                    {/* Stats - Más discretos y responsive */}
                     <div style={{
                         display: 'flex',
-                        gap: '20px',
+                        gap: '16px',
                         flexWrap: 'wrap',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        marginTop: '8px'
                     }}>
                         <div style={{
-                            background: `${COLOR_GOLD}22`,
-                            padding: '18px 30px',
-                            borderRadius: '20px',
+                            background: COLOR_ACCENT,
+                            padding: isMobile ? '8px 12px' : '12px 10px',
+                            borderRadius: '8px',
                             textAlign: 'center',
-                            border: `2px solid ${COLOR_GOLD}44`
+                            border: '1px solid #e2e8f0',
+                            minWidth: isMobile ? '70px' : '120px',
+                            flex: isMobile ? 1 : 'none'
                         }}>
-                            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: COLOR_BLUE }}>
+                            <div style={{
+                                fontSize: isMobile ? '1.2rem' : '1.5rem',
+                                fontWeight: '600',
+                                color: COLOR_PRIMARY
+                            }}>
                                 {attractions.length}
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>
+                            <div style={{
+                                fontSize: isMobile ? '0.65rem' : '0.75rem',
+                                color: COLOR_SECONDARY,
+                                fontWeight: '500'
+                            }}>
                                 Atractivos
                             </div>
                         </div>
                         <div style={{
-                            background: `${COLOR_BLUE}11`,
-                            padding: '15px 25px',
-                            borderRadius: '20px',
+                            background: COLOR_ACCENT,
+                            padding: isMobile ? '8px 12px' : '12px 20px',
+                            borderRadius: '8px',
                             textAlign: 'center',
-                            border: `2px solid ${COLOR_BLUE}22`
+                            border: '1px solid #e2e8f0',
+                            minWidth: isMobile ? '90px' : '120px',
+                            flex: isMobile ? 1 : 'none'
                         }}>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: COLOR_BLUE }}>
+                            <div style={{
+                                fontSize: isMobile ? '1.2rem' : '1.5rem',
+                                fontWeight: '600',
+                                color: COLOR_PRIMARY
+                            }}>
                                 {businesses.length}
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>
-                                Negocios Certificados
-                            </div>
-                        </div>
-                        <div style={{
-                            background: 'white',
-                            padding: '18px 30px',
-                            borderRadius: '20px',
-                            textAlign: 'center',
-                            border: `2px solid ${COLOR_GOLD}`
-                        }}>
-                            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: COLOR_GOLD }}>
-                                {filteredPlaces.length}
-                            </div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold' }}>
-                                Resultados
+                            <div style={{
+                                fontSize: isMobile ? '0.65rem' : '0.75rem',
+                                color: COLOR_SECONDARY,
+                                fontWeight: '500'
+                            }}>
+                                Negocios
                             </div>
                         </div>
                     </div>
@@ -466,27 +478,42 @@ export default function ExplorePage() {
             {/* Quick Categories */}
             <div style={{
                 background: 'rgba(255,255,255,0.95)',
-                padding: '20px',
+                padding: isMobile ? '8px' : '10px',
                 borderRadius: '24px',
-                marginBottom: '30px',
+                marginBottom: isMobile ? '8px' : '10px',
                 boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
-                border: `2px solid ${COLOR_BLUE}11`
+                border: `2px solid ${COLOR_PRIMARY}11`
             }}>
-                <h2 style={{ textAlign: 'center', color: COLOR_BLUE, marginBottom: '20px' }}>Categorías Destacadas</h2>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                <h2 style={{
+                    textAlign: 'center',
+                    color: COLOR_PRIMARY,
+                    marginBottom: isMobile ? '8px' : '10px',
+                    fontSize: isMobile ? '1.1rem' : '1.25rem'
+                }}>
+                    Categorías Destacadas
+                </h2>
+                <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: isMobile ? '2px' : '6px',
+                    justifyContent: 'center'
+                }}>
                     {['Hoteles', 'Gastronomía', 'Cultura', 'Entretenimiento'].map(cat => (
                         <button
                             key={cat}
                             onClick={() => setSelectedCategory(categories.includes(cat) ? cat : 'all')}
                             style={{
                                 background: 'rgba(255,255,255,0.8)',
-                                color: COLOR_BLUE,
-                                border: `2px solid ${COLOR_BLUE}22`,
-                                padding: '10px 20px',
-                                borderRadius: '50px',
+                                color: COLOR_PRIMARY,
+                                border: `2px solid ${COLOR_PRIMARY}22`,
+                                padding: isMobile ? '1px 8px' : '2px 8px',
+                                borderRadius: isMobile ? '8px' : '30px',
                                 fontWeight: 'bold',
+                                fontSize: isMobile ? '0.8rem' : '0.9rem',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s ease'
+                                transition: 'all 0.2s ease',
+                                whiteSpace: 'nowrap',
+                                lineHeight: '1.2'
                             }}
                         >
                             {cat}
@@ -496,13 +523,16 @@ export default function ExplorePage() {
                         onClick={() => setSelectedCategory('all')}
                         style={{
                             background: 'rgba(255,255,255,0.8)',
-                            color: COLOR_BLUE,
-                            border: `2px solid ${COLOR_BLUE}22`,
-                            padding: '10px 20px',
-                            borderRadius: '50px',
+                            color: COLOR_PRIMARY,
+                            border: `2px solid ${COLOR_PRIMARY}22`,
+                            padding: isMobile ? '6px 16px' : '8px 20px',
+                            borderRadius: isMobile ? '16px' : '40px',
                             fontWeight: 'bold',
+                            fontSize: isMobile ? '0.8rem' : '0.9rem',
                             cursor: 'pointer',
-                            transition: 'all 0.2s ease'
+                            transition: 'all 0.2s ease',
+                            whiteSpace: 'nowrap',
+                            lineHeight: '1.2'
                         }}
                     >
                         Todas
@@ -519,13 +549,13 @@ export default function ExplorePage() {
                     <div style={{
                         textAlign: 'center',
                         padding: '100px 20px',
-                        color: COLOR_BLUE
+                        color: COLOR_PRIMARY
                     }}>
                         <div style={{
                             width: '60px',
                             height: '60px',
-                            border: `6px solid ${COLOR_BLUE}22`,
-                            borderTop: `6px solid ${COLOR_GOLD}`,
+                            border: `6px solid ${COLOR_PRIMARY}22`,
+                            borderTop: `6px solid ${COLOR_ACCENT}`,
                             borderRadius: '50%',
                             animation: 'spin 1s linear infinite',
                             margin: '0 auto 20px'
@@ -543,7 +573,7 @@ export default function ExplorePage() {
                         boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
                     }}>
                         <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔍</div>
-                        <h2 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>
+                        <h2 style={{ color: COLOR_PRIMARY, marginBottom: '10px' }}>
                             No se encontraron resultados
                         </h2>
                         <p style={{ color: '#666' }}>
@@ -572,12 +602,12 @@ export default function ExplorePage() {
                 background: 'white',
                 borderRadius: '32px',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-                border: `2px solid ${COLOR_GOLD}33`
+                border: `2px solid ${COLOR_ACCENT}33`
             }}>
                 <h2 style={{
                     fontSize: '2rem',
                     fontWeight: '950',
-                    color: COLOR_BLUE,
+                    color: COLOR_PRIMARY,
                     letterSpacing: '-0.5px',
                     marginBottom: '30px',
                     textAlign: 'center'
