@@ -75,15 +75,21 @@ export default function ExplorePage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [{ data: attrs }, { data: biz }] = await Promise.all([
-                supabase.from('attractions').select('*'),
-                supabase.from('businesses').select('*')
+            const [attrsRes, bizRes] = await Promise.all([
+                supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls'),
+                supabase.from('businesses').select('id,name,description,website_url,contact_info,image_url,lat,lng,category,plan,is_active,payment_status')
             ]);
+
+            if (attrsRes.error) console.warn('Attractions fetch error', attrsRes.error);
+            if (bizRes.error) console.warn('Businesses fetch error', bizRes.error);
+
+            const attrs = attrsRes.data;
+            const biz = bizRes.data;
 
             setAttractions(attrs || []);
             setBusinesses((biz || []).map(b => ({ ...b, isBusiness: true })));
         } catch (e) {
-            console.error(e);
+            console.error('fetchData error', e);
         } finally {
             setLoading(false);
         }

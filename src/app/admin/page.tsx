@@ -91,10 +91,15 @@ export default function AdminDashboard() {
 
     const fetchData = async () => {
         setLoading(true);
-        const { data: attData } = await supabase.from('attractions').select('*').order('created_at', { ascending: false });
-        const { data: bizData } = await supabase.from('businesses').select('*').order('created_at', { ascending: false });
-        const { data: vidData } = await supabase.from('app_videos').select('*').order('created_at', { ascending: false });
-        const { data: carouselData } = await supabase.from('carousel_photos').select('*').order('order_position', { ascending: true });
+        const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category').order('created_at', { ascending: false });
+        const { data: bizData, error: bizErr } = await supabase.from('businesses').select('id,name,category,contact_info,website_url,image_url,lat,lng,plan,is_active,payment_status').order('created_at', { ascending: false });
+        const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
+        const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
+
+        if (attErr) console.warn('Admin attractions fetch error', attErr);
+        if (bizErr) console.warn('Admin businesses fetch error', bizErr);
+        if (vidErr) console.warn('Admin videos fetch error', vidErr);
+        if (carouselErr) console.warn('Admin carousel fetch error', carouselErr);
 
         if (attData) setPlaces(attData as PlaceRecord[]);
         if (bizData) setBusinesses(bizData as BusinessRecord[]);

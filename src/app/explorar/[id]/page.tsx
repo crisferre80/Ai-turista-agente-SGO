@@ -38,7 +38,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   // Try to fetch attraction or business and normalize to `place`
   let place: Place | null = null;
   try {
-    const { data: attr } = await supabase.from('attractions').select('*').eq('id', id).single();
+    const { data: attr, error: attrErr } = await supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls,video_urls').eq('id', id).maybeSingle();
+    if (attrErr) console.warn('Attraction fetch error', attrErr);
     if (attr) {
       place = {
         id: String(attr.id),
@@ -55,13 +56,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         video_urls: attr.video_urls || undefined
       };
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn('Error fetching attraction', e);
   }
 
   if (!place) {
     try {
-      const { data: biz } = await supabase.from('businesses').select('*').eq('id', id).single();
+      const { data: biz, error: bizErr } = await supabase.from('businesses').select('id,name,description,image_url,category,lat,lng,contact_info,website_url,gallery_images,plan,is_active,payment_status').eq('id', id).maybeSingle();
+      if (bizErr) console.warn('Business fetch error', bizErr);
       if (biz) {
         place = {
           id: String(biz.id),
@@ -74,12 +76,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           isBusiness: true,
           contact_info: biz.contact_info || undefined,
           website_url: biz.website_url || undefined,
-          gallery_urls: biz.gallery_urls || undefined,
+          gallery_urls: biz.gallery_images || undefined,
           video_urls: biz.video_urls || undefined
         };
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn('Error fetching business', e);
     }
   }
 

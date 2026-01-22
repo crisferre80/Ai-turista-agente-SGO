@@ -346,10 +346,20 @@ export default function Home() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: attrs } = await supabase.from('attractions').select('*');
-      const { data: vids } = await supabase.from('app_videos').select('*');
-      const { data: biz } = await supabase.from('businesses').select('*');
-      const { data: carousel } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
+      const { data: attrs, error: attrsErr } = await supabase.from('attractions').select('*');
+      if (attrsErr) console.warn('Attractions fetch error', attrsErr);
+
+      const { data: vids, error: vidsErr } = await supabase.from('app_videos').select('*');
+      if (vidsErr) console.warn('Videos fetch error', vidsErr);
+
+      // Fetch businesses with explicit columns to avoid PostgREST errors when schema changes
+      const { data: biz, error: bizErr } = await supabase
+        .from('businesses')
+        .select('id,name,website_url,contact_info,image_url,lat,lng,category,plan,is_active,payment_status');
+      if (bizErr) console.warn('Businesses fetch error', bizErr);
+
+      const { data: carousel, error: carouselErr } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
+      if (carouselErr) console.warn('Carousel fetch error', carouselErr);
 
       const mappedBiz = (biz || []).map(b => ({
         ...b,

@@ -13,6 +13,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [resendLoading, setResendLoading] = useState(false);
     const router = useRouter();
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -56,18 +57,94 @@ export default function LoginPage() {
                     } catch (e) { console.warn('Failed to call welcome email endpoint', e); }
                 } else {
                     // Login Business
-                    const { data, error: authError } = await supabase.auth.signInWithPassword({
-                        email,
-                        password
-                    });
-                    if (authError) throw authError;
+                    if (!email || !password) {
+                        setError('Por favor completa email y contraseña');
+                        setLoading(false);
+                        return;
+                    }
 
-                    localStorage.setItem('adminToken', 'granted');
-                    router.push('/admin');
+                    const resp = await supabase.auth.signInWithPassword({ email, password });
+                    const authError = resp.error;
+                    if (authError) {
+                        console.warn('signInWithPassword error', authError);
+                        const status = (authError as any)?.status;
+                        const msg = (authError as any)?.message || String(authError);
+                        if (status === 429) {
+                            setError('Demasiados intentos. Espera un momento e intenta nuevamente.');
+                        } else if (/confirm|verify|pending/i.test(msg)) {
+                            setError('Tu cuenta no está confirmada. Revisa tu email para confirmar la cuenta.');
+                        } else if (/invalid|credentials|user not found/i.test(msg)) {
+                            setError('Credenciales inválidas. Verifica email y contraseña.');
+                        } else {
+                            setError('Error al iniciar sesión: ' + msg);
+                        }
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Determine role: check `businesses` table (businesses have their own table), then `profiles`, then metadata.
+                    const userId = (await supabase.auth.getUser()).data.user?.id;
+
+                    if (!userId) {
+                        setError('No se pudo obtener el id de usuario. Intenta recargar la página.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Check businesses table first
+                    const { data: businessRow, error: businessError } = await supabase
+                        .from('businesses')
+                        .select('id')
+                        .eq('owner_id', userId)
+                        .maybeSingle();
+
+                    if (businessError) {
+                        console.warn('Error al buscar business:', businessError);
+                        // Show a user-friendly hint but fall back to profile metadata
+                        setError('Hubo un problema verificando tu cuenta de negocio. Intenta de nuevo o contacta soporte.');
+                    }
+
+                    console.debug('Login check:', { userId, businessRow, businessError });
+
+                    if (businessRow) {
+                        router.push('/dashboard/business');
+                        return;
+                    }
+
+                    // Fallback to profiles table and auth metadata
+                    const { data: profileRow, error: profileError } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', userId)
+                        .maybeSingle();
+
+                    if (profileError) console.warn('Error al buscar profile:', profileError);
+
+                    const roleFromProfile = profileRow?.role;
+                    const authUser = (await supabase.auth.getUser()).data.user;
+                    const roleFromMetadata = authUser?.user_metadata?.role;
+                    const role = roleFromProfile || roleFromMetadata || 'user';
+
+                    console.debug('Role resolved:', { role, roleFromProfile, roleFromMetadata });
+
+                    if (role === 'admin') {
+                        localStorage.setItem('adminToken', 'granted');
+                        router.push('/admin');
+                    } else {
+                        router.push('/dashboard/tourist');
+                    }
                 }
             }
         } catch (err: any) {
-            setError('Error: ' + err.message);
+            const msg = err?.message || String(err);
+            const status = err?.status;
+            if (status === 429) {
+                setError('Hay muchos intentos. Espera un momento e intenta nuevamente.');
+            } else if (/confirm|verify|pending/i.test(msg)) {
+                setError('Tu cuenta no está confirmada. Revisa tu email para confirmar la cuenta.');
+            } else {
+                setError('Error: ' + msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -222,6 +299,28 @@ export default function LoginPage() {
                     {error && <p style={{ color: '#ff4444', fontSize: '12px', margin: 0 }}>{error}</p>}
                     {success && <p style={{ color: '#20B2AA', fontSize: '12px', margin: 0 }}>{success}</p>}
 
+                    {/* Resend confirmation link for businesses (if they didn't receive confirmation) */}
+                    {!isAdminMode && !isTourist && email && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button
+                          onClick={async () => {
+                            setResendLoading(true);
+                            setError('');
+                            try {
+                              const { error } = await supabase.auth.signInWithOtp({ email });
+                              if (error) throw error;
+                              setSuccess('Se envió un correo de acceso/confirmación a ' + email);
+                            } catch (err: unknown) {
+                              const msg = err instanceof Error ? err.message : String(err);
+                              setError('Error al reenviar correo: ' + msg);
+                            } finally { setResendLoading(false); }
+                          }}
+                          disabled={resendLoading}
+                          style={{ background: 'transparent', border: '1px solid #e2e8f0', color: COLOR_BLUE, padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}
+                        >{resendLoading ? 'Enviando...' : 'Reenviar correo de confirmación'}</button>
+                      </div>
+                    )}
+
                     <button
                         type="submit"
                         disabled={loading}
@@ -246,20 +345,53 @@ export default function LoginPage() {
 
                 {!isAdminMode && !isTourist && (
                     <div style={{ marginTop: '20px' }}>
-                        <button
-                            onClick={() => setIsRegistering(!isRegistering)}
-                            style={{ 
-                                background: 'none', 
-                                border: 'none', 
-                                color: COLOR_BLUE, 
-                                cursor: 'pointer', 
-                                fontSize: '14px', 
-                                textDecoration: 'underline',
-                                fontWeight: '600'
-                            }}
-                        >
-                            {isRegistering ? '¿Ya tenés cuenta? Ingresá' : '¿Sos un negocio nuevo? Registrate'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => setIsRegistering(!isRegistering)}
+                                style={{ 
+                                    background: 'none', 
+                                    border: 'none', 
+                                    color: COLOR_BLUE, 
+                                    cursor: 'pointer', 
+                                    fontSize: '14px', 
+                                    textDecoration: 'underline',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                {isRegistering ? '¿Ya tenés cuenta? Ingresá' : '¿Sos un negocio nuevo? Registrate'}
+                            </button>
+
+                            <button
+                                onClick={() => router.push('/business/register')}
+                                style={{
+                                    background: COLOR_GOLD,
+                                    border: 'none',
+                                    color: COLOR_DARK,
+                                    padding: '8px 12px',
+                                    borderRadius: '12px',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '14px'
+                                }}
+                            >
+                                Registrate como Negocio →
+                            </button>
+                        </div>
+                        {isRegistering && (
+                            <div style={{ marginTop: '10px' }}>
+                                <Link 
+                                    href="/business/register" 
+                                    style={{ 
+                                        color: COLOR_GOLD, 
+                                        textDecoration: 'underline',
+                                        fontWeight: '600',
+                                        fontSize: '14px'
+                                    }}
+                                >
+                                    → O registrate con plan completo aquí
+                                </Link>
+                            </div>
+                        )}
                     </div>
                 )}
 

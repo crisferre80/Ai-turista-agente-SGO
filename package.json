@@ -20,6 +20,7 @@
     "@supabase/supabase-js": "^2.90.1",
     "cheerio": "^1.1.2",
     "mapbox-gl": "^3.17.0",
+    "mercadopago": "^2.12.0",
     "next": "16.1.1",
     "openai": "^6.16.0",
     "react": "19.2.3",

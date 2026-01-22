@@ -56,7 +56,7 @@ export default function AdminEmailPage() {
       const info: SessionInfo = { user: user || null, authError: authErrMsg };
       if (user && user.id) {
         // Try to fetch profile (may be blocked by RLS)
-        const { data: profile, error: pErr } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        const { data: profile, error: pErr } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         info.profile = (profile as Profile) || null;
         info.profileError = getErrorMessage(pErr);
       }

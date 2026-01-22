@@ -8,14 +8,22 @@ CREATE TABLE profiles (
 );
 
 -- TABLA DE NEGOCIOS
-CREATE TABLE businesses (
+CREATE TABLE IF NOT EXISTS businesses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   owner_id UUID REFERENCES profiles(id),
   name TEXT NOT NULL,
+  description TEXT,
   website_url TEXT,
   contact_info TEXT,
+  phone TEXT,
+  address TEXT,
   category TEXT, -- 'restaurante', 'hotel', 'artesania', etc.
+  plan TEXT DEFAULT 'basic', -- 'basic', 'pro', 'premium'
   is_verified BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT FALSE,
+  gallery_images TEXT[], -- Array de URLs de imágenes
+  payment_status TEXT DEFAULT 'pending', -- 'pending', 'paid', 'expired'
+  subscription_end DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -53,11 +61,30 @@ CREATE TABLE santis_phrases (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- TABLA DE VIDEOS DE LA APP
-CREATE TABLE app_videos (
+-- TABLA DE PLANES DE NEGOCIOS
+CREATE TABLE business_plans (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
-  video_url TEXT NOT NULL,
+  name TEXT NOT NULL, -- 'basic', 'pro', 'premium'
+  display_name TEXT NOT NULL,
+  price_monthly DECIMAL(10,2) NOT NULL,
+  price_yearly DECIMAL(10,2) NOT NULL,
+  features JSONB, -- Array de características
+  max_images INTEGER DEFAULT 5,
+  priority INTEGER DEFAULT 0, -- Para ordenamiento en listados
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- TABLA DE PAGOS
+CREATE TABLE payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  business_id UUID REFERENCES businesses(id),
+  amount DECIMAL(10,2) NOT NULL,
+  currency TEXT DEFAULT 'ARS',
+  payment_method TEXT, -- 'mercadopago'
+  mercadopago_id TEXT,
+  status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+  plan_name TEXT,
+  period TEXT, -- 'monthly', 'yearly'
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
