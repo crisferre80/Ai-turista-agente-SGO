@@ -9,10 +9,58 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
     try {
-        const { messages } = await req.json();
+        const { messages, userLocation } = await req.json();
 
         if (!messages) {
             return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
+        }
+
+        // Detectar si el usuario pregunta sobre su ubicación actual
+        const lastMessage = messages[messages.length - 1];
+        const locationKeywords = [
+            'dónde estoy', 'donde estoy', 'mi ubicación', 'mi ubicacion',
+            'ubicación actual', 'ubicacion actual', 'estoy en', 
+            'qué lugar es', 'que lugar es', 'qué es este lugar', 'que es este lugar',
+            'describe este lugar', 'háblame de donde estoy', 'hablame de donde estoy',
+            'información de aquí', 'informacion de aqui', 'sobre esta zona',
+            'dónde me encuentro', 'donde me encuentro', 'en qué parte', 'en que parte'
+        ];
+
+        const isAskingAboutLocation = lastMessage && 
+            typeof lastMessage.content === 'string' &&
+            locationKeywords.some(keyword => 
+                lastMessage.content.toLowerCase().includes(keyword)
+            );
+
+        // Si pregunta sobre ubicación Y tenemos coordenadas, consultar contexto de ubicación
+        if (isAskingAboutLocation && userLocation && userLocation.latitude && userLocation.longitude) {
+            try {
+                // Llamar al endpoint de contexto de ubicación
+                const locationContextUrl = new URL('/api/location-context', req.url);
+                const locationResponse = await fetch(locationContextUrl.toString(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latitude: userLocation.latitude,
+                        longitude: userLocation.longitude
+                    })
+                });
+
+                if (locationResponse.ok) {
+                    const locationData = await locationResponse.json();
+                    const locationDescription = locationData.description || '';
+
+                    // Retornar directamente la descripción del lugar con datos de OpenAI
+                    return NextResponse.json({ 
+                        reply: locationDescription,
+                        placeId: null,
+                        placeName: locationData.locationName || null
+                    });
+                }
+            } catch (locationError) {
+                console.error('Error fetching location context:', locationError);
+                // Si falla, continuar con el flujo normal
+            }
         }
 
         // 1. Fetch Local Data for Context

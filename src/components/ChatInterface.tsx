@@ -24,10 +24,11 @@ const BUSINESS_PROMPTS = [
     "Si querés aparecer destacado en la app: abrí 'Mi Negocio' → Crear ficha → subí fotos y un texto breve sobre lo que los hace únicos. En 48-72h el equipo revisa y te avisa. ¿Deseás que te muestre cómo?"
 ];
 
-const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
+const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation }: {
     externalTrigger?: string,
     externalStory?: { url: string, name: string },
-    isModalOpen?: boolean
+    isModalOpen?: boolean,
+    userLocation?: { latitude: number; longitude: number } | null
 }) => {
     const router = useRouter();
     
@@ -266,7 +267,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen }: {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    messages: [...getApiMessages(), { role: 'user', content: textToSend }]
+                    messages: [...getApiMessages(), { role: 'user', content: textToSend }],
+                    userLocation: userLocation || undefined
                 }),
             });
 

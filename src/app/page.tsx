@@ -322,6 +322,7 @@ export default function Home() {
   const [showIntro, setShowIntro] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const [carouselPhotos, setCarouselPhotos] = useState<string[]>([]);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -672,6 +673,7 @@ export default function Home() {
               onNarrate={handleNarration}
               onStoryPlay={(url, name) => setActiveStory({ url, name })}
               onPlaceFocus={setActivePlace}
+              onLocationChange={(coords) => setUserLocation({ latitude: coords[1], longitude: coords[0] })}
             />
           )}
           {/* Panel lateral EXPLORA mejorado */}
@@ -957,6 +959,7 @@ export default function Home() {
           externalTrigger={narration}
           externalStory={activeStory}
           isModalOpen={!!activePlace}
+          userLocation={userLocation}
         />
 
         {/* Place Detail Modal */}

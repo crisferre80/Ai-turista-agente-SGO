@@ -14,9 +14,10 @@ interface MapProps {
     onNarrate?: (text: string, opts?: { source?: string, force?: boolean }) => void;
     onStoryPlay?: (url: string, name: string) => void;
     onPlaceFocus?: (place: any) => void;
+    onLocationChange?: (coords: [number, number]) => void;
 }
 
-const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProps) => {
+const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange }: MapProps) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -71,6 +72,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                 const loc: [number, number] = [e.coords.longitude, e.coords.latitude];
                 console.log('User location set:', loc);
                 setUserLocation(loc);
+                
+                // Emit location to parent component
+                onLocationChange?.(loc);
 
                 if (!hasGreetedRef.current) {
                     onNarrate?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", { source: 'map-geolocate' });
@@ -98,6 +102,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus }: MapProp
                         (position) => {
                             const loc: [number, number] = [position.coords.longitude, position.coords.latitude];
                             setUserLocation(loc);
+                            onLocationChange?.(loc);
                         },
                         (error) => {
                             // Silenciar errores iniciales
