@@ -31,14 +31,40 @@ export const getSelectedVoice = (): SpeechSynthesisVoice | null => {
   return voices.find(voice => voice.lang.startsWith('es')) || voices[0] || null;
 };
 
-export const santiSpeak = (text: string): void => {
+let _isNarrating = false;
+let _currentAudio: HTMLAudioElement | null = null;
+
+export const stopSantiNarration = () => {
+  try {
+    if (_currentAudio) {
+      _currentAudio.pause();
+      _currentAudio.currentTime = 0;
+      _currentAudio = null;
+    }
+  } catch (e) { /* ignore */ }
+  _isNarrating = false;
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('santi:narration:end'));
+    }
+  } catch (e) { /* ignore */ }
+};
+
+export const santiSpeak = (text: string, opts?: { source?: string, force?: boolean }): void => {
+  if (_isNarrating && !opts?.force) {
+    console.warn('santiSpeak: already narrating, skipping new narration to avoid overlap');
+    return;
+  }
+
   try {
     if (typeof window !== 'undefined') {
       // Announce narration to any listeners (e.g., Map) so they can react and navigate
-      window.dispatchEvent(new CustomEvent('santi:narrate', { detail: { text } }));
-      window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
+      window.dispatchEvent(new CustomEvent('santi:narrate', { detail: { text, source: opts?.source } }));
+      window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
     }
   } catch (e) { /* ignore dispatch errors */ }
+
+  _isNarrating = true;
 
   fetch('/api/speech', {
     method: 'POST',
@@ -53,6 +79,7 @@ export const santiSpeak = (text: string): void => {
     .then(blob => {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      _currentAudio = audio;
       audio.play().catch(err => {
         console.warn("Autoplay blocked:", err);
       });
@@ -63,6 +90,19 @@ export const santiSpeak = (text: string): void => {
           }
         } catch (e) { /* ignore */ }
         URL.revokeObjectURL(url);
+        _currentAudio = null;
+        _isNarrating = false;
+      };
+      audio.onerror = (e) => {
+        console.error('Audio playback error', e);
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:end'));
+          }
+        } catch (ee) { /* ignore */ }
+        URL.revokeObjectURL(url);
+        _currentAudio = null;
+        _isNarrating = false;
       };
     })
     .catch(error => {
@@ -72,6 +112,7 @@ export const santiSpeak = (text: string): void => {
           window.dispatchEvent(new CustomEvent('santi:narration:end'));
         }
       } catch (e) { /* ignore */ }
+      _isNarrating = false;
       if (error.message === "API_KEY_MISSING") {
         alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
       }

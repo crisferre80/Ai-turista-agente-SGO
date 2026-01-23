@@ -4,6 +4,7 @@ declare global {
     santiNarrate?: (text: string) => void;
     focusPlaceOnMap?: (place: string) => void;
     requestRoute?: (lng: number, lat: number, name: string) => void;
+    stopSantiNarration?: () => void;
   }
 }
 

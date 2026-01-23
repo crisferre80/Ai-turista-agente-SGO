@@ -4,7 +4,7 @@ import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
-import { santiSpeak, santiNarrate } from '@/lib/speech';
+import { santiSpeak, santiNarrate, stopSantiNarration } from '@/lib/speech';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -404,9 +404,19 @@ export default function Home() {
     }
   };
 
-  const handleNarration = (text: string) => {
-    santiSpeak(text);
+  const handleNarration = (text: string, opts?: { source?: string, force?: boolean }) => {
+    santiSpeak(text, opts);
   };
+
+  // Expose helper to stop narration globally so other components (like Map) can prioritize route TTS
+  useEffect(() => {
+    try {
+      (window as any).stopSantiNarration = stopSantiNarration;
+    } catch {}
+    return () => {
+      try { if ((window as any).stopSantiNarration) delete (window as any).stopSantiNarration; } catch {}
+    };
+  }, []);
 
   // Map filtered attractions according to overlay filters
   const filteredAttractions = React.useMemo(() => {
