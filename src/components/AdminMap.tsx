@@ -43,9 +43,17 @@ const AdminMap = ({ onLocationSelect, initialCoords }: AdminMapProps) => {
                 }
             });
 
+            // Add geolocate control
+            const geolocate = new mapboxgl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: false,
+                showUserHeading: true,
+                showAccuracyCircle: false
+            });
+
             m.on('load', () => {
                 map.current = m;
-                // Create marke on load
+                // Create marker on load
                 marker.current = new mapboxgl.Marker({ color: '#FF0000', draggable: true })
                     .setLngLat([lng, lat])
                     .addTo(m);
@@ -62,6 +70,16 @@ const AdminMap = ({ onLocationSelect, initialCoords }: AdminMapProps) => {
                 });
             });
 
+            // Listen to geolocate event to move marker to user location
+            geolocate.on('geolocate', (e: any) => {
+                const userLng = e.coords.longitude;
+                const userLat = e.coords.latitude;
+                marker.current?.setLngLat([userLng, userLat]);
+                onLocationSelect(userLng, userLat);
+                m.flyTo({ center: [userLng, userLat], zoom: 15 });
+            });
+
+            m.addControl(geolocate, 'top-right');
             m.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
             return () => {

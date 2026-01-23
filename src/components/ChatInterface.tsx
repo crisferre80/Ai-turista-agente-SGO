@@ -114,6 +114,12 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
     // Text-to-Speech Helper
     const playAudioResponse = useCallback(async (text: string) => {
+        // Evitar llamadas duplicadas si ya hay audio reproduciéndose
+        if (audioRef.current && !audioRef.current.paused) {
+            console.log('ChatInterface: Audio already playing, ignoring duplicate request');
+            return;
+        }
+        
         try {
             const response = await fetch('/api/speech', {
                 method: 'POST',
@@ -275,27 +281,45 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             if (!response.ok) throw new Error("Chat request failed");
 
             const data = await response.json();
+            
+            // Manejar rate limit exceeded
+            if (data.rateLimitExceeded) {
+                setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+                setTimeout(() => setIsThinking(false), 600);
+                setIsLoading(false);
+                updateInteractionTime();
+                return;
+            }
+            
             const botReply = data.reply || "Lo siento, tuve un problema al pensar. ¿Podrías repetir?";
             const placeId = data.placeId;
             const placeName = data.placeName;
+            const isRouteOnly = data.isRouteOnly; // Flag para indicar consulta de ruta únicamente
+
+            console.log('Chat API response:', { botReply: botReply.substring(0, 50), placeId, placeName, isRouteOnly });
 
             // Add Assistant Message
             setMessages(prev => [...prev, { role: 'assistant', content: botReply }]);
 
-            // If navigating to a place, keep thinking state until narration starts there
-            // Otherwise turn off thinking after a short delay
-            if (!placeId) {
+            // Si es consulta de ruta (isRouteOnly), desactivar thinking inmediatamente
+            // y NO navegar a la página de detalles
+            if (isRouteOnly) {
+                setTimeout(() => {
+                    setIsThinking(false);
+                }, 600);
+            } else if (!placeId) {
+                // Si no hay placeId, también desactivar thinking
                 setTimeout(() => {
                     setIsThinking(false);
                 }, 600);
             }
-            // If there's a placeId, isThinking will be turned off by the narration:start event
+            // Si hay placeId y NO es isRouteOnly, isThinking se apagará con narration:start
 
             // Speak the response
             playAudioResponse(botReply);
             
-            // If a place was mentioned, navigate to its detail page automatically
-            if (placeId && typeof window !== 'undefined') {
+            // Solo navegar a detail page si hay placeId Y NO es consulta de ruta
+            if (placeId && !isRouteOnly && typeof window !== 'undefined') {
                 // Store that we're narrating about this place
                 // Use sessionStorage as fallback if localStorage is blocked
                 const setStorage = (key: string, value: string) => {
@@ -322,16 +346,23 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 }
             }
 
-            // Detect if user asked for directions and extract destination from user message
-            const isDirectionQuery = /(?:cómo|como) (?:llegar|voy|llego)|indicame|direcciones?|ruta|camino/i.test(textToSend);
-            console.log('Direction query detected:', isDirectionQuery, 'for message:', textToSend);
-            if (isDirectionQuery && typeof window !== 'undefined' && 'focusPlaceOnMap' in window && typeof (window as Window & typeof globalThis).focusPlaceOnMap === 'function') {
-                // Extract potential place names from user message
-                const placeMatch = textToSend.match(/(?:a\s+|al\s+|hacia\s+|para\s+|voy a\s+|ir a\s+)(.+?)(?:\?|$|\.|\s+y\s+)/i);
-                console.log('Place match:', placeMatch);
-                if (placeMatch) {
-                    const destination = placeMatch[1].trim();
-                    (window as Window & typeof globalThis).focusPlaceOnMap!(destination);
+            // Si es consulta de ruta, usar placeName de la respuesta de API para enfocar mapa
+            // Esto es más preciso que extraer del mensaje del usuario
+            if (isRouteOnly && typeof window !== 'undefined' && 'focusPlaceOnMap' in window && typeof (window as Window & typeof globalThis).focusPlaceOnMap === 'function') {
+                if (placeName) {
+                    console.log('Route query: Focusing map on place from API:', placeName);
+                    (window as Window & typeof globalThis).focusPlaceOnMap!(placeName);
+                } else {
+                    // Si no se encontró placeName en la respuesta, intentar extraer del mensaje del usuario
+                    console.log('Route query: placeName not found in API response, trying to extract from user message');
+                    const placeMatch = textToSend.match(/(?:a\s+|al\s+|hacia\s+|para\s+|llegar a\s+|ir a\s+|voy a\s+)([^?.,]+)/i);
+                    if (placeMatch) {
+                        const extractedPlace = placeMatch[1].trim();
+                        console.log('Route query: Extracted place from user message:', extractedPlace);
+                        (window as Window & typeof globalThis).focusPlaceOnMap!(extractedPlace);
+                    } else {
+                        console.warn('Route query: Could not extract place name from user message');
+                    }
                 }
             }
 

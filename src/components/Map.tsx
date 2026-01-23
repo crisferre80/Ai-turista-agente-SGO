@@ -152,11 +152,15 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             const duration = Math.floor(data.duration / 60);
             const stepNarrative = data.legs[0].steps.slice(0, 3).map((s: any) => s.maneuver.instruction).join('. Luego, ');
 
-            // Stop any in-progress narration and play route instructions with priority
-            try {
-                // stopSantiNarration is imported via page.handleNarration indirectly (it's exposed in speech.ts); we attempt a global call if available
-                if (typeof (window as any).stopSantiNarration === 'function') (window as any).stopSantiNarration();
-            } catch {}
+            // Limpiar ruta previa si existe
+            if (map.current.getLayer('route')) {
+                map.current.removeLayer('route');
+            }
+            if (map.current.getSource('route')) {
+                map.current.removeSource('route');
+            }
+
+            // Narrar instrucciones de ruta - esta es la ÚNICA narración que debe ocurrir
             onNarrate?.(`¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`, { source: 'map-route', force: true });
 
             const geojson: any = {
@@ -336,38 +340,52 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
 
     (window as any).focusPlaceOnMap = (placeName: string) => {
-            console.log('focusPlaceOnMap called with:', placeName);
+            console.log('=== focusPlaceOnMap DEBUG ===');
+            console.log('1. Input placeName:', placeName);
+            console.log('2. Total attractions available:', attractions.length);
+            
             const normalize = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '');
             const normalizedPlaceName = normalize(placeName);
+            console.log('3. Normalized placeName:', normalizedPlaceName);
+
+            // Log todos los nombres disponibles
+            console.log('4. Available place names:', attractions.map(a => a.name).slice(0, 10));
 
             const found = attractions.find(a => {
                 const normalizedName = normalize(a.name);
-                return normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
+                const matches = normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
+                if (matches) {
+                    console.log('5. MATCH FOUND:', a.name, 'with coords:', a.coords);
+                }
+                return matches;
             });
 
             if (found && found.coords) {
+                console.log('6. Flying to coordinates:', found.coords);
                 currentMap.flyTo({ center: found.coords as [number, number], zoom: 15 });
 
                 if (userLocation) {
+                    console.log('7. User location available, drawing route');
                     drawRoute(userLocation, found.coords as [number, number], found.name);
                 } else {
-                    console.log('Setting pending destination:', found.name);
+                    console.log('7. No user location, setting pending destination');
                     setPendingDestination({ coords: found.coords as [number, number], name: found.name });
                     onNarrate?.("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.", { source: 'map' });
                 }
 
-                const targetMarker = markersRef.current.find((m: any) => m.getElement()._attrId === found.id);
-                if (targetMarker) {
-                    if (!targetMarker.getPopup()?.isOpen()) targetMarker.togglePopup();
-                }
-
+                // NO abrir el popup automáticamente cuando es consulta de ruta
+                // El popup solo debe abrirse si el usuario hace clic en el marcador
+                
+                // Notificar al componente padre que se enfocó un lugar (sin causar navegación)
                 if (onPlaceFocus) onPlaceFocus(found);
+                console.log('8. Place focused successfully');
                 return found;
             }
+            console.log('6. NO MATCH FOUND for:', placeName);
             return null;
         };
 
-        // Listen to Santi narrations so we can navigate to a place detail when he mentions a known place
+        // Listen to Santi narrations so we can focus places on the map when mentioned
         const onNarration = (ev: Event) => {
             try {
                 const detail = (ev as CustomEvent).detail as { text: string, source?: string } | undefined;
@@ -381,11 +399,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 }
 
                 if (!text) return;
-                const found = (window as any).focusPlaceOnMap(text);
-                if (found && found.id) {
-                    // Navigate to the place detail page while Santi narrates
-                    router.push(`/explorar/${found.id}`);
-                }
+                // Solo enfocar en el mapa, NO navegar
+                // La navegación la maneja ChatInterface solo cuando corresponde
+                (window as any).focusPlaceOnMap(text);
             } catch (e) { /* ignore */ }
         };
 

@@ -323,6 +323,8 @@ export default function Home() {
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const [carouselPhotos, setCarouselPhotos] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -416,6 +418,37 @@ export default function Home() {
 
   const handleNarration = (text: string, opts?: { source?: string, force?: boolean }) => {
     santiSpeak(text, opts);
+  };
+  
+  // Reset panel to collapsed when activePlace changes
+  useEffect(() => {
+    if (activePlace) {
+      setIsPanelExpanded(false);
+    }
+  }, [activePlace]);
+
+  // Handle touch gestures for mobile panel
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    
+    const touchEnd = e.changedTouches[0].clientY;
+    const diff = touchStart - touchEnd;
+    
+    // Swipe up (diff > 50) -> expand
+    // Swipe down (diff < -50) -> collapse
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && !isPanelExpanded) {
+        setIsPanelExpanded(true);
+      } else if (diff < 0 && isPanelExpanded) {
+        setIsPanelExpanded(false);
+      }
+    }
+    
+    setTouchStart(null);
   };
 
   // Expose helper to stop narration globally so other components (like Map) can prioritize route TTS
@@ -986,41 +1019,92 @@ export default function Home() {
           userLocation={userLocation}
         />
 
-        {/* Place Detail Modal */}
+        {/* Place Detail Card - Responsive: Sidebar (Desktop) / Slide-up Panel (Mobile) */}
         {activePlace && (
-          <div
-            onClick={() => setActivePlace(null)}
-            style={{
-              position: 'fixed',
-              top: 0, left: 0, width: '100%', height: '100%',
-              backgroundColor: 'rgba(0,0,0,0.92)',
-              backdropFilter: 'blur(15px)',
-              zIndex: 20000,
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'center',
-              padding: '40px 20px',
-              overflowY: 'auto'
-            }}
-          >
+          <>
+            {/* Backdrop overlay - solo visible en desktop */}
+            <div
+              onClick={() => setActivePlace(null)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(0,0,0,0.2)',
+                zIndex: 19999,
+                display: 'block'
+              }}
+              className="place-detail-backdrop"
+            />
+            
             <div
               onClick={e => e.stopPropagation()}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
               style={{
+                position: 'fixed',
                 backgroundColor: '#1E293B',
-                borderRadius: '32px',
-                maxWidth: '550px',
-                width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                position: 'relative',
-                boxShadow: `0 40px 100px rgba(0,0,0,0.8)`,
+                color: 'white',
+                zIndex: 20000,
+                boxShadow: `0 -10px 50px rgba(0,0,0,0.8)`,
                 border: `2px solid ${COLOR_GOLD}33`,
-                color: 'white'
+                overflowY: 'auto',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
               }}
+              className="place-detail-panel"
             >
+              {/* Mobile: Drag handle */}
+              <div 
+                onClick={() => setIsPanelExpanded(!isPanelExpanded)}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center', 
+                  padding: '12px 0 8px',
+                  cursor: 'pointer',
+                  borderBottom: `1px solid ${COLOR_GOLD}22`,
+                  gap: '8px'
+                }}
+                className="mobile-drag-handle"
+              >
+                <div style={{
+                  width: '50px',
+                  height: '5px',
+                  borderRadius: '10px',
+                  backgroundColor: COLOR_GOLD,
+                  opacity: 0.8
+                }} />
+                <span style={{
+                  fontSize: '0.75rem',
+                  color: COLOR_GOLD,
+                  opacity: 0.7,
+                  fontWeight: 600,
+                  letterSpacing: '0.5px'
+                }}>
+                  {isPanelExpanded ? '▼ Desliza hacia abajo' : '▲ Toca para ver más'}
+                </span>
+              </div>
+              
+              {/* Close button */}
               <button
                 onClick={() => setActivePlace(null)}
-                style={{ position: 'absolute', top: '15px', right: '15px', background: COLOR_RED, color: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', zIndex: 10, fontWeight: 'bold' }}
+                style={{ 
+                  position: 'absolute', 
+                  top: '15px', 
+                  right: '15px', 
+                  background: COLOR_RED, 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '50%', 
+                  width: '35px', 
+                  height: '35px', 
+                  cursor: 'pointer', 
+                  zIndex: 10, 
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}
               >
                 ✕
               </button>
@@ -1080,7 +1164,79 @@ export default function Home() {
                 </button>
               </div>
             </div>
-          </div>
+            
+            {/* Estilos CSS para responsive behavior */}
+            <style jsx>{`
+              @keyframes slideInRight {
+                from {
+                  transform: translateX(100%);
+                }
+                to {
+                  transform: translateX(0);
+                }
+              }
+              
+              @keyframes slideInUp {
+                from {
+                  transform: translateY(100%);
+                }
+                to {
+                  transform: translateY(0);
+                }
+              }
+              
+              @media (min-width: 768px) {
+                /* Desktop: Sidebar derecho con animación */
+                .place-detail-panel {
+                  top: 0;
+                  right: 0;
+                  width: 450px;
+                  max-width: 35vw;
+                  height: 100vh;
+                  border-radius: 0;
+                  border-right: none;
+                  animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .mobile-drag-handle {
+                  display: none;
+                }
+                .place-detail-backdrop {
+                  background-color: rgba(0,0,0,0.2);
+                  pointer-events: auto;
+                }
+              }
+              
+              @media (max-width: 767px) {
+                /* Mobile: Panel deslizable desde abajo */
+                .place-detail-backdrop {
+                  background-color: transparent;
+                  backdrop-filter: none;
+                  pointer-events: none;
+                }
+                .place-detail-panel {
+                  bottom: 0;
+                  left: 0;
+                  right: 0;
+                  width: 100%;
+                  max-height: ${isPanelExpanded ? '85vh' : '45vh'};
+                  min-height: ${isPanelExpanded ? '85vh' : '45vh'};
+                  border-radius: 24px 24px 0 0;
+                  border-bottom: none;
+                  animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                  box-shadow: 0 -10px 50px rgba(0,0,0,0.6);
+                  overflow-y: auto;
+                  -webkit-overflow-scrolling: touch;
+                }
+                .mobile-drag-handle {
+                  display: flex;
+                  position: sticky;
+                  top: 0;
+                  background: #1E293B;
+                  z-index: 10;
+                }
+              }
+            `}</style>
+          </>
         )}
 
         {/* Lightbox / Zoomed Image */}

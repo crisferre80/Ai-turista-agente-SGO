@@ -72,6 +72,7 @@ export default function AdminDashboard() {
     const [businessFile, setBusinessFile] = useState<File | null>(null);
     const [carouselFile, setCarouselFile] = useState<File | null>(null);
     const [newCarouselPhoto, setNewCarouselPhoto] = useState({ title: '', description: '' });
+    const [generatingDesc, setGeneratingDesc] = useState(false);
 
     const checkAuth = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -238,6 +239,46 @@ export default function AdminDashboard() {
         setEditingId(null);
         setUploadFile(null);
         setGalleryFiles([]);
+    };
+
+    const generateDescription = async (type: 'place' | 'business') => {
+        const name = type === 'place' ? newPlace.name : newBusiness.name;
+        const category = type === 'place' ? newPlace.category : newBusiness.category;
+
+        if (!name.trim()) {
+            alert('Por favor ingresa un nombre primero');
+            return;
+        }
+
+        setGeneratingDesc(true);
+        try {
+            const response = await fetch('/api/generate-description', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    category,
+                    type: type === 'place' ? 'attraction' : 'business'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al generar descripción');
+            }
+
+            const data = await response.json();
+            
+            if (type === 'place') {
+                setNewPlace({ ...newPlace, desc: data.description });
+            } else {
+                setNewBusiness({ ...newBusiness, contact: data.description });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al generar descripción. Verifica tu conexión e intenta nuevamente.');
+        } finally {
+            setGeneratingDesc(false);
+        }
     };
 
     const startEditing = (p: PlaceRecord) => {
@@ -555,7 +596,38 @@ export default function AdminDashboard() {
                                     <p style={{ fontSize: '11px', color: '#888' }}>{newPlace.gallery.length} fotos existentes en galería.</p>
                                 </div>
 
-                                <textarea style={textareaStyle} placeholder="Descripción para Santi..." value={newPlace.desc} onChange={e => setNewPlace({ ...newPlace, desc: e.target.value })} rows={3} />
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label style={labelStyle}>Descripción para Santi</label>
+                                        <button 
+                                            type="button"
+                                            onClick={() => generateDescription('place')}
+                                            disabled={generatingDesc || !newPlace.name.trim()}
+                                            style={{
+                                                padding: '6px 12px',
+                                                background: generatingDesc ? '#ccc' : '#9333ea',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                cursor: generatingDesc || !newPlace.name.trim() ? 'not-allowed' : 'pointer',
+                                                fontSize: '12px',
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            {generatingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
+                                        </button>
+                                    </div>
+                                    <textarea 
+                                        style={textareaStyle} 
+                                        placeholder="Descripción para Santi... o genera una con IA" 
+                                        value={newPlace.desc} 
+                                        onChange={e => setNewPlace({ ...newPlace, desc: e.target.value })} 
+                                        rows={3} 
+                                    />
+                                </div>
                                 <Input label="Info Extra (Horarios, tips)" value={newPlace.info} onChange={v => setNewPlace({ ...newPlace, info: v })} />
 
                                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -843,7 +915,38 @@ export default function AdminDashboard() {
                                     </div>
                                     {newBusiness.image_url && <NextImage src={newBusiness.image_url} width={90} height={60} style={{ height: '60px', width: 'auto', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }} alt="Vista previa negocio" />}
                                 </div>
-                                <Input label="WhatsApp / Cel" value={newBusiness.contact} onChange={v => setNewBusiness({ ...newBusiness, contact: v })} />
+                                
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label style={labelStyle}>Descripción / WhatsApp / Contacto</label>
+                                        <button 
+                                            type="button"
+                                            onClick={() => generateDescription('business')}
+                                            disabled={generatingDesc || !newBusiness.name.trim()}
+                                            style={{
+                                                padding: '6px 12px',
+                                                background: generatingDesc ? '#ccc' : '#9333ea',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                cursor: generatingDesc || !newBusiness.name.trim() ? 'not-allowed' : 'pointer',
+                                                fontSize: '12px',
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            {generatingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
+                                        </button>
+                                    </div>
+                                    <Input 
+                                        label="" 
+                                        value={newBusiness.contact} 
+                                        onChange={v => setNewBusiness({ ...newBusiness, contact: v })} 
+                                        placeholder="Descripción del negocio o número de contacto"
+                                    />
+                                </div>
                                 <Input label="Web o Instagram" value={newBusiness.website} onChange={v => setNewBusiness({ ...newBusiness, website: v })} />
                                 <button type="submit" style={btnPrimary}>{newBusiness.id ? 'Guardar Cambios' : 'Registrar Negocio'}</button>
                             </form>
