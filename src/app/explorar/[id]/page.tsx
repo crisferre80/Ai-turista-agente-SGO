@@ -41,19 +41,20 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     const { data: attr, error: attrErr } = await supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls,video_urls').eq('id', id).maybeSingle();
     if (attrErr) console.warn('Attraction fetch error', attrErr);
     if (attr) {
+      const a: any = attr as any;
       place = {
-        id: String(attr.id),
-        name: String(attr.name || ''),
-        description: attr.description || '',
-        image_url: attr.image_url || undefined,
-        category: attr.category || undefined,
-        lat: attr.lat,
-        lng: attr.lng,
+        id: String(a.id),
+        name: String(a.name || ''),
+        description: a.description || '',
+        image_url: a.image_url || undefined,
+        category: a.category || undefined,
+        lat: a.lat,
+        lng: a.lng,
         isBusiness: false,
-        contact_info: attr.contact_info || undefined,
-        website_url: attr.website_url || undefined,
-        gallery_urls: attr.gallery_urls || undefined,
-        video_urls: attr.video_urls || undefined
+        contact_info: a.contact_info || undefined,
+        website_url: a.website_url || undefined,
+        gallery_urls: a.gallery_urls || a.gallery_images || undefined,
+        video_urls: a.video_urls || undefined
       };
     }
   } catch (e) {
@@ -62,22 +63,23 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   if (!place) {
     try {
-      const { data: biz, error: bizErr } = await supabase.from('businesses').select('id,name,description,image_url,category,lat,lng,contact_info,website_url,gallery_images,plan,is_active,payment_status').eq('id', id).maybeSingle();
+      const { data: biz, error: bizErr } = await supabase.from('businesses').select('id,name,description,category,lat,lng,contact_info,website_url,gallery_images,is_active,payment_status,phone,address').eq('id', id).maybeSingle();
       if (bizErr) console.warn('Business fetch error', bizErr);
       if (biz) {
+        const b: any = biz as any;
         place = {
-          id: String(biz.id),
-          name: String(biz.name || ''),
-          description: biz.description || '',
-          image_url: biz.image_url || undefined,
-          category: biz.category || undefined,
-          lat: biz.lat,
-          lng: biz.lng,
+          id: String(b.id),
+          name: String(b.name || ''),
+          description: b.description || '',
+          image_url: b.gallery_images && b.gallery_images.length > 0 ? b.gallery_images[0] : undefined,
+          category: b.category || undefined,
+          lat: b.lat,
+          lng: b.lng,
           isBusiness: true,
-          contact_info: biz.contact_info || undefined,
-          website_url: biz.website_url || undefined,
-          gallery_urls: biz.gallery_images || undefined,
-          video_urls: biz.video_urls || undefined
+          contact_info: b.contact_info || undefined,
+          website_url: b.website_url || undefined,
+          gallery_urls: b.gallery_images || undefined,
+          video_urls: b.video_urls || undefined
         };
       }
     } catch (e) {

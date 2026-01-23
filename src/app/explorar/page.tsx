@@ -77,17 +77,24 @@ export default function ExplorePage() {
         try {
             const [attrsRes, bizRes] = await Promise.all([
                 supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls'),
-                supabase.from('businesses').select('id,name,description,website_url,contact_info,image_url,lat,lng,category,plan,is_active,payment_status')
+                supabase.from('businesses').select('id,name,description,website_url,contact_info,category,payment_status,gallery_images,lat,lng,is_active,phone,address')
             ]);
 
             if (attrsRes.error) console.warn('Attractions fetch error', attrsRes.error);
-            if (bizRes.error) console.warn('Businesses fetch error', bizRes.error);
+            if (bizRes.error) {
+                console.warn('Businesses fetch error', bizRes.error);
+                console.log('⚠️ Si ves error 400, ejecuta add_missing_columns_only.sql en Supabase');
+            }
 
             const attrs = attrsRes.data;
             const biz = bizRes.data;
 
             setAttractions(attrs || []);
-            setBusinesses((biz || []).map(b => ({ ...b, isBusiness: true })));
+            setBusinesses((biz || []).map(b => ({ 
+                ...b, 
+                isBusiness: true,
+                image_url: b.gallery_images && b.gallery_images.length > 0 ? b.gallery_images[0] : null
+            })));
         } catch (e) {
             console.error('fetchData error', e);
         } finally {

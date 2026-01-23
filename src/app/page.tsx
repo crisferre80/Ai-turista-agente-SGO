@@ -353,11 +353,19 @@ export default function Home() {
       const { data: vids, error: vidsErr } = await supabase.from('app_videos').select('*');
       if (vidsErr) console.warn('Videos fetch error', vidsErr);
 
-      // Fetch businesses with explicit columns to avoid PostgREST errors when schema changes
+      // Fetch businesses with all columns including coordinates
       const { data: biz, error: bizErr } = await supabase
         .from('businesses')
-        .select('id,name,website_url,contact_info,image_url,lat,lng,category,plan,is_active,payment_status');
-      if (bizErr) console.warn('Businesses fetch error', bizErr);
+        .select('id,name,description,website_url,contact_info,phone,address,gallery_images,lat,lng,category,is_active,is_verified,payment_status')
+        .eq('is_active', true)
+        .not('lat', 'is', null)
+        .not('lng', 'is', null);
+      
+      if (bizErr) {
+        console.warn('Businesses fetch error', bizErr);
+      } else {
+        console.log(`✅ Loaded ${biz?.length || 0} active businesses with coordinates`);
+      }
 
       const { data: carousel, error: carouselErr } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
       if (carouselErr) console.warn('Carousel fetch error', carouselErr);
@@ -365,8 +373,9 @@ export default function Home() {
       const mappedBiz = (biz || []).map(b => ({
         ...b,
         isBusiness: true,
-        image: b.image_url,
-        description: b.contact_info || b.category,
+        image: b.gallery_images && b.gallery_images.length > 0 ? b.gallery_images[0] : null,
+        description: b.description || b.contact_info || b.category || 'Negocio registrado',
+        info_extra: b.phone || b.address || b.website_url,
         coords: [b.lng, b.lat]
       }));
 
@@ -411,11 +420,18 @@ export default function Home() {
 
   // Expose helper to stop narration globally so other components (like Map) can prioritize route TTS
   useEffect(() => {
+    type WindowWithSanti = Window & { stopSantiNarration?: () => void };
+    const win = window as WindowWithSanti;
     try {
-      (window as any).stopSantiNarration = stopSantiNarration;
+      win.stopSantiNarration = stopSantiNarration;
     } catch {}
     return () => {
-      try { if ((window as any).stopSantiNarration) delete (window as any).stopSantiNarration; } catch {}
+      try {
+        if (win.stopSantiNarration) {
+          // Clear the reference without using `any`
+          win.stopSantiNarration = undefined;
+        }
+      } catch {}
     };
   }, []);
 
@@ -426,7 +442,10 @@ export default function Home() {
 
     const includes = (value?: string, substr?: string) => (value || '').toLowerCase().includes((substr || '').toLowerCase());
 
-    return attractions.filter(a => {
+    console.log('🔍 Total attractions before filter:', attractions.length);
+    console.log('🔍 Filters:', filters);
+    
+    const filtered = attractions.filter(a => {
       const cat = a.category || '';
       const isBiz = !!a.isBusiness;
 
@@ -442,6 +461,11 @@ export default function Home() {
         (filters.cultura && matchCultura)
       );
     });
+    
+    console.log('✅ Filtered attractions:', filtered.length);
+    console.log('📍 Business markers:', filtered.filter(a => a.isBusiness).map(b => ({ name: b.name, category: b.category, coords: b.coords })));
+    
+    return filtered;
   }, [attractions, filters]);
 
   // Mostrar la intro primero, sobre cualquier otro contenido

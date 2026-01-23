@@ -36,10 +36,16 @@ let _currentAudio: HTMLAudioElement | null = null;
 
 export const stopSantiNarration = () => {
   try {
+    // Stop OpenAI audio if playing
     if (_currentAudio) {
       _currentAudio.pause();
       _currentAudio.currentTime = 0;
       _currentAudio = null;
+    }
+    
+    // Stop Web Speech API if speaking
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
   } catch (e) { /* ignore */ }
   _isNarrating = false;
@@ -66,6 +72,49 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
 
   _isNarrating = true;
 
+  // Helper function to use Web Speech API as fallback
+  const useBrowserTTS = () => {
+    console.log('Using browser TTS as fallback');
+    try {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      const spanishVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
+      if (spanishVoice) utterance.voice = spanishVoice;
+      utterance.lang = 'es-ES';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      
+      utterance.onend = () => {
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:end'));
+          }
+        } catch (e) { /* ignore */ }
+        _isNarrating = false;
+      };
+      
+      utterance.onerror = (e) => {
+        console.error('Browser TTS error:', e);
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:end'));
+          }
+        } catch (ee) { /* ignore */ }
+        _isNarrating = false;
+      };
+      
+      synth.speak(utterance);
+    } catch (err) {
+      console.error('Browser TTS failed:', err);
+      _isNarrating = false;
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('santi:narration:end'));
+        }
+      } catch (e) { /* ignore */ }
+    }
+  };
+
   fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -73,6 +122,7 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
   })
     .then(response => {
       if (response.status === 401) throw new Error("API_KEY_MISSING");
+      if (response.status === 429) throw new Error("QUOTA_EXCEEDED");
       if (!response.ok) throw new Error("Audio generation failed");
       return response.blob();
     })
@@ -107,14 +157,23 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     })
     .catch(error => {
       console.error("TTS Error:", error);
+      
+      // Use browser TTS as fallback for quota exceeded or API errors
+      if (error.message === "QUOTA_EXCEEDED" || error.message === "Audio generation failed") {
+        useBrowserTTS();
+        return;
+      }
+      
       try {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('santi:narration:end'));
         }
       } catch (e) { /* ignore */ }
       _isNarrating = false;
+      
       if (error.message === "API_KEY_MISSING") {
-        alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
+        console.warn("OpenAI API key missing, falling back to browser TTS");
+        useBrowserTTS();
       }
     });
 };

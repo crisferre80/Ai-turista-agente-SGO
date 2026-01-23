@@ -30,6 +30,30 @@ export async function POST(req: Request) {
 
     } catch (error) {
         console.error('Error in speech route:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        
+        // Check if it's an OpenAI API error (quota exceeded, rate limit, etc.)
+        if (error && typeof error === 'object' && 'status' in error) {
+            const apiError = error as { status: number; message?: string };
+            
+            // Return specific status codes for client-side handling
+            if (apiError.status === 429) {
+                return NextResponse.json({ 
+                    error: 'OpenAI quota exceeded - using fallback TTS',
+                    fallback: true 
+                }, { status: 429 });
+            }
+            
+            if (apiError.status === 401) {
+                return NextResponse.json({ 
+                    error: 'OpenAI authentication failed',
+                    fallback: true 
+                }, { status: 401 });
+            }
+        }
+        
+        return NextResponse.json({ 
+            error: 'Internal Server Error',
+            fallback: true 
+        }, { status: 500 });
     }
 }
