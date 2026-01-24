@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
 import GalleryModal from '@/components/GalleryModal';
 import UserReviewModal from '@/components/UserReviewModal';
@@ -41,6 +42,7 @@ export default function ExplorePage() {
     const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         fetchData();
@@ -246,6 +248,10 @@ export default function ExplorePage() {
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.background = COLOR_PRIMARY;
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/explorar/${place.id}`);
                         }}
                     >
                         Ver detalles
