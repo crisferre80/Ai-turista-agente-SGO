@@ -47,6 +47,7 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
     const [activeTab, setActiveTab] = useState<'profile' | 'stories' | 'stats'>('profile');
+    const [categories, setCategories] = useState<Array<{name: string, icon: string}>>([]);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -60,7 +61,53 @@ export default function ProfilePage() {
     useEffect(() => {
         fetchProfile();
         fetchNarrations();
+        fetchCategories();
     }, []);
+
+    const fetchCategories = async () => {
+        console.log('🔍 Fetching categories from database...');
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('name, icon')
+                .eq('type', 'attraction')
+                .order('name');
+
+            if (error) {
+                console.error('❌ Error fetching categories:', error);
+                // Fallback: usar categorías hardcodeadas
+                console.log('⚠️ Using fallback categories');
+                setCategories([
+                    { name: 'histórico', icon: '🏛️' },
+                    { name: 'naturaleza', icon: '🌿' },
+                    { name: 'compras', icon: '🛍️' },
+                    { name: 'cultura', icon: '🎭' },
+                    { name: 'arquitectura', icon: '🏗️' },
+                    { name: 'monumentos', icon: '🗿' },
+                    { name: 'reservas naturales', icon: '🏞️' },
+                    { name: 'gastronomía', icon: '🍽️' },
+                    { name: 'artesanía', icon: '🎨' }
+                ]);
+            } else {
+                console.log('✅ Categories fetched:', data);
+                setCategories(data || []);
+            }
+        } catch (err) {
+            console.error('❌ Exception fetching categories:', err);
+            // Fallback en caso de excepción
+            setCategories([
+                { name: 'histórico', icon: '🏛️' },
+                { name: 'naturaleza', icon: '🌿' },
+                { name: 'compras', icon: '🛍️' },
+                { name: 'cultura', icon: '🎭' },
+                { name: 'arquitectura', icon: '🏗️' },
+                { name: 'monumentos', icon: '🗿' },
+                { name: 'reservas naturales', icon: '🏞️' },
+                { name: 'gastronomía', icon: '🍽️' },
+                { name: 'artesanía', icon: '🎨' }
+            ]);
+        }
+    };
 
     const fetchProfile = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -225,17 +272,9 @@ export default function ProfilePage() {
         setLoading(false);
     };
 
-    const getCategoryIcon = (category: string) => {
-        const icons: Record<string, string> = {
-            'historico': '🏛️',
-            'naturaleza': '🌿',
-            'compras': '🛍️',
-            'gastronomia': '🍽️',
-            'artesania': '🎨',
-            'deportes': '⚽',
-            'cultura': '🎭'
-        };
-        return icons[category] || '📍';
+    const getCategoryIcon = (categoryName: string) => {
+        const category = categories.find(cat => cat.name === categoryName);
+        return category?.icon || '📍';
     };
 
     const getBadgeIcon = (badge: string) => {
@@ -576,29 +615,29 @@ export default function ProfilePage() {
                                             marginBottom: '12px'
                                         }}>Categorías Favoritas</label>
                                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                            {['historico', 'naturaleza', 'gastronomia', 'artesania', 'compras', 'cultura'].map(category => (
+                                            {categories.map(cat => (
                                                 <button
-                                                    key={category}
+                                                    key={cat.name}
                                                     type="button"
                                                     onClick={() => {
-                                                        const newCategories = formData.favorite_categories.includes(category)
-                                                            ? formData.favorite_categories.filter(c => c !== category)
-                                                            : [...formData.favorite_categories, category];
+                                                        const newCategories = formData.favorite_categories.includes(cat.name)
+                                                            ? formData.favorite_categories.filter(c => c !== cat.name)
+                                                            : [...formData.favorite_categories, cat.name];
                                                         setFormData({...formData, favorite_categories: newCategories});
                                                     }}
                                                     style={{
                                                         padding: '8px 16px',
                                                         borderRadius: '20px',
-                                                        border: `2px solid ${formData.favorite_categories.includes(category) ? COLOR_GOLD : '#e2e8f0'}`,
-                                                        background: formData.favorite_categories.includes(category) ? COLOR_GOLD : 'white',
-                                                        color: formData.favorite_categories.includes(category) ? COLOR_DARK : '#64748b',
+                                                        border: `2px solid ${formData.favorite_categories.includes(cat.name) ? COLOR_GOLD : '#e2e8f0'}`,
+                                                        background: formData.favorite_categories.includes(cat.name) ? COLOR_GOLD : 'white',
+                                                        color: formData.favorite_categories.includes(cat.name) ? COLOR_DARK : '#64748b',
                                                         cursor: 'pointer',
                                                         fontSize: '13px',
                                                         fontWeight: '500',
                                                         transition: 'all 0.2s ease'
                                                     }}
                                                 >
-                                                    {getCategoryIcon(category)} {category.charAt(0).toUpperCase() + category.slice(1)}
+                                                    {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
                                                 </button>
                                             ))}
                                         </div>

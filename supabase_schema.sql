@@ -1,5 +1,5 @@
 -- TABLA DE PERFILES (Usuarios y Admin)
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   name TEXT,
   avatar_url TEXT,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   contact_info TEXT,
   phone TEXT,
   address TEXT,
-  category TEXT, -- 'restaurante', 'hotel', 'artesania', etc.
+  category TEXT, -- 'restaurante', 'hotel', 'artesanía', 'compras', 'cultura', 'servicios'
   plan TEXT DEFAULT 'basic', -- 'basic', 'pro', 'premium'
   is_verified BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT FALSE,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS businesses (
 );
 
 -- TABLA DE ATRACTIVOS (Puntos en el mapa)
-CREATE TABLE attractions (
+CREATE TABLE IF NOT EXISTS attractions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
@@ -36,14 +36,14 @@ CREATE TABLE attractions (
   lng FLOAT NOT NULL,
   image_url TEXT,
   info_extra TEXT,
-  category TEXT, -- 'historico', 'naturaleza', 'compras'
+  category TEXT, -- 'histórico', 'naturaleza', 'compras', 'cultura', 'arquitectura', 'monumentos', 'reservas naturales', 'gastronomía', 'artesanía'
   is_business_listing BOOLEAN DEFAULT FALSE,
   business_id UUID REFERENCES businesses(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- TABLA DE RELATOS (Historias de usuarios)
-CREATE TABLE narrations (
+CREATE TABLE IF NOT EXISTS narrations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   attraction_id UUID REFERENCES attractions(id) ON DELETE CASCADE,
   user_id UUID REFERENCES profiles(id),
@@ -54,7 +54,7 @@ CREATE TABLE narrations (
 );
 
 -- TABLA DE FRASES DE SANTI
-CREATE TABLE santis_phrases (
+CREATE TABLE IF NOT EXISTS santis_phrases (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   phrase TEXT NOT NULL,
   category TEXT DEFAULT 'general',
@@ -62,7 +62,7 @@ CREATE TABLE santis_phrases (
 );
 
 -- TABLA DE PLANES DE NEGOCIOS
-CREATE TABLE business_plans (
+CREATE TABLE IF NOT EXISTS business_plans (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL, -- 'basic', 'pro', 'premium'
   display_name TEXT NOT NULL,
@@ -75,7 +75,7 @@ CREATE TABLE business_plans (
 );
 
 -- TABLA DE PAGOS
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id),
   amount DECIMAL(10,2) NOT NULL,
@@ -88,10 +88,22 @@ CREATE TABLE payments (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- TABLA DE VIDEOS DE LA APP
+CREATE TABLE IF NOT EXISTS app_videos (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- HABILITAR STORAGE (Buckets: images, audios)
 -- Nota: Esto se configura manualmente en la UI de Supabase o vía políticas RLS.
 
 -- POLÍTICAS DE SEGURIDAD (RLS)
+DROP POLICY IF EXISTS "Videos públicos" ON app_videos;
+DROP POLICY IF EXISTS "Admin inserta videos" ON app_videos;
+DROP POLICY IF EXISTS "Admin borra videos" ON app_videos;
+
 ALTER TABLE app_videos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Videos públicos" ON app_videos FOR SELECT TO public USING (true);
 CREATE POLICY "Admin inserta videos" ON app_videos FOR INSERT TO public WITH CHECK (true);

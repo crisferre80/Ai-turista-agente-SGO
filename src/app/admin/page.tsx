@@ -57,6 +57,9 @@ export default function AdminDashboard() {
     const [videos, setVideos] = useState<VideoRecord[]>([]);
     const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
     const [carouselPhotos, setCarouselPhotos] = useState<CarouselPhoto[]>([]);
+    const [phrases, setPhrases] = useState<Array<{id: string, phrase: string, category: string}>>([]);
+    const [attractionCategories, setAttractionCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
+    const [businessCategories, setBusinessCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
 
     // Form States
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,6 +77,15 @@ export default function AdminDashboard() {
     const [newCarouselPhoto, setNewCarouselPhoto] = useState({ title: '', description: '' });
     const [generatingDesc, setGeneratingDesc] = useState(false);
 
+    // Filter States
+    const [placeSearch, setPlaceSearch] = useState('');
+    const [placeCategoryFilter, setPlaceCategoryFilter] = useState('');
+    const [businessSearch, setBusinessSearch] = useState('');
+    const [businessCategoryFilter, setBusinessCategoryFilter] = useState('');
+
+    // Category States
+    const [newCategory, setNewCategory] = useState({ name: '', icon: '', type: 'attraction' });
+
     const checkAuth = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         const legacyAuth = localStorage.getItem('adminToken');
@@ -83,8 +95,24 @@ export default function AdminDashboard() {
         } else {
             setIsAuthorized(true);
             fetchData();
+            fetchCategories();
         }
     }, [router]);
+
+    // Función para asegurar autenticación antes de operaciones de escritura
+    const ensureAuthenticated = async () => {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) {
+            // Intentar refrescar la sesión
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError || !refreshData.user) {
+                alert('Sesión expirada. Por favor, inicia sesión nuevamente.');
+                router.push('/login');
+                return false;
+            }
+        }
+        return true;
+    };
 
     useEffect(() => {
         checkAuth();
@@ -96,17 +124,43 @@ export default function AdminDashboard() {
         const { data: bizData, error: bizErr } = await supabase.from('businesses').select('id,name,category,contact_info,website_url,gallery_images,lat,lng,is_active,payment_status,phone,address,description').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
+        const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
 
         if (attErr) console.warn('Admin attractions fetch error', attErr);
         if (bizErr) console.warn('Admin businesses fetch error', bizErr);
         if (vidErr) console.warn('Admin videos fetch error', vidErr);
         if (carouselErr) console.warn('Admin carousel fetch error', carouselErr);
+        if (phraseErr) console.warn('Admin phrases fetch error', phraseErr);
 
         if (attData) setPlaces(attData as PlaceRecord[]);
         if (bizData) setBusinesses(bizData as BusinessRecord[]);
         if (vidData) setVideos(vidData as VideoRecord[]);
         if (carouselData) setCarouselPhotos(carouselData);
+        if (phraseData) setPhrases(phraseData);
         setLoading(false);
+    };
+
+    const fetchCategories = async () => {
+        console.log('🔍 Admin: Fetching categories...');
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('name, icon, type')
+                .order('type', { ascending: false })
+                .order('name');
+
+            if (error) {
+                console.error('❌ Admin: Error fetching categories:', error);
+            } else {
+                console.log('✅ Admin: Categories fetched:', data);
+                const attractions = data?.filter(cat => cat.type === 'attraction') || [];
+                const businesses = data?.filter(cat => cat.type === 'business') || [];
+                setAttractionCategories(attractions);
+                setBusinessCategories(businesses);
+            }
+        } catch (err) {
+            console.error('❌ Admin: Exception fetching categories:', err);
+        }
     };
 
     // Helper: Client-side Image Compression
@@ -188,6 +242,13 @@ export default function AdminDashboard() {
         setLoading(true);
 
         try {
+            // Validar que la categoría existe
+            const validCategories = attractionCategories.map(cat => cat.name);
+            if (!validCategories.includes(newPlace.category)) {
+                alert(`Categoría inválida: ${newPlace.category}. Selecciona una categoría válida.`);
+                setLoading(false);
+                return;
+            }
             let finalImgUrl = newPlace.img;
             if (uploadFile) {
                 const uploadedUrl = await handleFileUpload(uploadFile, 'images');
@@ -213,10 +274,18 @@ export default function AdminDashboard() {
                 gallery_urls: finalGallery
             };
 
+            console.log('📝 Admin: Updating place with data:', placeData);
+
             let error;
             if (editingId) {
+                console.log('🔄 Admin: Updating attraction ID:', editingId);
                 const { error: updErr } = await supabase.from('attractions').update(placeData).eq('id', editingId);
                 error = updErr;
+                if (error) {
+                    console.error('❌ Admin: Update error:', error);
+                } else {
+                    console.log('✅ Admin: Update successful');
+                }
             } else {
                 const { error: insErr } = await supabase.from('attractions').insert([placeData]);
                 error = insErr;
@@ -235,7 +304,7 @@ export default function AdminDashboard() {
     };
 
     const resetPlaceForm = () => {
-        setNewPlace({ name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: 'historico', gallery: [] });
+        setNewPlace({ name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: 'histórico', gallery: [] });
         setEditingId(null);
         setUploadFile(null);
         setGalleryFiles([]);
@@ -348,6 +417,28 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleAddCategory = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newCategory.name.trim() || !newCategory.icon.trim()) {
+            alert('Por favor completa nombre e ícono');
+            return;
+        }
+        try {
+            const { error } = await supabase.from('categories').insert([{
+                name: newCategory.name.trim(),
+                icon: newCategory.icon.trim(),
+                type: newCategory.type
+            }]);
+            if (error) throw error;
+            alert('¡Categoría creada!');
+            setNewCategory({ name: '', icon: '', type: 'attraction' });
+            fetchCategories();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error desconocido';
+            alert('Error: ' + msg);
+        }
+    };
+
     const handleAddVideo = async (e: React.FormEvent) => {
         e.preventDefault();
         let videoUrl = newVideo.url;
@@ -378,6 +469,9 @@ export default function AdminDashboard() {
         e.preventDefault();
         setLoading(true);
         try {
+            // Verificar autenticación antes de proceder
+            if (!(await ensureAuthenticated())) return;
+
             if (!carouselFile) {
                 alert('Selecciona una foto');
                 return;
@@ -414,6 +508,7 @@ export default function AdminDashboard() {
     };
 
     const deleteCarouselPhoto = async (id: string) => {
+        if (!(await ensureAuthenticated())) return;
         if (!confirm('¿Eliminar esta foto del carrusel?')) return;
         const { error } = await supabase.from('carousel_photos').delete().eq('id', id);
         if (error) alert(error.message);
@@ -421,6 +516,7 @@ export default function AdminDashboard() {
     };
 
     const toggleCarouselPhotoStatus = async (id: string, currentStatus: boolean) => {
+        if (!(await ensureAuthenticated())) return;
         const { error } = await supabase.from('carousel_photos').update({ is_active: !currentStatus }).eq('id', id);
         if (error) alert(error.message);
         else fetchData();
@@ -520,8 +616,8 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('carrusel'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'carrusel')}>📸 Carrusel</button>
                     <button onClick={() => { setActiveTab('videos'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'videos')}>🎥 Videos</button>
                     <button onClick={() => { setActiveTab('negocios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'negocios')}>🏢 Negocios</button>
+                    <button onClick={() => { setActiveTab('categorias'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'categorias')}>🏷️ Categorías</button>
                     <button onClick={() => { setActiveTab('frases'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'frases')}>💬 Frases</button>
-                    <button onClick={() => { setActiveTab('relatos'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'relatos')}>🎙️ Relatos</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                 </div>
 
@@ -556,6 +652,8 @@ export default function AdminDashboard() {
                     }}>
                         {activeTab === 'lugares' ? (editingId ? 'Editando Lugar' : 'Atractivos') :
                             activeTab === 'negocios' ? 'Directorio de Negocios' :
+                                activeTab === 'categorias' ? 'Gestión de Categorías' :
+                                activeTab === 'frases' ? 'Frases de Santi' :
                                 activeTab === 'videos' ? 'Multimedia' :
                                 activeTab === 'emails' ? 'Emails' : 'Santi'}
                     </h1>
@@ -572,10 +670,11 @@ export default function AdminDashboard() {
                                     <div className="responsive-col">
                                         <label style={labelStyle}>Categoría</label>
                                         <select style={inputStyle} value={newPlace.category} onChange={e => setNewPlace({ ...newPlace, category: e.target.value })}>
-                                            <option value="historico">Histórico</option>
-                                            <option value="naturaleza">Naturaleza</option>
-                                            <option value="compras">Mercado</option>
-                                            <option value="gastronomia">Gastronomía</option>
+                                            {attractionCategories.map(cat => (
+                                                <option key={cat.name} value={cat.name}>
+                                                    {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
@@ -650,8 +749,43 @@ export default function AdminDashboard() {
 
                         <hr style={{ margin: '40px 0', border: 'none', borderTop: '1px solid #eee' }} />
                         <h3>Explorar y Editar Atractivos</h3>
+                        
+                        {/* Filtros para lugares */}
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <label style={labelStyle}>Buscar por nombre</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar atractivos..." 
+                                    value={placeSearch} 
+                                    onChange={e => setPlaceSearch(e.target.value)} 
+                                    style={inputStyle} 
+                                />
+                            </div>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <label style={labelStyle}>Filtrar por categoría</label>
+                                <select 
+                                    value={placeCategoryFilter} 
+                                    onChange={e => setPlaceCategoryFilter(e.target.value)} 
+                                    style={inputStyle}
+                                >
+                                    <option value="">Todas las categorías</option>
+                                    {attractionCategories.map(cat => (
+                                        <option key={cat.name} value={cat.name}>
+                                            {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        
                         <div className="content-grid">
-                            {places.map(p => (
+                            {places
+                                .filter(p => 
+                                    p.name.toLowerCase().includes(placeSearch.toLowerCase()) &&
+                                    (placeCategoryFilter === '' || p.category === placeCategoryFilter)
+                                )
+                                .map(p => (
                                 <div key={p.id} style={placeCard} onClick={() => startEditing(p)}>
                                     <div style={{ position: 'relative' }}>
                                         <NextImage src={p.image_url || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300"} width={300} height={120} style={{ maxWidth: '100%', width: 'auto', height: '120px', objectFit: 'cover' }} alt={p.name} />
@@ -783,13 +917,18 @@ export default function AdminDashboard() {
                                     boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
                                     position: 'relative'
                                 }}>
-                                    <div style={{ position: 'relative', paddingTop: '66%' }}>
+                                    <div style={{ position: 'relative', height: '150px', overflow: 'hidden' }}>
                                         <NextImage 
                                             src={photo.image_url} 
                                             alt={photo.title || 'Postal'} 
-                                            fill
-                                            sizes="250px"
-                                            style={{ objectFit: 'cover' }}
+                                            width={250}
+                                            height={150}
+                                            style={{ 
+                                                width: '100%', 
+                                                height: '100%', 
+                                                objectFit: 'cover',
+                                                borderRadius: '8px 8px 0 0'
+                                            }}
                                         />
                                         {!photo.is_active && (
                                             <div style={{
@@ -900,10 +1039,11 @@ export default function AdminDashboard() {
                                     <div className="responsive-col">
                                         <label style={labelStyle}>Categoría</label>
                                         <select style={inputStyle} value={newBusiness.category} onChange={e => setNewBusiness({ ...newBusiness, category: e.target.value })}>
-                                            <option value="restaurante">Restaurante / Comida</option>
-                                            <option value="hotel">Hotelería / Alojamiento</option>
-                                            <option value="artesania">Artesanías / Regalos</option>
-                                            <option value="transporte">Transporte / Guía</option>
+                                            {businessCategories.map(cat => (
+                                                <option key={cat.name} value={cat.name}>
+                                                    {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>
@@ -963,8 +1103,42 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
+                        {/* Filtros para negocios */}
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <label style={labelStyle}>Buscar por nombre</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar negocios..." 
+                                    value={businessSearch} 
+                                    onChange={e => setBusinessSearch(e.target.value)} 
+                                    style={inputStyle} 
+                                />
+                            </div>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <label style={labelStyle}>Filtrar por categoría</label>
+                                <select 
+                                    value={businessCategoryFilter} 
+                                    onChange={e => setBusinessCategoryFilter(e.target.value)} 
+                                    style={inputStyle}
+                                >
+                                    <option value="">Todas las categorías</option>
+                                    {businessCategories.map(cat => (
+                                        <option key={cat.name} value={cat.name}>
+                                            {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
                         <div style={{ display: 'grid', gap: '15px' }}>
-                            {businesses.map(b => (
+                            {businesses
+                                .filter(b => 
+                                    b.name.toLowerCase().includes(businessSearch.toLowerCase()) &&
+                                    (businessCategoryFilter === '' || b.category === businessCategoryFilter)
+                                )
+                                .map(b => (
                                 <div key={b.id} style={listItem}>
                                     <div className="responsive-row row-center">
                                         <NextImage src={b.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"} width={45} height={45} style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} alt={b.name || 'Negocio'} />
@@ -1008,6 +1182,109 @@ export default function AdminDashboard() {
                     <div style={cardStyle}>
                         <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>📧 Gestión de Emails</h3>
                         <EmailManager />
+                    </div>
+                )}
+
+                {/* Tab: CATEGORÍAS */}
+                {activeTab === 'categorias' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>🏷️ Crear Nueva Categoría</h3>
+                        
+                        <form onSubmit={handleAddCategory} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '40px' }}>
+                            <div className="responsive-row" style={{ gap: '15px' }}>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Nombre de la Categoría</label>
+                                    <input 
+                                        style={inputStyle} 
+                                        placeholder="Ej: histórico, restaurante..." 
+                                        value={newCategory.name} 
+                                        onChange={e => setNewCategory({ ...newCategory, name: e.target.value })} 
+                                        required 
+                                    />
+                                </div>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Ícono (emoji)</label>
+                                    <input 
+                                        style={inputStyle} 
+                                        placeholder="Ej: 🏛️, 🍽️..." 
+                                        value={newCategory.icon} 
+                                        onChange={e => setNewCategory({ ...newCategory, icon: e.target.value })} 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label style={labelStyle}>Tipo</label>
+                                <select 
+                                    style={inputStyle} 
+                                    value={newCategory.type} 
+                                    onChange={e => setNewCategory({ ...newCategory, type: e.target.value })}
+                                >
+                                    <option value="attraction">Atractivos</option>
+                                    <option value="business">Negocios</option>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" style={btnPrimary}>Crear Categoría</button>
+                        </form>
+
+                        <h4>Categorías Existentes</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' }}>
+                            {[...attractionCategories, ...businessCategories].map(cat => (
+                                <div key={`${cat.type}-${cat.name}`} style={{
+                                    padding: '15px',
+                                    border: `2px solid ${COLOR_GOLD}22`,
+                                    borderRadius: '12px',
+                                    background: '#fff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px'
+                                }}>
+                                    <span style={{ fontSize: '1.5rem' }}>{cat.icon}</span>
+                                    <div>
+                                        <strong>{cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}</strong>
+                                        <p style={{ margin: '0', fontSize: '0.8rem', color: '#777' }}>
+                                            {cat.type === 'attraction' ? 'Atractivos' : 'Negocios'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab: FRASES */}
+                {activeTab === 'frases' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>💬 Frases de Santi</h3>
+                        
+                        <form onSubmit={handleAddPhrase} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '40px' }}>
+                            <Input label="Frase" value={newPhrase.text} onChange={v => setNewPhrase({ ...newPhrase, text: v })} placeholder="Escribe una frase inspiradora..." />
+                            <div>
+                                <label style={labelStyle}>Categoría</label>
+                                <select style={inputStyle} value={newPhrase.category} onChange={e => setNewPhrase({ ...newPhrase, category: e.target.value })}>
+                                    <option value="general">General</option>
+                                    <option value="motivacional">Motivacional</option>
+                                    <option value="reflexiva">Reflexiva</option>
+                                    <option value="humorística">Humorística</option>
+                                </select>
+                            </div>
+                            <button type="submit" style={btnPrimary}>Agregar Frase</button>
+                        </form>
+
+                        <h4>Frases Existentes ({phrases.length})</h4>
+                        <div style={{ display: 'grid', gap: '15px' }}>
+                            {phrases.map(phrase => (
+                                <div key={phrase.id} style={listItem}>
+                                    <div>
+                                        <p style={{ margin: '0', fontSize: '1rem', fontStyle: 'italic' }}>"{phrase.phrase}"</p>
+                                        <span style={{ fontSize: '0.8rem', color: '#777', textTransform: 'capitalize' }}>{phrase.category}</span>
+                                    </div>
+                                    <button onClick={async () => { if (confirm('¿Eliminar esta frase?')) { await supabase.from('santis_phrases').delete().eq('id', phrase.id); fetchData(); } }} style={btnAction}>🗑️</button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

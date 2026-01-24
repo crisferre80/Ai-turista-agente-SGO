@@ -67,15 +67,15 @@ export default function OneSignalConsent() {
           console.debug('Detected OneSignal service worker script:', foundOneSignal ? (foundOneSignal.active?.scriptURL || foundOneSignal.installing?.scriptURL || foundOneSignal.waiting?.scriptURL) : null);
           const reg = await navigator.serviceWorker.getRegistration('/');
           console.debug('SW registration for /:', reg?.scope, reg?.active?.scriptURL || null, 'active=', !!reg?.active);
-          if (reg?.active) {
+          if (reg?.active && reg.active.scriptURL.includes('/sw.js')) {
             try {
               reg.active.postMessage({ type: 'PING_FROM_APP' });
-              console.debug('Posted PING to active SW');
+              console.debug('Posted PING to custom SW');
             } catch (e) {
-              console.warn('Failed to postMessage to SW:', e);
+              console.warn('Failed to postMessage to custom SW:', e);
             }
           } else {
-            console.warn('No active service worker to postMessage to.');
+            console.debug('No custom service worker active to ping.');
           }
         } else {
           console.warn('ServiceWorker not supported in navigator');

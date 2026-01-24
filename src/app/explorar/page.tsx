@@ -15,6 +15,12 @@ const COLOR_ACCENT = "#f1f5f9"; // Gris muy claro
 const COLOR_TEXT = "#1e293b"; // Gris oscuro
 const COLOR_BACKGROUND = "#ffffff"; // Blanco
 
+type CategoryType = {
+    name: string;
+    icon: string;
+    type: 'attraction' | 'business';
+};
+
 type PlaceType = {
     id: string;
     name: string;
@@ -42,11 +48,20 @@ export default function ExplorePage() {
     const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(false);
+    const [categories, setCategories] = useState<CategoryType[]>([]);
     const router = useRouter();
 
     useEffect(() => {
         fetchData();
+        fetchCategories();
+        testCategoriesQuery();
+    }, []);
 
+    useEffect(() => {
+        console.log('🔄 Categories state changed:', categories.length, 'categories');
+    }, [categories]);
+
+    useEffect(() => {
         // Check if a place was requested via marker 'Más info' button
         const openPlaceId = typeof window !== 'undefined' ? localStorage.getItem('openPlaceId') : null;
         if (openPlaceId) {
@@ -104,12 +119,88 @@ export default function ExplorePage() {
         }
     };
 
+    const fetchCategories = async () => {
+        console.log('🔍 Fetching all categories from database...');
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('name, icon, type')
+                .order('type', { ascending: false })
+                .order('name');
+
+            if (error) {
+                console.error('❌ Error fetching categories:', error);
+                // Fallback: usar categorías hardcodeadas
+                console.log('⚠️ Using fallback categories');
+                setCategories([
+                    { name: 'histórico', icon: '🏛️', type: 'attraction' },
+                    { name: 'naturaleza', icon: '🌿', type: 'attraction' },
+                    { name: 'compras', icon: '🛍️', type: 'attraction' },
+                    { name: 'cultura', icon: '🎭', type: 'attraction' },
+                    { name: 'arquitectura', icon: '🏗️', type: 'attraction' },
+                    { name: 'monumentos', icon: '🗿', type: 'attraction' },
+                    { name: 'reservas naturales', icon: '🏞️', type: 'attraction' },
+                    { name: 'gastronomía', icon: '🍽️', type: 'attraction' },
+                    { name: 'artesanía', icon: '🎨', type: 'attraction' },
+                    { name: 'restaurante', icon: '🍽️', type: 'business' },
+                    { name: 'hotel', icon: '🏨', type: 'business' },
+                    { name: 'artesanía', icon: '🎨', type: 'business' },
+                    { name: 'compras', icon: '🛍️', type: 'business' },
+                    { name: 'cultura', icon: '🎭', type: 'business' },
+                    { name: 'servicios', icon: '🛠️', type: 'business' }
+                ]);
+            } else {
+                console.log('✅ Categories fetched:', data);
+                setCategories(data || []);
+            }
+        } catch (err) {
+            console.error('❌ Exception fetching categories:', err);
+            // Fallback en caso de excepción
+            setCategories([
+                { name: 'histórico', icon: '🏛️', type: 'attraction' },
+                { name: 'naturaleza', icon: '🌿', type: 'attraction' },
+                { name: 'compras', icon: '🛍️', type: 'attraction' },
+                { name: 'cultura', icon: '🎭', type: 'attraction' },
+                { name: 'arquitectura', icon: '🏗️', type: 'attraction' },
+                { name: 'monumentos', icon: '🗿', type: 'attraction' },
+                { name: 'reservas naturales', icon: '🏞️', type: 'attraction' },
+                { name: 'gastronomía', icon: '🍽️', type: 'attraction' },
+                { name: 'artesanía', icon: '🎨', type: 'attraction' },
+                { name: 'restaurante', icon: '🍽️', type: 'business' },
+                { name: 'hotel', icon: '🏨', type: 'business' },
+                { name: 'artesanía', icon: '🎨', type: 'business' },
+                { name: 'compras', icon: '🛍️', type: 'business' },
+                { name: 'cultura', icon: '🎭', type: 'business' },
+                { name: 'servicios', icon: '🛠️', type: 'business' }
+            ]);
+        }
+    };
+
+    const testCategoriesQuery = async () => {
+        console.log('🧪 Testing categories query...');
+        try {
+            const { data, error, count } = await supabase
+                .from('categories')
+                .select('*', { count: 'exact' });
+
+            console.log('🧪 Query result:', { data, error, count });
+            return { data, error, count };
+        } catch (err) {
+            console.error('🧪 Query exception:', err);
+            return { data: null, error: err, count: null };
+        }
+    };
+
     const allPlaces = [
         ...attractions.map(a => ({ ...a, isBusiness: false })),
         ...businesses
     ];
 
-    const categories = Array.from(new Set(allPlaces.map(p => p.category).filter(Boolean)));
+    const availableCategories = [...new Map(
+        categories.map(cat => [cat.name, cat])
+    ).values()];
+
+    console.log('📊 Available categories:', availableCategories.length, availableCategories);
 
     const filteredPlaces = allPlaces.filter(place => {
         const matchesFilter = filter === 'all' ||
@@ -428,8 +519,8 @@ export default function ExplorePage() {
                             }}
                         >
                             <option value="all">Todas las categorías</option>
-                            {categories.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
+                            {availableCategories.map(cat => (
+                                <option key={`${cat.name}-${cat.type}`} value={cat.name}>{cat.name}</option>
                             ))}
                         </select>
                     </div>
@@ -517,10 +608,10 @@ export default function ExplorePage() {
                     gap: isMobile ? '2px' : '6px',
                     justifyContent: 'center'
                 }}>
-                    {['Hoteles', 'Gastronomía', 'Cultura', 'Entretenimiento'].map(cat => (
+                    {availableCategories.slice(0, 4).map(cat => (
                         <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(categories.includes(cat) ? cat : 'all')}
+                            key={`${cat.name}-${cat.type}`}
+                            onClick={() => setSelectedCategory(cat.name)}
                             style={{
                                 background: 'rgba(255,255,255,0.8)',
                                 color: COLOR_PRIMARY,
@@ -535,7 +626,7 @@ export default function ExplorePage() {
                                 lineHeight: '1.2'
                             }}
                         >
-                            {cat}
+                            {cat.name}
                         </button>
                     ))}
                     <button
