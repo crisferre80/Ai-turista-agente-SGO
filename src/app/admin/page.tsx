@@ -1170,9 +1170,9 @@ const placeCard = {
 };
 
 
-const Input = ({ label, value, onChange }: { label: string, value: string | number, onChange: (v: string) => void }) => (
+const Input = ({ label, value, onChange, placeholder }: { label: string, value: string | number, onChange: (v: string) => void, placeholder?: string }) => (
     <div style={{ width: '100%' }}>
         {label && <label style={labelStyle}>{label}</label>}
-        <input style={inputStyle} value={value || ''} onChange={e => onChange(e.target.value)} />
+        <input style={inputStyle} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
     </div>
 );

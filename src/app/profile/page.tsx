@@ -152,8 +152,8 @@ export default function ProfilePage() {
                     audio_url: item.audio_url,
                     created_at: item.created_at,
                     attraction: {
-                        name: item.attractions?.name || 'Lugar desconocido',
-                        category: item.attractions?.category || 'general'
+                        name: item.attractions?.[0]?.name || 'Lugar desconocido',
+                        category: item.attractions?.[0]?.category || 'general'
                     }
                 })));
             }
