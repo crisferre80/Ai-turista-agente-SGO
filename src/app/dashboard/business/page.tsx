@@ -97,7 +97,7 @@ export default function BusinessDashboard() {
   );
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: '80px 24px 24px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ margin: 0 }}>{business.name}</h1>
         <div>

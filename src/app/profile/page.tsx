@@ -276,7 +276,7 @@ export default function ProfilePage() {
         <div style={{ 
             minHeight: '100vh', 
             background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)', 
-            padding: '20px', 
+            padding: '80px 20px 20px 20px', 
             fontFamily: 'system-ui, -apple-system, sans-serif' 
         }}>
             {/* Header Navigation */}

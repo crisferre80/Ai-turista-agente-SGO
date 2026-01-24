@@ -532,7 +532,7 @@ export default function Home() {
       <div style={{ 
         position: 'relative', 
         zIndex: 10, 
-        padding: '90px clamp(20px, 5vw, 60px) 40px clamp(20px, 5vw, 60px)', 
+        padding: '100px clamp(20px, 5vw, 60px) 40px clamp(20px, 5vw, 60px)', 
         maxWidth: '1600px', 
         margin: '0 auto',
         width: '100%',

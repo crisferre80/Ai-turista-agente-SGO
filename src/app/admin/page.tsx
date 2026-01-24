@@ -533,7 +533,7 @@ export default function AdminDashboard() {
             {/* Main Content */}
             <div style={{ 
                 flex: 1, 
-                padding: '50px', 
+                padding: '120px 50px 50px 50px', 
                 overflowY: 'auto' 
             }} className="main-content admin-main">
                 <header style={{ 

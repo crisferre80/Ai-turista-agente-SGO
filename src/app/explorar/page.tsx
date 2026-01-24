@@ -286,7 +286,7 @@ export default function ExplorePage() {
         <div style={{
             minHeight: '100vh',
             background: '#f8fafc',
-            padding: '16px',
+            padding: '90px 16px 16px 16px',
             fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
             {/* Header - Rediseño Profesional */}

@@ -49,7 +49,7 @@ export default function TouristDashboard() {
   if (!profile) return <div style={{ padding: 40 }}>No hay perfil - <button onClick={() => router.push('/login')}>Iniciar sesión</button></div>;
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: '80px 24px 24px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Bienvenido, {profile.name || 'Turista'}</h1>
         <div>
