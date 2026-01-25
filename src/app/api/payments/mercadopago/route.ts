@@ -10,6 +10,9 @@ export async function OPTIONS(request: NextRequest) {
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
+  });
+}
+
 // Endpoint GET para verificar que la ruta funciona
 export async function GET(request: NextRequest) {
   return NextResponse.json({
@@ -17,8 +20,9 @@ export async function GET(request: NextRequest) {
     message: 'Mercado Pago webhook endpoint is active',
     timestamp: new Date().toISOString(),
     methods: ['GET', 'POST', 'OPTIONS']
-  });
 }
+
+export async function POST(request: NextRequest) {
   let webhookId = null;
 
   try {
