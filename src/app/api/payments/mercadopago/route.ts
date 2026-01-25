@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-export async function POST(request: NextRequest) {
+// Manejar preflight requests de CORS
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+// Endpoint GET para verificar que la ruta funciona
+export async function GET(request: NextRequest) {
+  return NextResponse.json({
+    status: 'OK',
+    message: 'Mercado Pago webhook endpoint is active',
+    timestamp: new Date().toISOString(),
+    methods: ['GET', 'POST', 'OPTIONS']
+  });
+}
   let webhookId = null;
 
   try {
