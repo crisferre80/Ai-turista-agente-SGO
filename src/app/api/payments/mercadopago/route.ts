@@ -2,11 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
+  let webhookId = null;
+
   try {
     const body = await request.json();
 
     // Verificar si es un webhook de Mercado Pago (tiene campo 'action')
     if (body.action === 'payment.updated') {
+      webhookId = body.id || `webhook_${Date.now()}_${Math.random()}`;
+
+      // Verificar si este webhook ya fue procesado
+      const { data: existingWebhook } = await supabase
+        .from('webhooks')
+        .select('processed, processing_attempts')
+        .eq('webhook_id', webhookId)
+        .single();
+
+      if (existingWebhook?.processed) {
+        console.log('Webhook already processed:', webhookId);
+        return NextResponse.json({ received: true });
+      }
+
+      // Registrar el webhook en la base de datos
+      const { error: webhookError } = await supabase
+        .from('webhooks')
+        .insert({
+          webhook_id: webhookId,
+          type: body.type,
+          action: body.action,
+          payment_id: body.data?.id,
+          data: body,
+          processing_attempts: (existingWebhook?.processing_attempts || 0) + 1,
+          last_attempt_at: new Date().toISOString()
+        });
+
+      if (webhookError) {
+        console.error('Error saving webhook:', webhookError);
+      }
+
       // Procesar webhook
       const paymentId = body.data.id;
 
@@ -62,6 +95,16 @@ export async function POST(request: NextRequest) {
             .order('created_at', { ascending: false })
             .limit(1);
         }
+
+        // Marcar webhook como procesado exitosamente
+        await supabase
+          .from('webhooks')
+          .update({
+            processed: true,
+            processed_at: new Date().toISOString(),
+            error_message: null
+          })
+          .eq('webhook_id', webhookId);
       }
 
       return NextResponse.json({ received: true });
@@ -169,11 +212,23 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error creating Mercado Pago preference:', error);
+    console.error('Error processing Mercado Pago webhook/payment:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    // Si fue un error en el procesamiento de webhook, marcar como fallido
+    if (webhookId) {
+      await supabase
+        .from('webhooks')
+        .update({
+          error_message: errorMessage,
+          last_attempt_at: new Date().toISOString()
+        })
+        .eq('webhook_id', webhookId);
+    }
+
     console.error('Error details:', error);
     return NextResponse.json(
-      { error: 'Failed to create payment preference', details: errorMessage },
+      { error: 'Failed to process payment', details: errorMessage },
       { status: 500 }
     );
   }
