@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     message: 'Mercado Pago webhook endpoint is active',
     timestamp: new Date().toISOString(),
     methods: ['GET', 'POST', 'OPTIONS']
+  });
 }
 
 export async function POST(request: NextRequest) {
