@@ -31,8 +31,27 @@ export default function TouristDashboard() {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
-      setProfile(data as Profile);
+      if (error) {
+        // If profile doesn't exist, create a basic one
+        if (error.code === 'PGRST116') { // No rows returned
+          const { data: newProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              name: user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario',
+              role: user.user_metadata?.role || 'user'
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+          setProfile(newProfile as Profile);
+        } else {
+          throw error;
+        }
+      } else {
+        setProfile(data as Profile);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setError('Error: ' + msg);
@@ -53,7 +72,7 @@ export default function TouristDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Bienvenido, {profile.name || 'Turista'}</h1>
         <div>
-          <button onClick={() => router.push('/profile')} style={{ marginRight: 8 }}>Editar Perfil</button>
+          <button onClick={() => router.push(profile.role === 'business' ? '/business/profile' : '/profile')} style={{ marginRight: 8 }}>Editar Perfil</button>
           <button onClick={() => router.push('/')}>Volver al Inicio</button>
         </div>
       </div>
@@ -70,7 +89,7 @@ export default function TouristDashboard() {
         <h3>Acciones</h3>
         <div style={{ display: 'flex', gap: 12 }}>
           <button onClick={() => router.push('/explorar')}>Explorar</button>
-          <button onClick={() => router.push('/profile')}>Editar Perfil</button>
+          <button onClick={() => router.push(profile.role === 'business' ? '/business/profile' : '/profile')}>Editar Perfil</button>
         </div>
       </div>
     </div>

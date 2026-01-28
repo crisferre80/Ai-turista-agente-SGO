@@ -63,7 +63,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   if (!place) {
     try {
-      const { data: biz, error: bizErr } = await supabase.from('businesses').select('id,name,description,category,lat,lng,contact_info,website_url,gallery_images,is_active,payment_status,phone,address').eq('id', id).maybeSingle();
+      const { data: biz, error: bizErr } = await supabase.from('business_profiles').select('id,name,description,category,lat,lng,contact_info,website_url,gallery_images,is_active,payment_status,phone,address').eq('id', id).maybeSingle();
       if (bizErr) console.warn('Business fetch error', bizErr);
       if (biz) {
         const b: any = biz as any;

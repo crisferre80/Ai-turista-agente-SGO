@@ -121,7 +121,7 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         setLoading(true);
         const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category').order('created_at', { ascending: false });
-        const { data: bizData, error: bizErr } = await supabase.from('businesses').select('id,name,category,contact_info,website_url,gallery_images,lat,lng,is_active,payment_status,phone,address,description').order('created_at', { ascending: false });
+        const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,lat,lng,is_active,payment_status,phone,address,description').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });

@@ -22,6 +22,7 @@ export default function BusinessRegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
 
   // Form data
   const [businessData, setBusinessData] = useState({
@@ -154,14 +155,6 @@ export default function BusinessRegisterPage() {
 
       if (authError) throw authError;
 
-      // Ensure lightweight profile row exists for this user so FK constraints on `businesses.owner_id` do not fail.
-      try {
-        await supabase.from('profiles').upsert({ id: authData.user?.id, name: businessData.name, role: 'business' });
-      } catch (pErr) {
-        // Non-blocking: log and continue, but warn so we can diagnose DB permission issues
-        console.warn('Could not create profile for business signup:', pErr);
-      }
-
       // Upload gallery images to Supabase Storage
       const imageUrls: string[] = [];
       for (const image of galleryImages) {
@@ -180,12 +173,13 @@ export default function BusinessRegisterPage() {
         imageUrls.push(publicUrl);
       }
 
-      // Create business profile (if plan is free, activate immediately)
-      const { data: business, error: businessError } = await supabase
-        .from('businesses')
+      // Create business profile (unified table)
+      const { data: businessProfile, error: businessError } = await supabase
+        .from('business_profiles')
         .insert({
-          owner_id: authData.user?.id,
+          auth_id: authData.user?.id,
           name: businessData.name,
+          email: businessData.email,
           description: businessData.description,
           website_url: businessData.website_url,
           phone: businessData.phone,
@@ -193,7 +187,7 @@ export default function BusinessRegisterPage() {
           category: businessData.category,
           plan: selectedPlan.name,
           gallery_images: imageUrls,
-          payment_status: selectedPlan.name === 'basic' ? 'free' : 'pending',
+          payment_status: selectedPlan.name === 'basic' ? 'paid' : 'pending',
           is_active: selectedPlan.name === 'basic' ? true : false
         })
         .select()
@@ -205,7 +199,7 @@ export default function BusinessRegisterPage() {
       setAwaitingConfirmation(true);
       setSuccess('¡Registro iniciado! Te enviamos un correo de confirmación. Por favor confirma tu cuenta desde el email antes de ingresar.');
 
-      // For paid plans, still create a payment preference (user may complete payment after confirming)
+      // For paid plans, create payment preference and open in new window
       if (selectedPlan.name !== 'basic') {
         const paymentAmount = billingPeriod === 'monthly' ? selectedPlan.price_monthly : selectedPlan.price_yearly;
 
@@ -216,26 +210,38 @@ export default function BusinessRegisterPage() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              businessId: business.id,
+              businessId: businessProfile.id,
               planName: selectedPlan.name,
               amount: paymentAmount,
               period: billingPeriod,
-              businessName: businessData.name,
+              businessName: businessProfile.name,
               businessEmail: businessData.email,
             }),
           });
 
+          console.log('Sending payment request:', JSON.stringify({
+            businessId: businessProfile.id,
+            planName: selectedPlan.name,
+            amount: paymentAmount,
+            period: billingPeriod,
+            businessName: businessProfile.name,
+            businessEmail: businessData.email,
+          }, null, 2));
+
           if (paymentResponse.ok) {
             const paymentData = await paymentResponse.json();
             if (paymentData.initPoint) {
-              setSuccess(prev => prev + ' Una vez confirmado el email, también podrás completar el pago de tu plan.');
-              // Opcional: abrir el link de pago
-              // window.open(paymentData.initPoint, '_blank');
+              setPaymentLink(paymentData.initPoint);
+              setSuccess('¡Registro iniciado! Te enviamos un correo de confirmación. Confirma tu cuenta desde el email, luego inicia sesión. Una vez logueado, podrás completar el pago desde el botón abajo o desde tu dashboard.');
+            } else {
+              setSuccess('¡Registro iniciado! Te enviamos un correo de confirmación. Confirma tu cuenta desde el email, luego inicia sesión. Podrás configurar el pago desde tu panel.');
             }
+          } else {
+            setSuccess('¡Registro iniciado! Te enviamos un correo de confirmación. Confirma tu cuenta desde el email, luego inicia sesión. Podrás configurar el pago desde tu panel.');
           }
         } catch (paymentErr) {
           console.warn('No se pudo crear la preferencia de pago:', paymentErr);
-          setSuccess(prev => prev + ' Podrás configurar el pago desde tu panel después de confirmar el email.');
+          setSuccess('¡Registro iniciado! Te enviamos un correo de confirmación. Confirma tu cuenta desde el email, luego inicia sesión. Podrás configurar el pago desde tu panel.');
         }
       }
 
@@ -405,6 +411,21 @@ export default function BusinessRegisterPage() {
                 {awaitingConfirmation ? '📧 Confirmación Requerida' : '✅ Éxito'}
               </div>
               <div>{success}</div>
+              {paymentLink && (
+                <div style={{ marginTop: 15 }}>
+                  <a href={paymentLink} target="_blank" rel="noopener noreferrer" style={{
+                    background: '#00a650',
+                    color: 'white',
+                    padding: '10px 20px',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                    display: 'inline-block',
+                    fontWeight: 'bold'
+                  }}>
+                    💳 Completar Pago Ahora
+                  </a>
+                </div>
+              )}
               {awaitingConfirmation && (
                 <div style={{ marginTop: 15, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ 

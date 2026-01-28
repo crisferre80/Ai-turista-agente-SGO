@@ -94,7 +94,7 @@ export default function ExplorePage() {
         try {
             const [attrsRes, bizRes] = await Promise.all([
                 supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls'),
-                supabase.from('businesses').select('id,name,description,website_url,contact_info,category,payment_status,gallery_images,lat,lng,is_active,phone,address')
+                supabase.from('business_profiles').select('id,name,description,website_url,contact_info,category,payment_status,gallery_images,lat,lng,is_active,phone,address')
             ]);
 
             if (attrsRes.error) console.warn('Attractions fetch error', attrsRes.error);

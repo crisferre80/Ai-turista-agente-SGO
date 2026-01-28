@@ -6,7 +6,9 @@ import Image from 'next/image';
 
 interface Business {
   id: string;
+  auth_id: string;
   name: string;
+  email: string;
   description: string;
   website_url: string;
   phone: string;
@@ -77,9 +79,9 @@ export default function BusinessProfilePage() {
 
       // Fetch business data
       const { data: businessData, error: businessError } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .select('*')
-        .eq('owner_id', user.id)
+        .eq('auth_id', user.id)
         .single();
 
       if (businessError) throw businessError;
@@ -102,6 +104,7 @@ export default function BusinessProfilePage() {
 
       if (businessData) {
         setBusiness(businessData);
+        setProfile(businessData); // Profile is now part of business data
         setStats(mockStats);
         setFormData({
           name: businessData.name || '',
@@ -111,10 +114,6 @@ export default function BusinessProfilePage() {
           address: businessData.address || '',
           category: businessData.category || ''
         });
-      }
-
-      if (profileData) {
-        setProfile(profileData);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -138,15 +137,14 @@ export default function BusinessProfilePage() {
 
     try {
       const { error } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .update({
           name: formData.name,
           description: formData.description,
           website_url: formData.website_url,
           phone: formData.phone,
           address: formData.address,
-          category: formData.category,
-          updated_at: new Date()
+          category: formData.category
         })
         .eq('id', business.id);
 
@@ -219,7 +217,7 @@ export default function BusinessProfilePage() {
       const newGalleryImages = business.gallery_images?.filter(url => url !== imageUrl) || [];
 
       const { error } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .update({ gallery_images: newGalleryImages })
         .eq('id', business.id);
 

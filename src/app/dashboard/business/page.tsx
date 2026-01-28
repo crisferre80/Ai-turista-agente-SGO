@@ -6,8 +6,9 @@ import Image from 'next/image';
 
 interface Business {
   id: string;
-  owner_id?: string;
+  auth_id?: string;
   name: string;
+  email: string;
   description?: string;
   website_url?: string;
   phone?: string;
@@ -35,9 +36,9 @@ export default function BusinessDashboard() {
       if (!user) return router.push('/login');
 
       const { data, error } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .select('*')
-        .eq('owner_id', user.id)
+        .eq('auth_id', user.id)
         .single();
 
       if (error) throw error;
@@ -70,7 +71,7 @@ export default function BusinessDashboard() {
           amount,
           period,
           businessName: business.name,
-          businessEmail: (await supabase.auth.getUser()).data.user?.email
+          businessEmail: business.email
         })
       });
 
@@ -90,11 +91,60 @@ export default function BusinessDashboard() {
   if (loading) return <div style={{ padding: 40 }}>Cargando dashboard...</div>;
 
   if (!business) return (
-    <div style={{ padding: 40 }}>
-      <h2>No se encontró un negocio asociado a esta cuenta</h2>
-      <button onClick={() => router.push('/business/register')}>Registrar Negocio</button>
+    <div style={{ padding: '80px 24px 24px 24px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
+        <h1>No se encontró un negocio registrado</h1>
+        <p>Parece que tu cuenta de negocio no tiene un negocio asociado. Registra tu negocio para continuar.</p>
+        <button onClick={() => router.push('/business/register')} style={{ padding: '12px 24px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Registrar Negocio</button>
+        <div style={{ marginTop: 20 }}>
+          <button onClick={() => router.push('/')} style={{ marginRight: 10 }}>Volver al Inicio</button>
+          <button onClick={() => router.push('/profile')}>Editar Perfil Personal</button>
+        </div>
+      </div>
     </div>
   );
+
+  // Check if business is active and paid
+  const isActive = business.is_active && (business.payment_status === 'paid' || business.plan === 'basic');
+  if (!isActive) {
+    return (
+      <div style={{ padding: '80px 24px 24px 24px' }}>
+        <div style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
+          <h1 style={{ marginBottom: 20 }}>Negocio Registrado - Pago Pendiente</h1>
+          <div style={{ background: 'white', padding: 30, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h2>{business.name}</h2>
+            <p style={{ margin: '20px 0' }}>
+              Tu negocio ha sido registrado exitosamente, pero necesitas completar el pago para activarlo.
+            </p>
+            <div style={{ margin: '20px 0' }}>
+              <p><strong>Plan:</strong> {business.plan}</p>
+              <p><strong>Estado:</strong> {business.payment_status}</p>
+            </div>
+            <button 
+              onClick={openPayment} 
+              disabled={processing}
+              style={{
+                background: '#00a650',
+                color: 'white',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: 8,
+                fontSize: 16,
+                cursor: processing ? 'not-allowed' : 'pointer',
+                opacity: processing ? 0.6 : 1
+              }}
+            >
+              {processing ? 'Procesando...' : 'Completar Pago con MercadoPago 💳'}
+            </button>
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <button onClick={() => router.push('/')} style={{ marginRight: 10 }}>Volver al Inicio</button>
+            <button onClick={() => router.push('/business/profile')}>Editar Información</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '80px 24px 24px 24px' }}>

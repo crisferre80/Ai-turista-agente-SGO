@@ -357,7 +357,7 @@ export default function Home() {
 
       // Fetch businesses with all columns including coordinates
       const { data: biz, error: bizErr } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .select('id,name,description,website_url,contact_info,phone,address,gallery_images,lat,lng,category,is_active,is_verified,payment_status')
         .eq('is_active', true)
         .not('lat', 'is', null)

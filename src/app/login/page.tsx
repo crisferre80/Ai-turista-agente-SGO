@@ -93,9 +93,9 @@ export default function LoginPage() {
 
                     // Check businesses table first
                     const { data: businessRow, error: businessError } = await supabase
-                        .from('businesses')
+                        .from('business_profiles')
                         .select('id')
-                        .eq('owner_id', userId)
+                        .eq('auth_id', userId)
                         .maybeSingle();
 
                     if (businessError) {

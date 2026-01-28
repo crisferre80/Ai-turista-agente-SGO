@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
 
           // Actualizar negocio
           await supabase
-            .from('businesses')
+            .from('business_profiles')
             .update({
               plan: planName,
               is_active: true,
@@ -136,11 +136,11 @@ export async function POST(request: NextRequest) {
     const { businessId, planName, amount, period, businessName, businessEmail } = body;
 
     console.log('MercadoPago API called with:', { businessId, planName, amount, period, businessName, businessEmail });
-
+    console.log('Received payment request:', { businessId, planName, amount, period, businessName, businessEmail });
     if (!businessId || !planName || !amount || !businessName || !businessEmail) {
-      console.error('Missing required fields');
+      console.error('Missing required fields:', { businessId, planName, amount, businessName, businessEmail });
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields', received: { businessId, planName, amount, businessName, businessEmail } },
         { status: 400 }
       );
     }
