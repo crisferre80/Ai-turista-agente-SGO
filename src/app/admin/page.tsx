@@ -86,6 +86,11 @@ export default function AdminDashboard() {
     // Category States
     const [newCategory, setNewCategory] = useState({ name: '', icon: '', type: 'attraction' });
 
+    // Plans States
+    const [plans, setPlans] = useState<Array<{id: string, name: string, display_name: string, price_monthly: number, price_yearly: number, features: string[], mercadopago_id: string, max_images: number, priority: number, is_active: boolean}>>([]);
+    const [newPlan, setNewPlan] = useState({ name: '', display_name: '', price_monthly: 0, price_yearly: 0, features: [] as string[], mercadopago_id: '', max_images: 5, priority: 0 });
+    const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+
     const checkAuth = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         const legacyAuth = localStorage.getItem('adminToken');
@@ -125,18 +130,23 @@ export default function AdminDashboard() {
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
+        const { data: plansData, error: plansErr } = await supabase.from('business_plans').select('*').order('priority', { ascending: true });
 
         if (attErr) console.warn('Admin attractions fetch error', attErr);
         if (bizErr) console.warn('Admin businesses fetch error', bizErr);
         if (vidErr) console.warn('Admin videos fetch error', vidErr);
         if (carouselErr) console.warn('Admin carousel fetch error', carouselErr);
         if (phraseErr) console.warn('Admin phrases fetch error', phraseErr);
+        if (plansErr) console.warn('Admin plans fetch error', plansErr);
+        console.log('Admin: Plans error:', plansErr);
 
         if (attData) setPlaces(attData as PlaceRecord[]);
         if (bizData) setBusinesses(bizData as BusinessRecord[]);
         if (vidData) setVideos(vidData as VideoRecord[]);
         if (carouselData) setCarouselPhotos(carouselData);
         if (phraseData) setPhrases(phraseData);
+        if (plansData) setPlans(plansData.map(p => ({ ...p, features: Array.isArray(p.features) ? p.features : [] })));
+        console.log('Admin: Loaded plans:', plansData);
         setLoading(false);
     };
 
@@ -522,6 +532,90 @@ export default function AdminDashboard() {
         else fetchData();
     };
 
+    // Plans handlers
+    const handleSavePlan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const planData = {
+                name: newPlan.name,
+                display_name: newPlan.display_name,
+                price_monthly: newPlan.price_monthly,
+                price_yearly: newPlan.price_yearly,
+                features: newPlan.features,
+                mercadopago_id: newPlan.mercadopago_id,
+                max_images: newPlan.max_images,
+                priority: newPlan.priority
+            };
+
+            console.log('Admin: Saving plan data:', planData, 'editingId:', editingPlanId);
+
+            if (editingPlanId) {
+                // Editar plan existente
+                console.log('Admin: Updating plan', editingPlanId);
+                const { error } = await supabase.from('business_plans').update(planData).eq('id', editingPlanId);
+                console.log('Admin: Update result error:', error);
+                if (error) throw error;
+                alert('¡Plan actualizado!');
+                setEditingPlanId(null);
+            } else {
+                // Crear nuevo plan
+                console.log('Admin: Creating new plan');
+                const { error } = await supabase.from('business_plans').insert([planData]);
+                if (error) throw error;
+                alert('¡Plan agregado!');
+            }
+
+            setNewPlan({ name: '', display_name: '', price_monthly: 0, price_yearly: 0, features: [], mercadopago_id: '', max_images: 5, priority: 0 });
+            fetchData();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Error desconocido';
+            console.error('Admin: Save plan error:', err);
+            alert('Error: ' + msg);
+        }
+        setLoading(false);
+    };
+
+    const startEditingPlan = (plan: any) => {
+        setNewPlan({
+            name: plan.name,
+            display_name: plan.display_name,
+            price_monthly: plan.price_monthly,
+            price_yearly: plan.price_yearly,
+            features: plan.features,
+            mercadopago_id: plan.mercadopago_id || '',
+            max_images: plan.max_images,
+            priority: plan.priority
+        });
+        setEditingPlanId(plan.id);
+    };
+
+    const cancelEditing = () => {
+        setNewPlan({ name: '', display_name: '', price_monthly: 0, price_yearly: 0, features: [], mercadopago_id: '', max_images: 5, priority: 0 });
+        setEditingPlanId(null);
+    };
+
+    const handleUpdatePlan = async (id: string, updates: any) => {
+        try {
+            const { error } = await supabase.from('business_plans').update(updates).eq('id', id);
+            if (error) throw error;
+            fetchData();
+        } catch (err) {
+            alert('Error actualizando plan');
+        }
+    };
+
+    const handleDeletePlan = async (id: string) => {
+        if (!confirm('¿Eliminar plan?')) return;
+        try {
+            const { error } = await supabase.from('business_plans').delete().eq('id', id);
+            if (error) throw error;
+            fetchData();
+        } catch (err) {
+            alert('Error eliminando plan');
+        }
+    };
+
 
     if (!isAuthorized) return null;
 
@@ -619,6 +713,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('categorias'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'categorias')}>🏷️ Categorías</button>
                     <button onClick={() => { setActiveTab('frases'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'frases')}>💬 Frases</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
+                    <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -655,7 +750,8 @@ export default function AdminDashboard() {
                                 activeTab === 'categorias' ? 'Gestión de Categorías' :
                                 activeTab === 'frases' ? 'Frases de Santi' :
                                 activeTab === 'videos' ? 'Multimedia' :
-                                activeTab === 'emails' ? 'Emails' : 'Santi'}
+                                activeTab === 'emails' ? 'Emails' :
+                                activeTab === 'planes' ? 'Planes de Pago' : 'Santi'}
                     </h1>
                     {loading && <span className="loading-spinner"></span>}
                 </header>
@@ -1185,6 +1281,163 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {/* Tab: PLANES */}
+                {activeTab === 'planes' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>
+                            💳 {editingPlanId ? 'Editar Plan de Pago' : 'Gestión de Planes de Pago'}
+                        </h3>
+                        
+                        <form onSubmit={handleSavePlan} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '40px' }}>
+                            <div className="responsive-row" style={{ gap: '15px' }}>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Nombre Interno</label>
+                                    <input 
+                                        style={inputStyle} 
+                                        placeholder="Ej: pro" 
+                                        value={newPlan.name} 
+                                        onChange={e => setNewPlan({ ...newPlan, name: e.target.value })} 
+                                        required 
+                                        disabled={!!editingPlanId} // No permitir cambiar name al editar
+                                    />
+                                </div>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Nombre para Mostrar</label>
+                                    <input 
+                                        style={inputStyle} 
+                                        placeholder="Ej: Plan Pro" 
+                                        value={newPlan.display_name} 
+                                        onChange={e => setNewPlan({ ...newPlan, display_name: e.target.value })} 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="responsive-row" style={{ gap: '15px' }}>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Precio Mensual (ARS)</label>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        style={inputStyle} 
+                                        placeholder="9.99" 
+                                        value={newPlan.price_monthly} 
+                                        onChange={e => setNewPlan({ ...newPlan, price_monthly: parseFloat(e.target.value) || 0 })} 
+                                        required 
+                                    />
+                                </div>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Precio Anual (ARS)</label>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        style={inputStyle} 
+                                        placeholder="99.99" 
+                                        value={newPlan.price_yearly} 
+                                        onChange={e => setNewPlan({ ...newPlan, price_yearly: parseFloat(e.target.value) || 0 })} 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="responsive-row" style={{ gap: '15px' }}>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Máximo de Imágenes</label>
+                                    <input 
+                                        type="number"
+                                        style={inputStyle} 
+                                        placeholder="5 (-1 para ilimitado)" 
+                                        value={newPlan.max_images} 
+                                        onChange={e => setNewPlan({ ...newPlan, max_images: parseInt(e.target.value) || 5 })} 
+                                    />
+                                </div>
+                                <div className="responsive-col">
+                                    <label style={labelStyle}>Prioridad (orden)</label>
+                                    <input 
+                                        type="number"
+                                        style={inputStyle} 
+                                        placeholder="1" 
+                                        value={newPlan.priority} 
+                                        onChange={e => setNewPlan({ ...newPlan, priority: parseInt(e.target.value) || 0 })} 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label style={labelStyle}>ID de MercadoPago</label>
+                                <input 
+                                    style={inputStyle} 
+                                    placeholder="ID del producto en MercadoPago" 
+                                    value={newPlan.mercadopago_id} 
+                                    onChange={e => setNewPlan({ ...newPlan, mercadopago_id: e.target.value })} 
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Características (una por línea)</label>
+                                <textarea 
+                                    style={{ ...inputStyle, minHeight: '120px', resize: 'vertical' }} 
+                                    rows={5}
+                                    placeholder="Acceso ilimitado&#10;Soporte prioritario&#10;Estadísticas avanzadas" 
+                                    value={newPlan.features.join('\n')} 
+                                    onChange={e => setNewPlan({ ...newPlan, features: e.target.value.split('\n').filter(f => f.trim()) })} 
+                                />
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button type="submit" style={submitBtn} disabled={loading}>
+                                    {loading ? 'Guardando...' : editingPlanId ? 'Actualizar Plan' : 'Crear Plan'}
+                                </button>
+                                {editingPlanId && (
+                                    <button type="button" onClick={cancelEditing} style={btnStyle}>
+                                        Cancelar
+                                    </button>
+                                )}
+                            </div>
+                        </form>
+
+                        <h4 style={{ fontSize: '1.2rem', color: COLOR_BLUE, marginBottom: '15px' }}>Planes Existentes</h4>
+                        <div style={{ display: 'grid', gap: '15px' }}>
+                            {plans.map(plan => (
+                                <div key={plan.id} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '15px', background: '#fafafa' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <h5 style={{ margin: 0, color: COLOR_BLUE }}>{plan.display_name} ({plan.name})</h5>
+                                        <div>
+                                            <button 
+                                                onClick={() => startEditingPlan(plan)} 
+                                                style={{ ...btnStyle, background: '#17a2b8', marginRight: '5px' }}
+                                            >
+                                                Editar
+                                            </button>
+                                            <button 
+                                                onClick={() => handleUpdatePlan(plan.id, { is_active: !plan.is_active })} 
+                                                style={{ ...btnStyle, background: plan.is_active ? '#28a745' : '#dc3545', marginRight: '5px' }}
+                                            >
+                                                {plan.is_active ? 'Activo' : 'Inactivo'}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeletePlan(plan.id)} 
+                                                style={{ ...btnStyle, background: '#dc3545' }}
+                                            >
+                                                Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                                        Precio: ${plan.price_monthly}/mes - ${plan.price_yearly}/año | Máx imágenes: {plan.max_images === -1 ? 'Ilimitado' : plan.max_images} | Prioridad: {plan.priority}
+                                    </p>
+                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>ID MP: {plan.mercadopago_id || 'No configurado'}</p>
+                                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                        {plan.features.map((feature, idx) => (
+                                            <li key={idx} style={{ fontSize: '14px' }}>{feature}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Tab: CATEGORÍAS */}
                 {activeTab === 'categorias' && (
                     <div style={cardStyle}>
@@ -1396,6 +1649,32 @@ const btnAction = {
     border: `2px solid ${COLOR_BLUE}22`, 
     padding: '8px 14px', 
     borderRadius: '50px', 
+    cursor: 'pointer', 
+    fontSize: '14px',
+    fontWeight: '600',
+    color: COLOR_BLUE,
+    transition: 'all 0.2s ease'
+};
+
+const submitBtn = { 
+    background: `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)`, 
+    color: COLOR_DARK, 
+    border: 'none', 
+    padding: '16px 28px', 
+    borderRadius: '50px', 
+    fontWeight: 'bold', 
+    cursor: 'pointer', 
+    width: '100%',
+    fontSize: '16px',
+    boxShadow: `0 10px 30px ${COLOR_GOLD}44`,
+    transition: 'all 0.2s ease'
+};
+
+const btnStyle = { 
+    background: 'white', 
+    border: `2px solid ${COLOR_BLUE}22`, 
+    padding: '8px 14px', 
+    borderRadius: '8px', 
     cursor: 'pointer', 
     fontSize: '14px',
     fontWeight: '600',

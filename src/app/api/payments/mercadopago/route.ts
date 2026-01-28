@@ -175,7 +175,6 @@ export async function POST(request: NextRequest) {
         failure: `${process.env.NEXT_PUBLIC_APP_URL}/business/profile?payment=failure`,
         pending: `${process.env.NEXT_PUBLIC_APP_URL}/business/profile?payment=pending`,
       },
-      auto_return: 'approved',
       external_reference: `business_${businessId}_${planName}_${period}_${Date.now()}`,
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/mercadopago/webhook`,
     };
