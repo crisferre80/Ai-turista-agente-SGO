@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import openai from '@/lib/openai';
+import { getGeminiModel } from '@/lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -151,20 +151,31 @@ export async function POST(req: Request) {
     ${localContext}
     `;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages
-            ],
-            temperature: 0.7,
+        const model = getGeminiModel();
+        
+        // Convertir mensajes al formato de Gemini
+        const chatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
+        
+        const lastUserMessage = messages[messages.length - 1].content;
+        
+        const chat = model.startChat({
+            history: chatHistory,
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+            },
         });
-
-        const reply = response.choices[0].message.content;
+        
+        const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
+        const reply = result.response.text();
         
         // Detect if a specific place is mentioned in the reply
-        let placeId = null;
+        let placeId: string | null = null;
         let placeName = null;
+        let placeDescription = null;
         let isRouteOnly = false; // Flag para indicar que solo se debe mostrar ruta
         
         // Si es consulta de ruta, marcar como tal pero SÍ extraer placeName para trazar ruta
@@ -221,12 +232,26 @@ export async function POST(req: Request) {
                     }
                 }
             }
+            
+            // Get description if place found
+            if (placeId) {
+                const attraction = attractions?.find(a => a.id === placeId);
+                if (attraction) {
+                    placeDescription = attraction.description || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
+                } else {
+                    const business = businesses?.find(b => b.id === placeId);
+                    if (business) {
+                        placeDescription = `Conoce ${business.name}, un negocio en la categoría ${business.category}.`;
+                    }
+                }
+            }
         }
         
         return NextResponse.json({ 
             reply, 
             placeId, 
             placeName, 
+            placeDescription,
             isRouteOnly,
             remainingRequests: rateLimit.remainingRequests
         });

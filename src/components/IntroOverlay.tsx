@@ -30,7 +30,7 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
     useEffect(() => {
         const playWelcomeAudio = async () => {
             try {
-                const welcomeText = "¡Hola chango! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. Toca el botón de recorrer para comenzar esta aventura inolvidable.";
+                const welcomeText = "¡Hola changos y chinitas! Bienvenidos a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. Toca el botón de recorrer para comenzar esta aventura inolvidable.";
                 const response = await fetch('/api/speech', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

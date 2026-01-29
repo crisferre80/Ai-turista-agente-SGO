@@ -120,6 +120,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             return;
         }
         
+        console.log('ChatInterface: Playing audio response:', text.substring(0, 50));
+        
         try {
             const response = await fetch('/api/speech', {
                 method: 'POST',
@@ -325,10 +327,10 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 const setStorage = (key: string, value: string) => {
                     try {
                         localStorage.setItem(key, value);
-                    } catch (e) {
+                    } catch {
                         try {
                             sessionStorage.setItem(key, value);
-                        } catch (e2) {
+                        } catch {
                             console.warn('Storage blocked, narration may not show on detail page');
                         }
                     }
@@ -374,7 +376,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             setIsLoading(false);
             updateInteractionTime(); // Reset timer again after response
         }
-    }, [input, getApiMessages, playAudioResponse]);
+    }, [input, getApiMessages, playAudioResponse, router, userLocation]);
 
     // External triggers effects
     useEffect(() => {
@@ -425,7 +427,25 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             setIsThinking(false);
         };
         
+        // Listen for narration events from other components (like PlaceDetailClient)
+        const handleNarrate = (event: Event) => {
+            const customEvent = event as CustomEvent<{ text: string; source?: string }>;
+            const { text, source } = customEvent.detail;
+            // Ignorar narraciones que vienen de fuentes específicas que ya se manejan en sus componentes
+            if (source && (source.startsWith('map') || source === 'place-detail')) {
+                console.log('ChatInterface: Ignoring narration from', source);
+                return;
+            }
+            if (text && source !== 'chat') {
+                console.log('ChatInterface: Received narration from', source, '- playing audio');
+                // Agregar el mensaje al chat y reproducir audio
+                setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+                playAudioResponse(text);
+            }
+        };
+        
         window.addEventListener('santi:narration:start', handleNarrationStart);
+        window.addEventListener('santi:narrate', handleNarrate);
         
         (window as Window & typeof globalThis).santiNarrate = (text: string) => {
             handleSend(text);
@@ -435,10 +455,11 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         };
         return () => {
             window.removeEventListener('santi:narration:start', handleNarrationStart);
+            window.removeEventListener('santi:narrate', handleNarrate);
             if ((window as Window & typeof globalThis).santiNarrate) delete (window as Window & typeof globalThis).santiNarrate;
             if ((window as Window & typeof globalThis).santiSpeak) delete (window as Window & typeof globalThis).santiSpeak;
         };
-    }, [handleSend, triggerAssistantMessage]);
+    }, [handleSend, triggerAssistantMessage, playAudioResponse]);
 
     // Cleanup mic hover timeout on unmount
     useEffect(() => {
@@ -560,9 +581,18 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             <audio
                 ref={audioRef}
                 style={{ display: 'none' }}
-                onPlay={() => setIsSpeaking(true)}
-                onEnded={() => setIsSpeaking(false)}
-                onPause={() => setIsSpeaking(false)}
+                onPlay={() => {
+                    console.log('ChatInterface: Audio started playing - setting isSpeaking to true');
+                    setIsSpeaking(true);
+                }}
+                onEnded={() => {
+                    console.log('ChatInterface: Audio ended - setting isSpeaking to false');
+                    setIsSpeaking(false);
+                }}
+                onPause={() => {
+                    console.log('ChatInterface: Audio paused - setting isSpeaking to false');
+                    setIsSpeaking(false);
+                }}
             />
 
             {/* THINKING MODAL */}

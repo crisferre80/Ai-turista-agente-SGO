@@ -17,6 +17,7 @@
     "@capacitor/ios": "^8.0.1",
     "@capacitor/preferences": "^8.0.0",
     "@exodus/bytes": "^1.8.0",
+    "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.90.1",
     "cheerio": "^1.1.2",
     "mapbox-gl": "^3.17.0",

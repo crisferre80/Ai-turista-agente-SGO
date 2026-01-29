@@ -62,11 +62,14 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     return;
   }
 
+  console.log('santiSpeak called with source:', opts?.source);
+
   try {
     if (typeof window !== 'undefined') {
       // Announce narration to any listeners (e.g., Map) so they can react and navigate
       window.dispatchEvent(new CustomEvent('santi:narrate', { detail: { text, source: opts?.source } }));
-      window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+      console.log('Dispatched santi:narrate event with source:', opts?.source);
+      // Note: 'santi:narration:start' will be emitted when audio actually starts playing
     }
   } catch (e) { /* ignore dispatch errors */ }
 
@@ -83,6 +86,13 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
       utterance.lang = 'es-ES';
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      
+      // Emit start event when speech begins
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+        }
+      } catch (e) { /* ignore */ }
       
       utterance.onend = () => {
         try {
@@ -130,8 +140,21 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       _currentAudio = audio;
-      audio.play().catch(err => {
+      audio.play().then(() => {
+        // Emit start event when audio actually begins playing
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+          }
+        } catch (e) { /* ignore */ }
+      }).catch(err => {
         console.warn("Autoplay blocked:", err);
+        // Still emit start for UI purposes even if autoplay is blocked
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+          }
+        } catch (e) { /* ignore */ }
       });
       audio.onended = () => {
         try {

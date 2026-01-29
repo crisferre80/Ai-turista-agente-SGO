@@ -1,19 +1,41 @@
 "use client";
-import React, { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { createRoot } from 'react-dom/client';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import StoryRecorder from './StoryRecorder';
 import { supabase } from '@/lib/supabase';
 
+declare global {
+    interface Window {
+        requestRoute?: (destLng: number, destLat: number, destName: string) => void;
+        requestRecord?: (id: string, name: string) => void;
+        requestPlayStories?: (id: string, name: string) => Promise<void>;
+        focusPlaceOnMap?: (place: string) => void;
+    }
+}
+
 const MAPBOX_TOKEN = (process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '').trim();
 
+// Tipo para lugares/attractions
+interface Attraction {
+  id: string;
+  name: string;
+  image: string;
+  description: string;
+  coords: [number, number];
+  isBusiness?: boolean;
+  info?: string;
+  category?: string;
+  contact_info?: string;
+  gallery_urls?: string[];
+}
+
 interface MapProps {
-    attractions?: any[];
+    attractions?: Attraction[];
     onNarrate?: (text: string, opts?: { source?: string, force?: boolean }) => void;
     onStoryPlay?: (url: string, name: string) => void;
-    onPlaceFocus?: (place: any) => void;
+    onPlaceFocus?: (place: Attraction) => void;
     onLocationChange?: (coords: [number, number]) => void;
 }
 
@@ -26,10 +48,32 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
 
+    // Refs para callbacks para evitar re-renders por cambios en props
+    const onNarrateRef = useRef(onNarrate);
+    const onLocationChangeRef = useRef(onLocationChange);
+    const onPlaceFocusRef = useRef(onPlaceFocus);
+    const onStoryPlayRef = useRef(onStoryPlay);
+
+    // Actualizar refs cuando cambian las props
+    useEffect(() => {
+        onNarrateRef.current = onNarrate;
+    }, [onNarrate]);
+
+    useEffect(() => {
+        onLocationChangeRef.current = onLocationChange;
+    }, [onLocationChange]);
+
+    useEffect(() => {
+        onPlaceFocusRef.current = onPlaceFocus;
+    }, [onPlaceFocus]);
+
+    useEffect(() => {
+        onStoryPlayRef.current = onStoryPlay;
+    }, [onStoryPlay]);
+
     const [lng] = useState(-64.2599);
     const [lat] = useState(-27.7834);
     const [zoom] = useState(13);
-    const router = useRouter();
 
     useEffect(() => {
         if (!MAPBOX_TOKEN) {
@@ -49,9 +93,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 zoom: zoom
             });
 
-            m.on('error', (e: any) => {
+            m.on('error', (e: mapboxgl.ErrorEvent) => {
                 console.error("Mapbox error:", e);
-                if (e.error?.message?.includes("Invalid Access Token") || (e.error as any)?.status === 401) {
+                if (e.error?.message?.includes("Invalid Access Token")) {
                     setError("Token de Mapbox inválido o expirado.");
                 }
             });
@@ -68,16 +112,16 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             m.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
             const hasGreetedRef = { current: false };
-            geolocate.on('geolocate', (e: any) => {
+            geolocate.on('geolocate', (e: GeolocationPosition) => {
                 const loc: [number, number] = [e.coords.longitude, e.coords.latitude];
                 console.log('User location set:', loc);
                 setUserLocation(loc);
                 
                 // Emit location to parent component
-                onLocationChange?.(loc);
+                onLocationChangeRef.current?.(loc);
 
                 if (!hasGreetedRef.current) {
-                    onNarrate?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", { source: 'map-geolocate' });
+                    onNarrateRef.current?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", { source: 'map-geolocate' });
                     hasGreetedRef.current = true;
                 }
             });
@@ -102,9 +146,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         (position) => {
                             const loc: [number, number] = [position.coords.longitude, position.coords.latitude];
                             setUserLocation(loc);
-                            onLocationChange?.(loc);
+                            onLocationChangeRef.current?.(loc);
                         },
-                        (error) => {
+                        () => {
                             // Silenciar errores iniciales
                         },
                         { enableHighAccuracy: true, timeout: 5000 }
@@ -122,16 +166,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         }
     }, [lng, lat, zoom]);
 
-    // Effect to draw pending route when user location becomes available
-    useEffect(() => {
-        if (userLocation && pendingDestination && map.current) {
-            console.log('Drawing pending route to:', pendingDestination.name);
-            drawRoute(userLocation, pendingDestination.coords, pendingDestination.name);
-            setPendingDestination(null);
-        }
-    }, [userLocation, pendingDestination]);
-
-    const drawRoute = async (start: [number, number], end: [number, number], destName: string) => {
+    const drawRoute = useCallback(async (start: [number, number], end: [number, number], destName: string) => {
         if (!map.current) return;
         console.log('Drawing route from', start, 'to', end, 'for', destName);
         try {
@@ -150,7 +185,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             const route = data.geometry.coordinates;
             const distance = (data.distance / 1000).toFixed(1);
             const duration = Math.floor(data.duration / 60);
-            const stepNarrative = data.legs[0].steps.slice(0, 3).map((s: any) => s.maneuver.instruction).join('. Luego, ');
+            const stepNarrative = data.legs[0].steps.slice(0, 3).map((s: { maneuver: { instruction: string } }) => s.maneuver.instruction).join('. Luego, ');
 
             // Limpiar ruta previa si existe
             if (map.current.getLayer('route')) {
@@ -161,9 +196,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             }
 
             // Narrar instrucciones de ruta - esta es la ÚNICA narración que debe ocurrir
-            onNarrate?.(`¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`, { source: 'map-route', force: true });
+            onNarrateRef.current?.(`¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`, { source: 'map-route', force: true });
 
-            const geojson: any = {
+            const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
                 type: 'Feature',
                 properties: {},
                 geometry: { type: 'LineString', coordinates: route }
@@ -183,15 +218,31 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
             const bounds = new mapboxgl.LngLatBounds(route[0], route[0]);
             route.forEach((coord: [number, number]) => bounds.extend(coord));
-            map.current.fitBounds(bounds, { padding: 100, duration: 1500 });
+            map.current.fitBounds(bounds, { 
+                padding: 120, 
+                duration: 2000,
+                pitch: 35, // Vista 3D para la ruta
+                bearing: 10, // Orientación ligera
+                easing: (t: number) => t * (2 - t) // Easing suave
+            });
             console.log('Route drawn successfully');
         } catch (error) {
             console.error('Error drawing route:', error);
-            onNarrate?.("No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.", { source: 'map' });
+            onNarrateRef.current?.("No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.", { source: 'map' });
         }
-    };
+    }, []);
 
-    const openRecorder = (id: string, name: string) => {
+    // Effect to draw pending route when user location becomes available
+    useEffect(() => {
+        if (userLocation && pendingDestination && map.current) {
+            console.log('Drawing pending route to:', pendingDestination.name);
+            drawRoute(userLocation, pendingDestination.coords, pendingDestination.name);
+            setPendingDestination(null);
+        }
+    }, [userLocation, pendingDestination, drawRoute]);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const openRecorder = (id: string, _name: string) => {
         const recorderDiv = document.createElement('div');
         recorderDiv.id = 'story-recorder-container';
         document.body.appendChild(recorderDiv);
@@ -248,8 +299,6 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 el.style.transform = 'scale(1) translateY(0)';
                 el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
             };
-
-            const galleryCount = attr.gallery_urls?.length || 0;
 
             // Tooltip element for hover title
             const tooltip = document.createElement('div');
@@ -311,9 +360,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     .setPopup(new mapboxgl.Popup({ offset: 35, maxWidth: '320px' }).setHTML(compactContent))
                     .addTo(currentMap);
 
-                (wrapper as any)._attrId = attr.id;
+                (wrapper as unknown as HTMLElement & { _attrId: string })._attrId = attr.id;
                 markersRef.current.push(marker);
-            } catch (e) { }
+            } catch { }
 
 
         });
@@ -325,21 +374,21 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         if (!isMapReady || !map.current) return;
         const currentMap = map.current;
 
-        (window as any).requestRoute = (destLng: number, destLat: number, destName: string) => {
+        window.requestRoute = (destLng: number, destLat: number, destName: string) => {
             if (userLocation && map.current) drawRoute(userLocation, [destLng, destLat], destName);
-            else onNarrate?.("Necesito tu ubicación para guiarte.", { source: 'map' });
+            else onNarrateRef.current?.("Necesito tu ubicación para guiarte.", { source: 'map' });
         };
 
-        (window as any).requestRecord = (id: string, name: string) => openRecorder(id, name);
+        window.requestRecord = (id: string, name: string) => openRecorder(id, name);
 
-        (window as any).requestPlayStories = async (id: string, name: string) => {
+        window.requestPlayStories = async (id: string, name: string) => {
             const { data } = await supabase.from('narrations').select('audio_url').eq('attraction_id', id).order('created_at', { ascending: false }).limit(1);
-            if (data && data.length > 0) onStoryPlay?.(data[0].audio_url, name);
-            else onNarrate?.(`Aún no hay historias para ${name}.`, { source: 'map' });
+            if (data && data.length > 0) onStoryPlayRef.current?.(data[0].audio_url, name);
+            else onNarrateRef.current?.(`Aún no hay historias para ${name}.`, { source: 'map' });
         };
 
 
-    (window as any).focusPlaceOnMap = (placeName: string) => {
+    window.focusPlaceOnMap = (placeName: string) => {
             console.log('=== focusPlaceOnMap DEBUG ===');
             console.log('1. Input placeName:', placeName);
             console.log('2. Total attractions available:', attractions.length);
@@ -362,7 +411,18 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
             if (found && found.coords) {
                 console.log('6. Flying to coordinates:', found.coords);
-                currentMap.flyTo({ center: found.coords as [number, number], zoom: 15 });
+                
+                // Animación cinematográfica 3D con movimiento y orientación
+                setTimeout(() => {
+                    currentMap.flyTo({
+                        center: found.coords as [number, number],
+                        zoom: 16,
+                        pitch: 45, // Inclinación 3D para efecto tridimensional
+                        bearing: 15, // Rotación ligera para no parecer plano
+                        duration: 2500, // Duración más larga para efecto cinematográfico
+                        easing: (t: number) => t * (2 - t) // Easing más suave y natural
+                    });
+                }, 300); // Pequeña pausa antes de la animación
 
                 if (userLocation) {
                     console.log('7. User location available, drawing route');
@@ -370,19 +430,18 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 } else {
                     console.log('7. No user location, setting pending destination');
                     setPendingDestination({ coords: found.coords as [number, number], name: found.name });
-                    onNarrate?.("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.", { source: 'map' });
+                    onNarrateRef.current?.("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.", { source: 'map' });
                 }
 
                 // NO abrir el popup automáticamente cuando es consulta de ruta
                 // El popup solo debe abrirse si el usuario hace clic en el marcador
                 
                 // Notificar al componente padre que se enfocó un lugar (sin causar navegación)
-                if (onPlaceFocus) onPlaceFocus(found);
+                if (onPlaceFocusRef.current) onPlaceFocusRef.current(found);
                 console.log('8. Place focused successfully');
-                return found;
+            } else {
+                console.log('6. NO MATCH FOUND for:', placeName);
             }
-            console.log('6. NO MATCH FOUND for:', placeName);
-            return null;
         };
 
         // Listen to Santi narrations so we can focus places on the map when mentioned
@@ -391,18 +450,18 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 const detail = (ev as CustomEvent).detail as { text: string, source?: string } | undefined;
                 const text = detail?.text || '';
                 const source = detail?.source;
-                // Ignore narrations emitted by our own map actions to avoid loops
-                if (source && typeof source === 'string' && source.startsWith('map')) {
-                    // Debug log to help trace potential loops
+                // Ignore narrations emitted by our own map actions, place-detail pages, and geolocate to avoid loops
+                if (source && typeof source === 'string' && (source.startsWith('map') || source === 'place-detail' || source === 'chat')) {
                     console.debug('Map: Ignoring narration from source:', source, 'text:', text.slice(0,50));
                     return;
                 }
 
                 if (!text) return;
-                // Solo enfocar en el mapa, NO navegar
-                // La navegación la maneja ChatInterface solo cuando corresponde
-                (window as any).focusPlaceOnMap(text);
-            } catch (e) { /* ignore */ }
+                // Solo enfocar en el mapa cuando la narración viene del chat o usuario
+                // NO procesar narraciones automáticas de place-detail para evitar doble procesamiento
+                console.log('Map: Processing narration from source:', source || 'unknown');
+                window.focusPlaceOnMap?.(text);
+            } catch { /* ignore */ }
         };
 
         window.addEventListener('santi:narrate', onNarration as EventListener);
@@ -410,7 +469,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         return () => {
             window.removeEventListener('santi:narrate', onNarration as EventListener);
         };
-    }, [isMapReady, attractions, userLocation]);
+    }, [isMapReady, attractions, userLocation, drawRoute]);
 
     if (error) {
         return (

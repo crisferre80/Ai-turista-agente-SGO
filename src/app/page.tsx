@@ -509,7 +509,7 @@ export default function Home() {
           setShowIntro(false);
           sessionStorage.setItem(INTRO_KEY, 'true');
           setTimeout(() => {
-            santiNarrate("¡Hola chango! Ya estoy listo para guiarte. ¡Bienvenido a Santiago!");
+            santiNarrate("¡Hola turista! ¿Cómo te llamas? Ya estoy listo para guiarte. ¡Bienvenido a Santiago!", { source: 'intro-welcome' });
           }, 500);
         }}
       />

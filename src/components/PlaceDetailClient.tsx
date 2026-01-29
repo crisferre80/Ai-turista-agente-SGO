@@ -37,277 +37,29 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   // Rating promedio state
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [totalReviews, setTotalReviews] = useState(0);
-  
-  // Santi narration state
-  const [santiNarrating, setSantiNarrating] = useState(false);
-  const [santiText, setSantiText] = useState('');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isPlayingRef = useRef(false); // Track if audio is already playing to avoid duplicates
-  const hasPlayedRef = useRef(false); // Track if we've already played audio for this page load
-  const isEndingRef = useRef(false); // Track if narration end event is already in progress to prevent loops
+
+  // Track if we've already narrated this place
+  const hasNarratedRef = useRef(false);
 
   const openGallery = (index = 0) => setGalleryOpen({ open: true, index });
   const closeGallery = () => setGalleryOpen({ open: false, index: 0 });
   const openVideo = (src?: string) => setVideoOpen({ open: true, src });
   const closeVideo = () => setVideoOpen({ open: false, src: undefined });
-  
-  // Check if we arrived here while Santi is narrating
+
+  // Narrate place description on load
   useEffect(() => {
-    // Safe storage getters/setters
-    const getStorage = (key: string): string | null => {
-      try {
-        return localStorage.getItem(key);
-      } catch {
-        try {
-          return sessionStorage.getItem(key);
-        } catch {
-          return null;
-        }
-      }
-    };
-    
-    const removeStorage = (key: string) => {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        try {
-          sessionStorage.removeItem(key);
-        } catch {
-          // Silent fail
-        }
-      }
-    };
-    
-    const handleNarrationStart = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const text = customEvent.detail?.text || '';
-      console.log('PlaceDetailClient: Narration start event received', text);
-      setSantiText(text);
-      setSantiNarrating(true);
-    };
-    
-    const handleNarrationEnd = () => {
-      // Prevent loop: if already ending, ignore this call
-      if (isEndingRef.current) {
-        console.log('PlaceDetailClient: Narration end already in progress, ignoring');
-        return;
-      }
-      
-      isEndingRef.current = true;
-      console.log('PlaceDetailClient: Narration end event received');
-      setSantiNarrating(false);
-      isPlayingRef.current = false; // Reset playing flag
-      
-      // Clean up storage
-      removeStorage('santi:narratingPlace');
-      removeStorage('santi:narratingText');
-      
-      // Stop local audio if playing, but DON'T clear src (causes onerror loop)
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          // Don't set src to '' - it causes an error event that triggers this again
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-      
-      // Reset ending flag after a small delay
-      setTimeout(() => {
-        isEndingRef.current = false;
-      }, 100);
-    };
-    
-    // Function to play audio locally
-    const playLocalAudio = async (text: string) => {
-      // Prevent duplicate playback
-      if (isPlayingRef.current) {
-        console.log('PlaceDetailClient: Audio already playing, skipping duplicate request');
-        return;
-      }
-      
-      isPlayingRef.current = true;
-      
-      try {
-        console.log('PlaceDetailClient: Requesting audio for:', text.substring(0, 50));
-        
-        // Emit start event BEFORE fetching audio so modal disappears promptly
-        window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
-        
-        const response = await fetch('/api/speech', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-        });
-
-        if (!response.ok) {
-          console.error('PlaceDetailClient: Audio generation failed', response.status, response.statusText);
-          isPlayingRef.current = false;
-          window.dispatchEvent(new CustomEvent('santi:narration:end'));
-          return;
-        }
-
-        const blob = await response.blob();
-        console.log('PlaceDetailClient: Blob received:', {
-          size: blob.size,
-          type: blob.type
-        });
-        
-        if (blob.size === 0) {
-          console.error('PlaceDetailClient: Empty blob received');
-          isPlayingRef.current = false;
-          window.dispatchEvent(new CustomEvent('santi:narration:end'));
-          return;
-        }
-        
-        const url = URL.createObjectURL(blob);
-        console.log('PlaceDetailClient: Audio blob URL created:', url);
-
-        if (!audioRef.current) {
-          audioRef.current = new Audio();
-        }
-        
-        // Clean up old audio but don't clear src yet
-        if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
-          try {
-            const oldSrc = audioRef.current.src;
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            URL.revokeObjectURL(oldSrc);
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-        
-        // Set new source
-        audioRef.current.src = url;
-        console.log('PlaceDetailClient: Audio src set to:', audioRef.current.src);
-        
-        audioRef.current.onended = () => {
-          console.log('PlaceDetailClient: Audio ended');
-          isPlayingRef.current = false;
-          window.dispatchEvent(new CustomEvent('santi:narration:end'));
-          URL.revokeObjectURL(url);
-        };
-        
-        audioRef.current.onerror = (e) => {
-          // Prevent loop: don't dispatch end event if already ending
-          if (isEndingRef.current) {
-            console.log('PlaceDetailClient: Audio error during end event, ignoring to prevent loop');
-            return;
-          }
-          
-          console.error('PlaceDetailClient: Audio onerror triggered');
-          console.error('PlaceDetailClient: Event:', e);
-          
-          try {
-            const event = e as Event;
-            const target = event?.target as HTMLAudioElement | null;
-            const error = target?.error;
-            
-            console.error('PlaceDetailClient: Audio error details', {
-              hasTarget: !!target,
-              hasError: !!error,
-              code: error?.code,
-              message: error?.message,
-              networkState: target?.networkState,
-              readyState: target?.readyState,
-              src: target?.src,
-              currentSrc: target?.currentSrc
-            });
-          } catch (logError) {
-            console.error('PlaceDetailClient: Error while logging audio error:', logError);
-          }
-          
-          isPlayingRef.current = false;
-          window.dispatchEvent(new CustomEvent('santi:narration:end'));
-          try {
-            URL.revokeObjectURL(url);
-          } catch {
-            // Ignore revoke errors
-          }
-        };
-        
-        // Add load event to debug loading
-        audioRef.current.onloadstart = () => {
-          console.log('PlaceDetailClient: Audio loading started');
-        };
-        
-        audioRef.current.oncanplay = () => {
-          console.log('PlaceDetailClient: Audio can play');
-        };
-        
-        try {
-          console.log('PlaceDetailClient: Attempting to play audio...');
-          const playPromise = audioRef.current.play();
-          await playPromise;
-          console.log('PlaceDetailClient: Audio playing successfully');
-        } catch (playError) {
-          console.error('PlaceDetailClient: Play() failed:', playError);
-          console.error('PlaceDetailClient: Audio element state:', {
-            src: audioRef.current.src,
-            currentSrc: audioRef.current.currentSrc,
-            readyState: audioRef.current.readyState,
-            networkState: audioRef.current.networkState,
-            paused: audioRef.current.paused,
-            error: audioRef.current.error
-          });
-          isPlayingRef.current = false;
-          window.dispatchEvent(new CustomEvent('santi:narration:end'));
-          URL.revokeObjectURL(url);
-          return;
-        }
-        
-      } catch (error) {
-        console.error('PlaceDetailClient: Error playing audio', error);
-        isPlayingRef.current = false;
-        window.dispatchEvent(new CustomEvent('santi:narration:end'));
-      }
-    };
-    
-    // Listen for narration events
-    window.addEventListener('santi:narration:start', handleNarrationStart);
-    window.addEventListener('santi:narration:end', handleNarrationEnd);
-    
-    // Check if we're in the middle of a narration - activate immediately
-    const narratingPlace = getStorage('santi:narratingPlace');
-    const narratingText = getStorage('santi:narratingText');
-    
-    console.log('PlaceDetailClient: Checking storage', { narratingPlace, placeId: place.id, narratingText, hasPlayed: hasPlayedRef.current });
-    
-    // Only play once per page load
-    if (narratingPlace === place.id && narratingText && !hasPlayedRef.current) {
-      console.log('PlaceDetailClient: Activating narration from storage');
-      hasPlayedRef.current = true; // Mark as played immediately
-      setSantiText(narratingText);
-      setSantiNarrating(true);
-      
-      // Play audio locally since we're on a new page
-      playLocalAudio(narratingText);
+    if (place.name && place.description && !hasNarratedRef.current) {
+      hasNarratedRef.current = true;
+      const narrationText = `Aquí tienes más detalles sobre ${place.name}. ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
+      console.log('PlaceDetailClient: Dispatching narration event:', narrationText.substring(0, 50));
+      const event = new CustomEvent('santi:narrate', {
+        detail: { text: narrationText, source: 'place-detail' }
+      });
+      window.dispatchEvent(event);
+      console.log('PlaceDetailClient: Narration event dispatched');
     }
-    
-    return () => {
-      window.removeEventListener('santi:narration:start', handleNarrationStart);
-      window.removeEventListener('santi:narration:end', handleNarrationEnd);
-      
-      // Reset played flag on unmount
-      hasPlayedRef.current = false;
-      
-      // Cleanup audio on unmount
-      isPlayingRef.current = false;
-      isEndingRef.current = false;
-      if (audioRef.current) {
-        try {
-          audioRef.current.pause();
-          // Don't clear src on unmount either - just pause
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-    };
-  }, [place.id]);
-
+  }, [place.name, place.description]);
+  
   // Calculate average rating
   useEffect(() => {
     const fetchAverageRating = async () => {
@@ -383,45 +135,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      {/* Santi narrating UI */}
-      {santiNarrating && (
-        <div style={{
-          position: 'fixed',
-          bottom: 24,
-          left: 24,
-          zIndex: 9999,
-          background: 'linear-gradient(135deg, #1A3A6C 0%, #2d5a9c 100%)',
-          borderRadius: 16,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-          display: 'flex',
-          gap: 16,
-          padding: 20,
-          alignItems: 'center',
-          maxWidth: 480,
-          animation: 'slideInLeft 0.5s ease-out'
-        }}>
-          <div style={{
-            width: 60,
-            height: 60,
-            borderRadius: '50%',
-            background: '#F1C40F',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '2rem',
-            flexShrink: 0,
-            animation: 'pulse 1.5s ease-in-out infinite'
-          }}>
-            🤖
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, color: '#F1C40F', marginBottom: 4 }}>Santi está narrando</div>
-            <div style={{ color: 'white', fontSize: '0.95rem', lineHeight: 1.4 }}>
-              {santiText.substring(0, 150)}{santiText.length > 150 ? '...' : ''}
-            </div>
-          </div>
-        </div>
-      )}
       
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -433,14 +146,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             to {
               transform: translateX(0);
               opacity: 1;
-            }
-          }
-          @keyframes pulse {
-            0%, 100% {
-              transform: scale(1);
-            }
-            50% {
-              transform: scale(1.1);
             }
           }
           @media (max-width: 768px) {

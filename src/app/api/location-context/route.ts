@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import openai from '@/lib/openai';
+import { getGeminiModel } from '@/lib/gemini';
 
 /**
  * API Route: /api/location-context
@@ -78,17 +78,24 @@ Describe de manera amigable y conversacional la ubicación actual del usuario. I
 
 Responde en un párrafo de 3-5 oraciones, conversacional y útil. Si no tienes información específica sobre la zona, sé honesto pero creativo describiendo lo que podrías inferir del contexto geográfico.`;
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-                { role: 'system', content: 'Eres un asistente turístico amigable y conocedor de Santiago del Estero, Argentina.' },
-                { role: 'user', content: prompt }
+        const model = getGeminiModel();
+        
+        const result = await model.generateContent({
+            contents: [
+                {
+                    role: 'user',
+                    parts: [{
+                        text: 'Eres un asistente turístico amigable y conocedor de Santiago del Estero, Argentina.\n\n' + prompt
+                    }]
+                }
             ],
-            temperature: 0.8,
-            max_tokens: 300
+            generationConfig: {
+                temperature: 0.8,
+                maxOutputTokens: 300,
+            },
         });
 
-        const description = completion.choices[0].message.content || 'No pude obtener información sobre esta ubicación.';
+        const description = result.response.text() || 'No pude obtener información sobre esta ubicación.';
 
         return NextResponse.json({
             success: true,
