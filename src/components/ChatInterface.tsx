@@ -11,6 +11,8 @@ declare global {
         focusPlaceOnMap?: (placeName: string) => void;
         SpeechRecognition?: unknown;
         webkitSpeechRecognition?: unknown;
+        testSantiAnimation?: () => void;
+        forceSantiSpeaking?: (speaking: boolean) => void;
     }
 }
 
@@ -108,40 +110,126 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
     // Idle / Auto-hide logic will be registered after callbacks are defined
 
+    // Debug: Monitor isSpeaking state changes
+    useEffect(() => {
+        console.log(`🎭 Santi Animation State: isSpeaking = ${isSpeaking} ${isSpeaking ? '(ANIMADO 🎬)' : '(ESTÁTICO 📸)'}`);
+        console.log(`🖼️ Image URL will be: ${isSpeaking ? 'guiarobotalpha_vv5jbj.webp (ANIMATED)' : 'guiarobotalpha_vv5jbj.png (STATIC)'}`);
+    }, [isSpeaking]);
+
     // Global access for triggers will be registered after callbacks are defined
 
     // Typewriter Effect Logic will be registered after callbacks are defined
 
+    // Helper function to clean text for speech
+    const cleanTextForSpeech = useCallback((text: string): string => {
+        return text
+            // Remove markdown formatting
+            .replace(/\*\*(.*?)\*\*/g, '$1') // Bold markdown **text** -> text
+            .replace(/\*(.*?)\*/g, '$1') // Italic markdown *text* -> text
+            .replace(/`(.*?)`/g, '$1') // Code markdown `text` -> text
+            .replace(/#{1,6}\s/g, '') // Headers # ## ### -> remove
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Links [text](url) -> text
+            .replace(/!\[(.*?)\]\(.*?\)/g, '$1') // Images ![alt](url) -> alt
+            // Remove special characters that sound unnatural
+            .replace(/[_~\[\]{}|\\<>]/g, ' ') // Remove underscores, tildes, brackets, etc.
+            .replace(/\n+/g, '. ') // Replace newlines with periods for natural pauses
+            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+            // Make it more conversational
+            .replace(/\b(USD|ARS|\$)\s*(\d+)/gi, '$2 pesos') // Currency formatting
+            .replace(/\bkm\b/gi, 'kilómetros') // Abbreviations
+            .replace(/\bm\b(?=\s|$)/gi, 'metros') // Meters
+            .replace(/&/g, 'y') // Ampersands
+            .replace(/\s+\./g, '.') // Remove spaces before periods
+            .trim();
+    }, []);
+
     // Text-to-Speech Helper
-    const playAudioResponse = useCallback(async (text: string) => {
-        // Evitar llamadas duplicadas si ya hay audio reproduciéndose
-        if (audioRef.current && !audioRef.current.paused) {
+    const playAudioResponse = useCallback(async (text: string, force = false) => {
+        // Clean text for natural speech
+        const cleanText = cleanTextForSpeech(text);
+        console.log('🎵 ChatInterface: playAudioResponse called with text:', text.substring(0, 50), 'cleaned:', cleanText.substring(0, 50), 'force:', force);
+        
+        // Si no es forzado, evitar llamadas duplicadas si ya hay audio reproduciéndose
+        if (!force && audioRef.current && !audioRef.current.paused) {
             console.log('ChatInterface: Audio already playing, ignoring duplicate request');
             return;
         }
         
-        console.log('ChatInterface: Playing audio response:', text.substring(0, 50));
+        // Si es forzado, detener audio actual
+        if (force && audioRef.current && !audioRef.current.paused) {
+            console.log('🔇 ChatInterface: Force playback - stopping current audio');
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+        
+        console.log('ChatInterface: Making TTS request...');
         
         try {
             const response = await fetch('/api/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({ text: cleanText }), // Use cleaned text for TTS
             });
 
             if (response.status === 401) throw new Error("API_KEY_MISSING");
             if (!response.ok) throw new Error("Audio generation failed");
 
+            // If server returned JSON (fallback instruction), parse and handle
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const payload = await response.json();
+                console.log('ChatInterface: TTS endpoint returned JSON payload', payload);
+                if (payload?.fallback) {
+                    // Use browser TTS as fallback with cleaned text
+                    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        const utter = new SpeechSynthesisUtterance(cleanText); // Use cleaned text
+                        utter.lang = 'es-AR';
+                        const voices = window.speechSynthesis.getVoices();
+                        utter.voice = voices.find(v => v.lang?.startsWith('es')) || null;
+                        window.speechSynthesis.cancel();
+                        window.speechSynthesis.speak(utter);
+                        // Emit start event
+                        window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text: cleanText } }));
+                        // Emit end when finished
+                        utter.onend = () => window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                        return;
+                    } else {
+                        console.warn('Browser TTS not available, fallback requested');
+                        throw new Error('TTS fallback requested but browser TTS unavailable');
+                    }
+                }
+                throw new Error(payload?.message || 'TTS server returned JSON');
+            }
+
             const blob = await response.blob();
+            console.log('🎵 ChatInterface: Got audio blob, size:', blob.size);
+            
+            // Validate blob
+            if (!blob || blob.size === 0) {
+                throw new Error('Received empty audio blob from TTS service');
+            }
+            
+            console.log('ChatInterface: Received audio blob, size:', blob.size, 'type:', blob.type);
             const url = URL.createObjectURL(blob);
+            console.log('🎵 ChatInterface: Created object URL, length:', url.length);
 
             if (audioRef.current) {
+                console.log('🎵 ChatInterface: Setting up audio element...');
                 // Clear previous handlers
                 audioRef.current.onended = null;
                 audioRef.current.onerror = null;
                 audioRef.current.pause();
                 audioRef.current.currentTime = 0;
                 audioRef.current.src = url;
+                
+                // Validate audio element before playing
+                if (!audioRef.current.src || audioRef.current.src === '') {
+                    console.error('Audio src not set correctly');
+                    URL.revokeObjectURL(url);
+                    throw new Error('Audio source not set');
+                }
+                
+                console.log('ChatInterface: Audio element configured, src length:', audioRef.current.src.length);
                 
                 // Set up end handler to emit event
                 audioRef.current.onended = () => {
@@ -151,26 +239,43 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     URL.revokeObjectURL(url);
                 };
                 
-                audioRef.current.onerror = () => {
+                audioRef.current.onerror = (ev) => {
+                    try {
+                        const error = audioRef.current?.error;
+                        const errorDetails = {
+                            code: error?.code,
+                            message: error?.message,
+                            src: audioRef.current?.src?.substring(0, 100),
+                            networkState: audioRef.current?.networkState,
+                            readyState: audioRef.current?.readyState,
+                            event: (ev as Event)?.type
+                        };
+                        console.error('Audio playback error:', errorDetails);
+                        // Also log to console for easier debugging
+                        console.error('Audio element error object:', error);
+                        console.error('Audio element event:', ev);
+                    } catch (e) {
+                        console.error('Audio onerror handler exception:', e);
+                    }
                     if (typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('santi:narration:end'));
                     }
                 };
 
-                // Play and emit start event ONLY after successful play
+                // Play and emit start event BEFORE attempting to play (to ensure animation starts)
+                // Emit start event immediately for UI responsiveness
+                if (typeof window !== 'undefined') {
+                    console.log('🎵 ChatInterface: Emitting narration start event');
+                    window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text: cleanText } }));
+                }
+                
                 audioRef.current.play().then(() => {
-                    // Emit start event for other components AFTER audio starts
-                    if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
-                    }
+                    console.log('🔊 ChatInterface: Audio playing successfully');
                 }).catch(err => {
                     if (err.name !== 'AbortError') {
                         console.warn("Autoplay blocked:", err);
                         setAudioBlocked(true);
-                        // Still emit start for UI purposes
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text } }));
-                        }
+                        // Animation already started above, so no need to emit again
                     }
                 });
             }
@@ -182,9 +287,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             }
             if (typeof error === 'object' && error && (error as { message?: string }).message === "API_KEY_MISSING") {
                 alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
+            } else if (typeof error === 'object' && error && (error as { message?: string }).message) {
+                console.error("TTS failed with message:", (error as { message: string }).message);
+            } else {
+                console.error("TTS failed with unknown error:", error);
             }
         }
-    }, []);
+    }, [cleanTextForSpeech]);
 
     const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
@@ -280,9 +389,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 }),
             });
 
-            if (!response.ok) throw new Error("Chat request failed");
+            const bodyText = await response.text();
+            if (!response.ok) {
+                console.error('ChatInterface: /api/chat error', response.status, bodyText);
+                let parsed;
+                try { parsed = JSON.parse(bodyText); } catch { parsed = null; }
+                throw new Error(parsed?.message || parsed?.error || `Chat API error ${response.status}`);
+            }
 
-            const data = await response.json();
+            const data = JSON.parse(bodyText);
             
             // Manejar rate limit exceeded
             if (data.rateLimitExceeded) {
@@ -337,12 +452,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 };
                 
                 try {
+                    console.log('ChatInterface: Storing narration data before navigation:', {
+                        placeId,
+                        textLength: botReply.length
+                    });
                     setStorage('santi:narratingPlace', placeId);
                     setStorage('santi:narratingText', botReply);
-                    // Navigate after a short delay to let audio start - use Next.js router for SPA navigation
+                    // Navigate with enough delay to ensure storage completes
                     setTimeout(() => {
+                        console.log('ChatInterface: Navigating to place detail page');
                         router.push(`/explorar/${placeId}`);
-                    }, 800);
+                    }, 500); // Increased to 500ms to ensure localStorage saves properly
                 } catch (err) {
                     console.error('Navigation error:', err);
                 }
@@ -421,23 +541,62 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
     // Global access for triggers
     useEffect(() => {
+        console.log('🎯 ChatInterface: Setting up event listeners');
+        
         // Turn off thinking modal when narration starts (even on other pages)
         const handleNarrationStart = () => {
-            console.log('ChatInterface: Narration started, hiding thinking modal');
+            console.log('🎯 ChatInterface: Narration START - hiding thinking modal and setting isSpeaking to true');
+            console.log('🎭 Before: isSpeaking was', isSpeaking);
             setIsThinking(false);
+            setIsSpeaking(true);
+            console.log('🎭 After: isSpeaking set to true');
+        };
+
+        const handleNarrationEnd = () => {
+            console.log('🎯 ChatInterface: Narration END - setting isSpeaking to false');
+            setIsSpeaking(false);
         };
         
         // Listen for narration events from other components (like PlaceDetailClient)
         const handleNarrate = (event: Event) => {
-            const customEvent = event as CustomEvent<{ text: string; source?: string }>;
-            const { text, source } = customEvent.detail;
-            // Ignorar narraciones que vienen de fuentes específicas que ya se manejan en sus componentes
-            if (source && (source.startsWith('map') || source === 'place-detail')) {
-                console.log('ChatInterface: Ignoring narration from', source);
+            const customEvent = event as CustomEvent<{ text: string; source?: string; force?: boolean }>;
+            const { text, source, force } = customEvent.detail;
+            
+            console.log('🎯 ChatInterface: Received narration event from', source, 'with force:', force, 'text preview:', text?.substring(0, 30));
+            
+            // Para intro-welcome: agregar al chat pero no reproducir audio adicional (ya se reproduce en santiSpeak)
+            if (source === 'intro-welcome') {
+                console.log('ChatInterface: Adding intro message to chat without additional audio');
+                setMessages(prev => [...prev, { role: 'assistant', content: text }]);
                 return;
             }
+            
+            // Si es una narración de ruta con force=true, interrumpir audio actual y reproducir
+            if (source === 'map-route' && force) {
+                console.log('🚨 ChatInterface: High priority route narration - interrupting current audio');
+                // Reproducir la narración de ruta con force=true
+                playAudioResponse(text, true);
+                // Agregar al chat
+                setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+                return;
+            }
+            
+            // Ignorar otras narraciones del mapa si no tienen force=true
+            if (source && source.startsWith('map') && !force) {
+                console.log('ChatInterface: Ignoring map narration without force flag');
+                return;
+            }
+            
+            // Manejar narraciones de place-detail (siempre reproducir)
+            if (source === 'place-detail') {
+                console.log('🔄 ChatInterface: Playing narration from place-detail, force:', force);
+                playAudioResponse(text, force || false);
+                setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+                return;
+            }
+            
             if (text && source !== 'chat') {
-                console.log('ChatInterface: Received narration from', source, '- playing audio');
+                console.log('ChatInterface: Received narration from', source, '- adding to chat and playing audio');
                 // Agregar el mensaje al chat y reproducir audio
                 setMessages(prev => [...prev, { role: 'assistant', content: text }]);
                 playAudioResponse(text);
@@ -445,21 +604,42 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         };
         
         window.addEventListener('santi:narration:start', handleNarrationStart);
+        window.addEventListener('santi:narration:end', handleNarrationEnd);
         window.addEventListener('santi:narrate', handleNarrate);
         
-        (window as Window & typeof globalThis).santiNarrate = (text: string) => {
+        console.log('🎯 ChatInterface: Event listeners registered successfully');
+        
+        window.santiNarrate = (text: string) => {
             handleSend(text);
         };
-        (window as Window & typeof globalThis).santiSpeak = (text: string) => {
+        window.santiSpeak = (text: string) => {
             triggerAssistantMessage(text, true); // Skip focus to avoid loops
+        };
+        
+        // Debug functions for testing animation
+        window.testSantiAnimation = () => {
+            console.log('🧪 Testing Santi animation...');
+            setIsSpeaking(prev => {
+                console.log('Current isSpeaking state:', prev);
+                console.log('Toggled to:', !prev);
+                return !prev;
+            });
+        };
+        
+        window.forceSantiSpeaking = (speaking: boolean) => {
+            console.log('🎯 Force setting Santi speaking to:', speaking);
+            setIsSpeaking(speaking);
         };
         return () => {
             window.removeEventListener('santi:narration:start', handleNarrationStart);
+            window.removeEventListener('santi:narration:end', handleNarrationEnd);
             window.removeEventListener('santi:narrate', handleNarrate);
-            if ((window as Window & typeof globalThis).santiNarrate) delete (window as Window & typeof globalThis).santiNarrate;
-            if ((window as Window & typeof globalThis).santiSpeak) delete (window as Window & typeof globalThis).santiSpeak;
+            if (window.santiNarrate) delete window.santiNarrate;
+            if (window.santiSpeak) delete window.santiSpeak;
+            if (window.testSantiAnimation) delete window.testSantiAnimation;
+            if (window.forceSantiSpeaking) delete window.forceSantiSpeaking;
         };
-    }, [handleSend, triggerAssistantMessage, playAudioResponse]);
+    }, [handleSend, triggerAssistantMessage, playAudioResponse, isSpeaking]);
 
     // Cleanup mic hover timeout on unmount
     useEffect(() => {
@@ -582,15 +762,25 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 ref={audioRef}
                 style={{ display: 'none' }}
                 onPlay={() => {
-                    console.log('ChatInterface: Audio started playing - setting isSpeaking to true');
+                    console.log('🎵 ChatInterface: Audio started playing - setting isSpeaking to true');
                     setIsSpeaking(true);
                 }}
                 onEnded={() => {
-                    console.log('ChatInterface: Audio ended - setting isSpeaking to false');
+                    console.log('🔇 ChatInterface: Audio ended - setting isSpeaking to false');
                     setIsSpeaking(false);
                 }}
                 onPause={() => {
-                    console.log('ChatInterface: Audio paused - setting isSpeaking to false');
+                    console.log('⏸️ ChatInterface: Audio paused - setting isSpeaking to false');
+                    setIsSpeaking(false);
+                }}
+                onLoadStart={() => {
+                    console.log('📋 ChatInterface: Audio load started');
+                }}
+                onCanPlay={() => {
+                    console.log('✅ ChatInterface: Audio can play');
+                }}
+                onError={(e) => {
+                    console.error('❌ ChatInterface: Audio error', e);
                     setIsSpeaking(false);
                 }}
             />
@@ -713,10 +903,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
                             width: 'auto',
                             objectFit: 'contain',
-                            filter: 'drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
-                            transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
                             opacity: 1,
-                            transform: isSpeaking ? 'scale(1)' : 'scale(0.9)',
                             pointerEvents: 'auto',
                             cursor: 'pointer'
                         }}
@@ -1253,6 +1440,43 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     }
                     40% {
                         transform: translateY(-12px);
+                    }
+                }
+
+                /* Santi Animation Styles */
+                .robot-avatar {
+                    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                
+                .robot-avatar.idle {
+                    filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.4));
+                    animation: idlePulse 3s ease-in-out infinite;
+                }
+                
+                .robot-avatar.active {
+                    filter: drop-shadow(0 0 40px rgba(241, 196, 15, 0.8)) drop-shadow(0 0 60px rgba(241, 196, 15, 0.4));
+                    animation: speakingBounce 0.8s ease-in-out infinite alternate;
+                }
+                
+                @keyframes idlePulse {
+                    0%, 100% { 
+                        transform: scale(0.9);
+                        filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.4));
+                    }
+                    50% { 
+                        transform: scale(0.92);
+                        filter: drop-shadow(0 0 35px rgba(255, 255, 255, 0.6));
+                    }
+                }
+                
+                @keyframes speakingBounce {
+                    0% { 
+                        transform: scale(1) rotate(-1deg);
+                        filter: drop-shadow(0 0 40px rgba(241, 196, 15, 0.8)) drop-shadow(0 0 60px rgba(241, 196, 15, 0.4));
+                    }
+                    100% { 
+                        transform: scale(1.05) rotate(1deg);
+                        filter: drop-shadow(0 0 50px rgba(241, 196, 15, 1)) drop-shadow(0 0 80px rgba(241, 196, 15, 0.6));
                     }
                 }
             `}</style>

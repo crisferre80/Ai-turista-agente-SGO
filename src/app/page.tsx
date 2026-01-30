@@ -509,8 +509,8 @@ export default function Home() {
           setShowIntro(false);
           sessionStorage.setItem(INTRO_KEY, 'true');
           setTimeout(() => {
-            santiNarrate("¡Hola turista! ¿Cómo te llamas? Ya estoy listo para guiarte. ¡Bienvenido a Santiago!", { source: 'intro-welcome' });
-          }, 500);
+            santiNarrate("¡Hola changos y chinitas! Bienvenidos a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
+          }, 1000); // Dar más tiempo para que se establezca el chat
         }}
       />
     );

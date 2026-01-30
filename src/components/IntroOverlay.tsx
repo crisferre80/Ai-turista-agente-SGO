@@ -24,37 +24,37 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
     const [isVisible, setIsVisible] = useState(true);
     const [images] = useState<string[]>(INTRO_IMAGES);
     const audioRef = React.useRef<HTMLAudioElement | null>(null);
-    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [isSpeaking] = useState(false);
 
-    // Audio de bienvenida
-    useEffect(() => {
-        const playWelcomeAudio = async () => {
-            try {
-                const welcomeText = "¡Hola changos y chinitas! Bienvenidos a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. Toca el botón de recorrer para comenzar esta aventura inolvidable.";
-                const response = await fetch('/api/speech', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: welcomeText }),
-                });
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    if (audioRef.current) {
-                        audioRef.current.src = url;
-                        audioRef.current.addEventListener('play', () => setIsSpeaking(true));
-                        audioRef.current.addEventListener('ended', () => setIsSpeaking(false));
-                        audioRef.current.addEventListener('pause', () => setIsSpeaking(false));
-                        audioRef.current.play().catch(() => {
-                            console.log('Autoplay blocked - waiting for user interaction');
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error('Welcome audio error:', err);
-            }
-        };
-        playWelcomeAudio();
-    }, []);
+    // No hacer autoplay de audio aquí, ya que el chat se encargará del mensaje de bienvenida
+    // useEffect(() => {
+    //     const playWelcomeAudio = async () => {
+    //         try {
+    //             const welcomeText = "¡Hola changos y chinitas! Bienvenidos a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. Toca el botón de recorrer para comenzar esta aventura inolvidable.";
+    //             const response = await fetch('/api/speech', {
+    //                 method: 'POST',
+    //                 headers: { 'Content-Type': 'application/json' },
+    //                 body: JSON.stringify({ text: welcomeText }),
+    //             });
+    //             if (response.ok) {
+    //                 const blob = await response.blob();
+    //                 const url = URL.createObjectURL(blob);
+    //                 if (audioRef.current) {
+    //                     audioRef.current.src = url;
+    //                     audioRef.current.addEventListener('play', () => setIsSpeaking(true));
+    //                     audioRef.current.addEventListener('ended', () => setIsSpeaking(false));
+    //                     audioRef.current.addEventListener('pause', () => setIsSpeaking(false));
+    //                     audioRef.current.play().catch(() => {
+    //                         console.log('Autoplay blocked - waiting for user interaction');
+    //                     });
+    //                 }
+    //             }
+    //         } catch (err) {
+    //             console.error('Welcome audio error:', err);
+    //         }
+    //     };
+    //     playWelcomeAudio();
+    // }, []);
 
     // Slideshow de fondo
     useEffect(() => {

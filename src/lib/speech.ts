@@ -5,6 +5,29 @@ export interface VoiceOption {
   voiceURI: string;
 }
 
+// Helper function to clean text for natural speech
+const cleanTextForSpeech = (text: string): string => {
+  return text
+    // Remove markdown formatting
+    .replace(/\*\*(.*?)\*\*/g, '$1') // Bold markdown **text** -> text
+    .replace(/\*(.*?)\*/g, '$1') // Italic markdown *text* -> text
+    .replace(/`(.*?)`/g, '$1') // Code markdown `text` -> text
+    .replace(/#{1,6}\s/g, '') // Headers # ## ### -> remove
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Links [text](url) -> text
+    .replace(/!\[(.*?)\]\(.*?\)/g, '$1') // Images ![alt](url) -> alt
+    // Remove special characters that sound unnatural
+    .replace(/[_~\[\]{}|\\<>]/g, ' ') // Remove underscores, tildes, brackets, etc.
+    .replace(/\n+/g, '. ') // Replace newlines with periods for natural pauses
+    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+    // Make it more conversational
+    .replace(/\b(USD|ARS|\$)\s*(\d+)/gi, '$2 pesos') // Currency formatting
+    .replace(/\bkm\b/gi, 'kilómetros') // Abbreviations
+    .replace(/\bm\b(?=\s|$)/gi, 'metros') // Meters
+    .replace(/&/g, 'y') // Ampersands
+    .replace(/\s+\./g, '.') // Remove spaces before periods
+    .trim();
+};
+
 let voices: SpeechSynthesisVoice[] = [];
 
 export const loadVoices = (): Promise<SpeechSynthesisVoice[]> => {
@@ -62,13 +85,26 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     return;
   }
 
-  console.log('santiSpeak called with source:', opts?.source);
+  // Clean text for natural speech
+  const cleanText = cleanTextForSpeech(text);
+  console.log('santiSpeak: Original text:', text.substring(0, 50));
+  console.log('santiSpeak: Cleaned text:', cleanText.substring(0, 50));
+
+  // Si force=true, detener cualquier narración en curso
+  if (opts?.force && _isNarrating) {
+    console.log('🔇 santiSpeak: Force mode - stopping current narration');
+    stopSantiNarration();
+  }
+
+  console.log('santiSpeak called with source:', opts?.source, opts?.force ? '(FORCED)' : '');
 
   try {
     if (typeof window !== 'undefined') {
       // Announce narration to any listeners (e.g., Map) so they can react and navigate
-      window.dispatchEvent(new CustomEvent('santi:narrate', { detail: { text, source: opts?.source } }));
-      console.log('Dispatched santi:narrate event with source:', opts?.source);
+      window.dispatchEvent(new CustomEvent('santi:narrate', { 
+        detail: { text: cleanText, source: opts?.source, force: opts?.force } // Use cleaned text
+      }));
+      console.log('Dispatched santi:narrate event with source:', opts?.source, 'force:', opts?.force);
       // Note: 'santi:narration:start' will be emitted when audio actually starts playing
     }
   } catch (e) { /* ignore dispatch errors */ }
@@ -80,7 +116,7 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     console.log('Using browser TTS as fallback');
     try {
       const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(cleanText); // Use cleaned text
       const spanishVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
       if (spanishVoice) utterance.voice = spanishVoice;
       utterance.lang = 'es-ES';
@@ -90,7 +126,7 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
       // Emit start event when speech begins
       try {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+          window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text: cleanText, source: opts?.source } }));
         }
       } catch (e) { /* ignore */ }
       
@@ -128,7 +164,7 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
   fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text: cleanText }), // Use cleaned text
   })
     .then(response => {
       if (response.status === 401) throw new Error("API_KEY_MISSING");
@@ -144,7 +180,7 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
         // Emit start event when audio actually begins playing
         try {
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text, source: opts?.source } }));
+            window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text: cleanText, source: opts?.source } }));
           }
         } catch (e) { /* ignore */ }
       }).catch(err => {

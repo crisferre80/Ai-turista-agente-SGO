@@ -58,11 +58,31 @@ export async function POST(req: Request) {
             'cómo voy', 'como voy', 'cómo ir', 'como ir',
             'direcciones a', 'direcciones para', 'ruta a', 'ruta para',
             'camino a', 'camino para', 'indicame como', 'indícame cómo',
-            'llévame a', 'llevame a', 'ir a', 'voy a'
+            'llévame a', 'llevame a', 'muéstrame la ruta', 'muestrame la ruta',
+            'cómo puedo llegar', 'como puedo llegar', 'quiero ir a',
+            'navegar a', 'navega a', 'ruta hasta', 'direcciones hasta'
         ];
+        
+        // Detectar consultas de INFORMACIÓN de lugares (NO rutas)
+        const infoKeywords = [
+            'dónde puedo', 'donde puedo', 'qué hay', 'que hay',
+            'qué me recomiendas', 'que me recomiendas', 'recomendaciones',
+            'dónde está', 'donde esta', 'qué lugares', 'que lugares',
+            'lugares para', 'sitios para', 'opciones para',
+            'información sobre', 'informacion sobre', 'háblame de', 'hablame de',
+            'cuéntame sobre', 'cuentame sobre', 'describen', 'describe',
+            'conoces algún', 'conoces algun', 'me sugieres', 'sugerencias'
+        ];
+        
+        const isInfoQuery = lastMessage && 
+            typeof lastMessage.content === 'string' &&
+            infoKeywords.some(keyword => 
+                lastMessage.content.toLowerCase().includes(keyword)
+            );
         
         const isRouteQuery = lastMessage && 
             typeof lastMessage.content === 'string' &&
+            !isInfoQuery && // NO es consulta de información
             routeKeywords.some(keyword => 
                 lastMessage.content.toLowerCase().includes(keyword)
             );
@@ -151,26 +171,106 @@ export async function POST(req: Request) {
     ${localContext}
     `;
 
-        const model = getGeminiModel();
-        
-        // Convertir mensajes al formato de Gemini
-        const chatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
-        }));
-        
-        const lastUserMessage = messages[messages.length - 1].content;
-        
-        const chat = model.startChat({
-            history: chatHistory,
-            generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 1024,
-            },
-        });
-        
-        const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
-        const reply = result.response.text();
+                // Decide provider based on app settings
+        const { getAppSettings } = await import('@/lib/getSettings');
+        const settings = await getAppSettings();
+        const iaProvider = settings?.ia_provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'openai');
+        const iaModel = settings?.ia_model || undefined;
+
+        let reply: string;
+
+        if (iaProvider === 'openai') {
+            const openai = (await import('@/lib/openai')).default;
+            const oaModel = iaModel || process.env.OPENAI_MODEL || 'gpt-4o';
+
+            const response = await openai.chat.completions.create({
+                model: oaModel,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...messages
+                ],
+                temperature: 0.7
+            });
+
+            reply = response.choices[0].message.content;
+        } else {
+            // Gemini
+            try {
+                const model = getGeminiModel(iaModel);
+                let chatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
+                    role: msg.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: msg.content }]
+                }));
+                
+                // Gemini requires chat history to start with a 'user' message
+                // If the first message is from 'model', remove it or adjust the history
+                if (chatHistory.length > 0 && chatHistory[0].role === 'model') {
+                    console.log('Gemini: Removing leading model message to fix history format');
+                    chatHistory = chatHistory.slice(1);
+                }
+                
+                // If history is empty or starts with model, ensure we have a valid structure
+                const lastUserMessage = messages[messages.length - 1].content;
+                const chat = model.startChat({ history: chatHistory, generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } });
+                const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
+                reply = result.response.text();
+            } catch (err) {
+                console.error('Gemini error:', err);
+                
+                // If it's a model not found error, attempt fallback to a working model
+                if ((err as any).message?.includes('not found') || (err as any).message?.includes('404')) {
+                    console.log('Model not found, attempting fallback to gemini-1.5-flash');
+                    try {
+                        const fallbackModel = getGeminiModel('gemini-1.5-flash');
+                        // Recreate chatHistory for fallback to ensure it's valid
+                        let fallbackChatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
+                            role: msg.role === 'assistant' ? 'model' : 'user',
+                            parts: [{ text: msg.content }]
+                        }));
+                        
+                        // Ensure fallback history also starts with 'user'
+                        if (fallbackChatHistory.length > 0 && fallbackChatHistory[0].role === 'model') {
+                            console.log('Gemini fallback: Removing leading model message to fix history format');
+                            fallbackChatHistory = fallbackChatHistory.slice(1);
+                        }
+                        
+                        const chat = fallbackModel.startChat({ 
+                            history: fallbackChatHistory, 
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } 
+                        });
+                        const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
+                        reply = result.response.text();
+                        console.log('Fallback model successful, consider updating admin settings');
+                    } catch (fallbackErr) {
+                        console.error('Fallback model also failed:', fallbackErr);
+                        throw new Error(`El modelo de IA configurado no está disponible. Por favor, actualiza la configuración en el panel de administración. Modelos recomendados: gemini-1.5-flash, gemini-1.5-pro`);
+                    }
+                } else {
+                    // For other errors, attempt to suggest available models to the admin
+                    try {
+                        const genAI = (await import('@/lib/gemini')).default as any;
+                        let models: any[] = [];
+                        if (typeof genAI.listModels === 'function') {
+                            const lm = await genAI.listModels();
+                            models = lm?.models || [];
+                        } else {
+                            const apiKey = process.env.GEMINI_API_KEY;
+                            if (apiKey) {
+                                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { Authorization: `Bearer ${apiKey}` } });
+                                if (r.ok) {
+                                    const data = await r.json();
+                                    models = data?.models || [];
+                                }
+                            }
+                        }
+                        const modelNames = models.map(m => m.name).slice(0, 50);
+                        throw new Error(`[GoogleGenerativeAI Error]: ${(err as Error).message}. Available models: ${modelNames.join(', ')}`);
+                    } catch (innerErr) {
+                        throw err;
+                    }
+                }
+            }
+        }
         
         // Detect if a specific place is mentioned in the reply
         let placeId: string | null = null;
@@ -178,9 +278,15 @@ export async function POST(req: Request) {
         let placeDescription = null;
         let isRouteOnly = false; // Flag para indicar que solo se debe mostrar ruta
         
+        // Debug: Log what type of query was detected
+        if (isInfoQuery) {
+            console.log('ℹ️  INFO query detected:', lastMessage.content);
+        }
+        
         // Si es consulta de ruta, marcar como tal pero SÍ extraer placeName para trazar ruta
         if (isRouteQuery) {
             isRouteOnly = true;
+            console.log('🗺️  ROUTE query detected:', lastMessage.content);
             console.log('Route query detected, extracting placeName but not setting placeId');
             
             // Buscar el nombre del lugar en la respuesta de la IA
@@ -258,6 +364,9 @@ export async function POST(req: Request) {
 
     } catch (error) {
         console.error('Error in chat route:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const message = error instanceof Error ? error.message : String(error);
+        const payload: any = { error: true, message };
+        if (process.env.NODE_ENV !== 'production' && error instanceof Error) payload.stack = error.stack;
+        return NextResponse.json(payload, { status: 500 });
     }
 }

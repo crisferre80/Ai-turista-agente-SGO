@@ -4,6 +4,7 @@ import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
+import AdminAISettings from '@/components/AdminAISettings';
 import { takePhoto } from '@/lib/photoService';
 import EmailManager from '@/email/EmailManager';
 
@@ -714,6 +715,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('frases'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'frases')}>💬 Frases</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
+                    <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -751,7 +753,7 @@ export default function AdminDashboard() {
                                 activeTab === 'frases' ? 'Frases de Santi' :
                                 activeTab === 'videos' ? 'Multimedia' :
                                 activeTab === 'emails' ? 'Emails' :
-                                activeTab === 'planes' ? 'Planes de Pago' : 'Santi'}
+                                activeTab === 'planes' ? 'Planes de Pago' : (activeTab === 'ai' ? 'IA y TTS' : 'Santi')}
                     </h1>
                     {loading && <span className="loading-spinner"></span>}
                 </header>
@@ -1435,6 +1437,13 @@ export default function AdminDashboard() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'ai' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>🤖 IA y TTS</h3>
+                        <AdminAISettings />
                     </div>
                 )}
 

@@ -48,17 +48,81 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   // Narrate place description on load
   useEffect(() => {
-    if (place.name && place.description && !hasNarratedRef.current) {
+    if (place.name && !hasNarratedRef.current) {
       hasNarratedRef.current = true;
-      const narrationText = `Aquí tienes más detalles sobre ${place.name}. ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
-      console.log('PlaceDetailClient: Dispatching narration event:', narrationText.substring(0, 50));
-      const event = new CustomEvent('santi:narrate', {
-        detail: { text: narrationText, source: 'place-detail' }
-      });
-      window.dispatchEvent(event);
-      console.log('PlaceDetailClient: Narration event dispatched');
+      
+      const checkForPendingNarration = (retryCount = 0) => {
+        console.log('PlaceDetailClient: Checking for pending narration, retry:', retryCount);
+        
+        // Check if there's a pending narration from ChatInterface navigation
+        let narrationText = '';
+        let hasPendingNarration = false;
+        
+        try {
+          const narratingPlace = localStorage.getItem('santi:narratingPlace');
+          const narratingTextStored = localStorage.getItem('santi:narratingText');
+          
+          console.log('PlaceDetailClient: Storage check:', {
+            narratingPlace,
+            currentPlaceId: place.id,
+            hasStoredText: !!narratingTextStored
+          });
+          
+          if (narratingPlace === place.id && narratingTextStored) {
+            narrationText = narratingTextStored;
+            hasPendingNarration = true;
+            // Clear the stored narration so it doesn't repeat on refresh
+            localStorage.removeItem('santi:narratingPlace');
+            localStorage.removeItem('santi:narratingText');
+            console.log('PlaceDetailClient: Using pending narration from ChatInterface');
+          }
+        } catch (e) {
+          console.warn('PlaceDetailClient: Could not access localStorage for narration', e);
+        }
+        
+        // If no pending narration found and we haven't retried yet, try again after a short delay
+        if (!hasPendingNarration && retryCount < 2) {
+          console.log('PlaceDetailClient: No pending narration found, retrying in 100ms');
+          setTimeout(() => checkForPendingNarration(retryCount + 1), 100);
+          return;
+        }
+        
+        // If no pending narration after retries, create default one
+        if (!hasPendingNarration && place.description) {
+          narrationText = `Aquí tienes más detalles sobre ${place.name}. ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
+          console.log('PlaceDetailClient: Using default narration text');
+        }
+        
+        // Only narrate if we have text
+        if (narrationText) {
+          console.log('PlaceDetailClient: Starting narration:', {
+            textPreview: narrationText.substring(0, 50),
+            hasPendingNarration,
+            force: hasPendingNarration
+          });
+          
+          // Add a small delay to ensure ChatInterface is mounted and listening
+          setTimeout(() => {
+            console.log('PlaceDetailClient: Dispatching narration event after delay');
+            const event = new CustomEvent('santi:narrate', {
+              detail: { 
+                text: narrationText, 
+                source: 'place-detail',
+                force: hasPendingNarration // Force if it's a pending narration from ChatInterface
+              }
+            });
+            window.dispatchEvent(event);
+            console.log('PlaceDetailClient: Narration event dispatched successfully');
+          }, 100); // Small delay to ensure ChatInterface is ready
+        } else {
+          console.log('PlaceDetailClient: No narration text available');
+        }
+      };
+      
+      // Start the narration check process
+      checkForPendingNarration();
     }
-  }, [place.name, place.description]);
+  }, [place.id, place.name, place.description]);
   
   // Calculate average rating
   useEffect(() => {

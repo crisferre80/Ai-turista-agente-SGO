@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Santi Animation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .image-test {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .santi-avatar {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .speaking {
+            border-color: #f1c40f;
+            box-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
+            animation: speakingPulse 1s ease-in-out infinite alternate;
+        }
+        @keyframes speakingPulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🤖 Test de Animación de Santi</h1>
+        
+        <div class="image-test">
+            <h3>Imagen Estática (.png)</h3>
+            <img 
+                src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png" 
+                alt="Santi Estático"
+                class="santi-avatar"
+                id="staticImage"
+            />
+            <div class="info">
+                <strong>URL:</strong> guiarobotalpha_vv5jbj.png
+            </div>
+        </div>
+
+        <div class="image-test">
+            <h3>Imagen Animada (.webp)</h3>
+            <img 
+                src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp" 
+                alt="Santi Animado"
+                class="santi-avatar"
+                id="animatedImage"
+            />
+            <div class="info">
+                <strong>URL:</strong> guiarobotalpha_vv5jbj.webp<br>
+                <strong>Estado:</strong> <span id="animationStatus">Verificando...</span>
+            </div>
+        </div>
+
+        <div class="image-test">
+            <h3>Simulación Interactiva</h3>
+            <img 
+                src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png" 
+                alt="Santi Interactivo"
+                class="santi-avatar"
+                id="interactiveImage"
+            />
+            <br><br>
+            <button onclick="toggleSpeaking()">🎯 Alternar Hablando / Silencioso</button>
+            <div class="info">
+                <strong>Estado actual:</strong> <span id="currentState">Silencioso</span><br>
+                <strong>Imagen actual:</strong> <span id="currentImage">PNG (estático)</span>
+            </div>
+        </div>
+
+        <div class="image-test">
+            <h3>Información Técnica</h3>
+            <div class="info">
+                <strong>Navegador soporta WebP:</strong> <span id="webpSupport">Verificando...</span><br>
+                <strong>Animaciones CSS activas:</strong> <span id="cssAnimations">Verificando...</span><br>
+                <strong>Console logs:</strong> Abre DevTools (F12) para ver logs detallados
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isSpeaking = false;
+
+        // Verificar soporte WebP
+        function checkWebPSupport() {
+            const webP = new Image();
+            webP.onload = webP.onerror = function () {
+                const support = (webP.height === 2);
+                document.getElementById('webpSupport').textContent = support ? 'Sí ✅' : 'No ❌';
+                console.log('WebP Support:', support);
+            };
+            webP.src = 'data:image/webp;base64,UklGRjoAAABXRUJQVlA4IC4AAACyAgCdASoCAAIALmk0mk0iIiIiIgBoSygABc6WWgAA/veff/0PP8bA//LwYAAA';
+        }
+
+        // Verificar si las animaciones CSS están funcionando
+        function checkCSSAnimations() {
+            const testElement = document.createElement('div');
+            testElement.style.animation = 'speakingPulse 1s ease-in-out infinite alternate';
+            document.body.appendChild(testElement);
+            
+            const computedStyle = window.getComputedStyle(testElement);
+            const animationName = computedStyle.animationName;
+            document.body.removeChild(testElement);
+            
+            const working = animationName !== 'none';
+            document.getElementById('cssAnimations').textContent = working ? 'Sí ✅' : 'No ❌';
+            console.log('CSS Animations:', working, 'Animation name:', animationName);
+        }
+
+        // Función para alternar entre hablando y silencioso
+        function toggleSpeaking() {
+            isSpeaking = !isSpeaking;
+            const img = document.getElementById('interactiveImage');
+            const stateSpan = document.getElementById('currentState');
+            const imageSpan = document.getElementById('currentImage');
+            
+            console.log('🎯 Toggleing speaking state to:', isSpeaking);
+            
+            if (isSpeaking) {
+                img.src = 'https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp';
+                img.className = 'santi-avatar speaking';
+                stateSpan.textContent = 'Hablando 🗣️';
+                imageSpan.textContent = 'WEBP (animado)';
+            } else {
+                img.src = 'https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png';
+                img.className = 'santi-avatar';
+                stateSpan.textContent = 'Silencioso 🤫';
+                imageSpan.textContent = 'PNG (estático)';
+            }
+        }
+
+        // Verificar si la imagen animada se está cargando correctamente
+        function checkAnimatedImage() {
+            const img = document.getElementById('animatedImage');
+            const status = document.getElementById('animationStatus');
+            
+            img.onload = function() {
+                status.textContent = 'Cargada correctamente ✅';
+                console.log('✅ Imagen WebP animada cargada correctamente');
+            };
+            
+            img.onerror = function() {
+                status.textContent = 'Error al cargar ❌';
+                console.error('❌ Error al cargar imagen WebP animada');
+            };
+        }
+
+        // Ejecutar verificaciones cuando la página carga
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 Iniciando verificaciones de animación de Santi...');
+            checkWebPSupport();
+            checkCSSAnimations();
+            checkAnimatedImage();
+        });
+    </script>
+</body>
+</html>
