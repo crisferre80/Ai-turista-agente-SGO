@@ -143,6 +143,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             .trim();
     }, []);
 
+    // Voice commands help state
+    const [showVoiceHelp, setShowVoiceHelp] = useState(false);
+
     // Text-to-Speech Helper
     const playAudioResponse = useCallback(async (text: string, force = false) => {
         // Clean text for natural speech
@@ -305,6 +308,141 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             (window as Window & typeof globalThis).focusPlaceOnMap!(text);
         }
     }, [playAudioResponse]);
+
+    // Voice navigation command processor - defined after triggerAssistantMessage and playAudioResponse
+    const processVoiceNavigationCommand = useCallback((transcript: string): boolean => {
+        const lowerTranscript = transcript.toLowerCase().trim();
+        console.log('🎙️ Processing voice command:', lowerTranscript);
+        
+        // Helper to trigger messages without circular dependency
+        const triggerMessage = (text: string, skipMapFocus = false) => {
+            updateInteractionTime();
+            setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+            // Call playAudioResponse directly if it exists
+            if (typeof playAudioResponse === 'function') {
+                playAudioResponse(text);
+            }
+        };
+
+        // Helper for sending regular messages  
+        const sendMessage = (text: string) => {
+            setInput(text);
+            // Call handleSend directly if it exists
+            if (typeof handleSend === 'function') {
+                handleSend(text);
+            }
+        };
+        
+        // Navigation commands
+        const navigationCommands = [
+            // Home/Main page
+            { 
+                keywords: ['inicio', 'página principal', 'home', 'principal', 'ir al inicio', 'volver al inicio'],
+                action: () => {
+                    router.push('/');
+                    triggerMessage('Te llevo al inicio, chango.');
+                }
+            },
+            // Explore/Map
+            {
+                keywords: ['mapa', 'explorar', 'ver mapa', 'mostrar mapa', 'ir al mapa', 'exploración'],
+                action: () => {
+                    router.push('/explorar');
+                    triggerMessage('Te llevo al mapa para explorar, chango.');
+                }
+            },
+            // Profile
+            {
+                keywords: ['perfil', 'mi perfil', 'ver perfil', 'ir al perfil', 'configuración'],
+                action: () => {
+                    router.push('/profile');
+                    triggerMessage('Te llevo a tu perfil, chango.');
+                }
+            },
+            // Dashboard (for admins)
+            {
+                keywords: ['dashboard', 'panel', 'administración', 'admin', 'ir al dashboard'],
+                action: () => {
+                    router.push('/dashboard');
+                    triggerMessage('Te llevo al panel de administración, chango.');
+                }
+            },
+            // Go back
+            {
+                keywords: ['atrás', 'volver', 'regresar', 'ir atrás', 'página anterior'],
+                action: () => {
+                    router.back();
+                    triggerMessage('Volvemos atrás, chango.');
+                }
+            },
+            // Refresh
+            {
+                keywords: ['actualizar', 'refrescar', 'recargar', 'actualizar página'],
+                action: () => {
+                    window.location.reload();
+                    triggerMessage('Actualizando la página, chango.');
+                }
+            },
+            // Audio control commands
+            {
+                keywords: ['silencio', 'cállate', 'para', 'detener', 'basta', 'stop'],
+                action: () => {
+                    // Stop current narration
+                    if (audioRef.current && !audioRef.current.paused) {
+                        audioRef.current.pause();
+                        audioRef.current.currentTime = 0;
+                        setIsSpeaking(false);
+                    }
+                    // Also trigger global stop
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                    }
+                    triggerMessage('Me quedo callado, chango.');
+                }
+            },
+            {
+                keywords: ['repetir', 'repite', 'otra vez', 'de nuevo'],
+                action: () => {
+                    // Get last assistant message and repeat it
+                    const lastAssistantMessage = messages.findLast(m => m.role === 'assistant');
+                    if (lastAssistantMessage && typeof playAudioResponse === 'function') {
+                        playAudioResponse(lastAssistantMessage.content);
+                        triggerMessage('Te repito lo último, chango.');
+                    }
+                }
+            }
+        ];
+
+        // Check for navigation commands
+        for (const command of navigationCommands) {
+            if (command.keywords.some(keyword => lowerTranscript.includes(keyword))) {
+                console.log('🎯 Voice navigation command detected:', command.keywords[0]);
+                command.action();
+                return true; // Command processed
+            }
+        }
+
+        // Check for search commands
+        const searchPatterns = [
+            /^buscar (.+)$/i,
+            /^busca (.+)$/i,
+            /^búsqueda de (.+)$/i,
+            /^encuentra (.+)$/i,
+            /^encontrar (.+)$/i
+        ];
+
+        for (const pattern of searchPatterns) {
+            const match = lowerTranscript.match(pattern);
+            if (match && match[1]) {
+                console.log('🔍 Voice search command detected:', match[1]);
+                sendMessage(match[1]);
+                triggerMessage(`Buscando ${match[1]}, chango.`);
+                return true; // Command processed
+            }
+        }
+
+        return false; // No navigation command found
+    }, [router, setInput, audioRef, setIsSpeaking, messages]); // Remove circular dependencies
 
     const playUserStory = useCallback(async (url: string, name: string) => {
         updateInteractionTime();
@@ -607,6 +745,24 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         window.addEventListener('santi:narration:end', handleNarrationEnd);
         window.addEventListener('santi:narrate', handleNarrate);
         
+        // Global voice navigation activation
+        const activateVoiceNav = () => {
+            if (!isListening && typeof window !== 'undefined') {
+                toggleListening();
+            }
+        };
+        
+        // Add keyboard shortcut for voice activation (Ctrl+Shift+V)
+        const handleKeyboard = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyV') {
+                e.preventDefault();
+                activateVoiceNav();
+            }
+        };
+        
+        window.addEventListener('activate-voice-nav', activateVoiceNav);
+        window.addEventListener('keydown', handleKeyboard);
+        
         console.log('🎯 ChatInterface: Event listeners registered successfully');
         
         window.santiNarrate = (text: string) => {
@@ -634,6 +790,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             window.removeEventListener('santi:narration:start', handleNarrationStart);
             window.removeEventListener('santi:narration:end', handleNarrationEnd);
             window.removeEventListener('santi:narrate', handleNarrate);
+            window.removeEventListener('activate-voice-nav', activateVoiceNav);
+            window.removeEventListener('keydown', handleKeyboard);
             if (window.santiNarrate) delete window.santiNarrate;
             if (window.santiSpeak) delete window.santiSpeak;
             if (window.testSantiAnimation) delete window.testSantiAnimation;
@@ -741,7 +899,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             const transcript = event.results?.[0]?.[0]?.transcript;
             console.log("Result received:", transcript);
             if (transcript) {
-                handleSend(transcript);
+                // First, check if it's a voice navigation command
+                const isNavigationCommand = processVoiceNavigationCommand(transcript);
+                
+                // If not a navigation command, process as normal chat
+                if (!isNavigationCommand) {
+                    handleSend(transcript);
+                }
             }
         };
 
@@ -1298,13 +1462,121 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: '1.2rem',
-                            flexShrink: 0
+                            flexShrink: 0,
+                            marginRight: '8px'
                         }}
                     >
                         {isListening ? '⏹️' : '🎙️'}
                     </button>
+                    
+                    {/* Voice Commands Help Button */}
+                    <button
+                        onClick={() => setShowVoiceHelp(true)}
+                        style={{
+                            background: COLOR_BLUE,
+                            color: 'white',
+                            border: `none`,
+                            borderRadius: '50%',
+                            width: '36px',
+                            height: '36px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1rem',
+                            flexShrink: 0
+                        }}
+                        title="Comandos de voz disponibles"
+                    >
+                        ❓
+                    </button>
                 </div>
             </div>
+
+            {/* Voice Commands Help Modal */}
+            {showVoiceHelp && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        background: 'white',
+                        padding: '30px',
+                        borderRadius: '15px',
+                        maxWidth: '90%',
+                        width: '400px',
+                        maxHeight: '80%',
+                        overflow: 'auto',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '20px'
+                        }}>
+                            <h3 style={{ margin: 0, color: COLOR_BLUE }}>🎙️ Comandos de Voz</h3>
+                            <button
+                                onClick={() => setShowVoiceHelp(false)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '1.5rem',
+                                    cursor: 'pointer',
+                                    padding: '5px'
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        
+                        <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+                            <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>📍 Navegación</h4>
+                            <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
+                                <li><strong>"Inicio"</strong> - Ir a la página principal</li>
+                                <li><strong>"Mapa"</strong> - Explorar lugares</li>
+                                <li><strong>"Perfil"</strong> - Ver mi perfil</li>
+                                <li><strong>"Atrás"</strong> - Página anterior</li>
+                                <li><strong>"Actualizar"</strong> - Recargar página</li>
+                            </ul>
+                            
+                            <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>🔍 Búsqueda</h4>
+                            <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
+                                <li><strong>"Buscar restaurantes"</strong></li>
+                                <li><strong>"Encuentra hoteles"</strong></li>
+                                <li><strong>"¿Dónde puedo comer?"</strong></li>
+                            </ul>
+                            
+                            <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>🔊 Control de Audio</h4>
+                            <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
+                                <li><strong>"Silencio"</strong> / <strong>"Para"</strong> - Detener narración</li>
+                                <li><strong>"Repetir"</strong> - Repetir último mensaje</li>
+                            </ul>
+                            
+                            <div style={{ 
+                                background: '#f8f9fa', 
+                                padding: '15px', 
+                                borderRadius: '8px',
+                                border: `2px solid ${COLOR_GOLD}`,
+                                marginTop: '15px'
+                            }}>
+                                <strong style={{ color: COLOR_BLUE }}>💡 Tips:</strong> 
+                                <br />• Habla con claridad y espera a que aparezca el micrófono antes de dar el siguiente comando
+                                <br />• Los comandos de navegación funcionan incluso mientras Santi está hablando
+                                <br />• Usa <strong>Ctrl+Shift+V</strong> para activar comandos de voz desde el teclado
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style jsx>{`
                 @keyframes floatSanti {
