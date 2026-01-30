@@ -192,7 +192,7 @@ export async function POST(req: Request) {
                 temperature: 0.7
             });
 
-            reply = response.choices[0].message.content;
+            reply = response.choices[0].message.content || 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?';
         } else {
             // Gemini
             try {
