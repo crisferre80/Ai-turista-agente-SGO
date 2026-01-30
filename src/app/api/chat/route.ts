@@ -217,6 +217,9 @@ export async function POST(req: Request) {
             } catch (err) {
                 console.error('Gemini error:', err);
                 
+                // Extract last user message for fallback use
+                const lastUserMessage = messages[messages.length - 1].content;
+                
                 // If it's a model not found error, attempt fallback to a working model
                 if ((err as any).message?.includes('not found') || (err as any).message?.includes('404')) {
                     console.log('Model not found, attempting fallback to gemini-1.5-flash');
