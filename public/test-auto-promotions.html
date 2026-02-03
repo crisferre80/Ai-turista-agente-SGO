@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Auto-Promociones</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #ffd700;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .result {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #4ade80;
+        }
+        .error {
+            color: #f87171;
+        }
+        .warning {
+            color: #fbbf24;
+        }
+        .info {
+            color: #60a5fa;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-success {
+            background: #4ade80;
+            color: black;
+        }
+        .status-error {
+            background: #f87171;
+            color: white;
+        }
+        .status-pending {
+            background: #fbbf24;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Test de Auto-Promociones</h1>
+        
+        <div class="test-section">
+            <h2>1. Test de Scheduler <span id="scheduler-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Verifica si el scheduler encuentra promociones activas.</p>
+            <button onclick="testScheduler()">▶️ Probar Scheduler</button>
+            <div id="scheduler-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Test de API Auto-Promotion <span id="api-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Verifica si la API retorna una promoción lista para ejecutar.</p>
+            <button onclick="testAutoPromotionAPI()">▶️ Probar API</button>
+            <div id="api-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. Ver Todas las Promociones <span id="list-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Lista todas las promociones en la base de datos.</p>
+            <button onclick="listPromotions()">▶️ Listar Promociones</button>
+            <div id="list-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. Test de Frecuencia <span id="frequency-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Simula el cálculo de frecuencia para ver si la promoción debería ejecutarse.</p>
+            <button onclick="testFrequency()">▶️ Calcular Frecuencia</button>
+            <div id="frequency-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. Reset Last Executed <span id="reset-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Resetea el campo last_executed para forzar que la promoción se ejecute.</p>
+            <input type="text" id="promo-id" placeholder="ID de la promoción" style="width: 300px; padding: 8px; border-radius: 4px; border: none; margin-right: 10px;">
+            <button onclick="resetLastExecuted()">🔄 Reset</button>
+            <div id="reset-result" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>6. Test Completo <span id="full-status" class="status-badge status-pending">PENDIENTE</span></h2>
+            <p>Ejecuta todos los tests en secuencia.</p>
+            <button onclick="runFullTest()">🚀 Ejecutar Test Completo</button>
+            <div id="full-result" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.innerHTML = content;
+        }
+
+        function updateStatus(statusId, status) {
+            const element = document.getElementById(statusId);
+            element.className = `status-badge status-${status}`;
+            element.textContent = status === 'success' ? '✅ OK' : status === 'error' ? '❌ ERROR' : '⏳ PENDIENTE';
+        }
+
+        async function testScheduler() {
+            showResult('scheduler-result', '⏳ Consultando scheduler...', 'info');
+            updateStatus('scheduler-status', 'pending');
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/admin/auto-promotions/scheduler`);
+                const data = await response.json();
+
+                let output = `Estado: ${response.status}\n\n`;
+                output += `✅ Success: ${data.success}\n`;
+                output += `📊 Promociones encontradas: ${data.count}\n`;
+                output += `🕐 Hora actual: ${data.current_time}\n`;
+                output += `📅 Día actual: ${data.current_day}\n\n`;
+
+                if (data.count > 0) {
+                    output += `🎯 PROMOCIONES LISTAS PARA EJECUTAR:\n\n`;
+                    data.promotions.forEach((promo, idx) => {
+                        output += `${idx + 1}. ${promo.title}\n`;
+                        output += `   ID: ${promo.id}\n`;
+                        output += `   Negocio: ${promo.business_name}\n`;
+                        output += `   Frecuencia: ${promo.frequency_type} (${promo.frequency_value})\n`;
+                        output += `   Horario: ${promo.start_time} - ${promo.end_time}\n`;
+                        output += `   Días: ${promo.days_of_week}\n`;
+                        output += `   Última ejecución: ${promo.last_executed || 'Nunca'}\n`;
+                        output += `   Prioridad: ${promo.priority}\n\n`;
+                    });
+                    updateStatus('scheduler-status', 'success');
+                } else {
+                    output += `⚠️ No hay promociones listas para ejecutar.\n`;
+                    output += `\nPosibles razones:\n`;
+                    output += `- No hay promociones activas\n`;
+                    output += `- Las promociones no cumplen los criterios de horario\n`;
+                    output += `- Las promociones no cumplen los criterios de frecuencia\n`;
+                    output += `- Las promociones no están configuradas para el día actual\n`;
+                    updateStatus('scheduler-status', 'error');
+                }
+
+                showResult('scheduler-result', output, data.count > 0 ? 'success' : 'warning');
+            } catch (error) {
+                showResult('scheduler-result', `❌ ERROR: ${error.message}`, 'error');
+                updateStatus('scheduler-status', 'error');
+            }
+        }
+
+        async function testAutoPromotionAPI() {
+            showResult('api-result', '⏳ Consultando API...', 'info');
+            updateStatus('api-status', 'pending');
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/auto-promotion`);
+                const data = await response.json();
+
+                let output = `Estado: ${response.status}\n\n`;
+                output += `✅ Should Show: ${data.shouldShow}\n\n`;
+
+                if (data.shouldShow && data.promotion) {
+                    output += `🎯 PROMOCIÓN RETORNADA:\n\n`;
+                    output += `Título: ${data.promotion.title}\n`;
+                    output += `Negocio: ${data.promotion.business_name}\n`;
+                    output += `Mensaje: ${data.promotion.message}\n`;
+                    output += `Prioridad: ${data.promotion.priority}\n\n`;
+                    
+                    if (data.metadata) {
+                        output += `📊 METADATA:\n`;
+                        output += `Total programadas: ${data.metadata.total_promotions_scheduled}\n`;
+                        output += `Hora actual: ${data.metadata.current_time}\n`;
+                        output += `Timestamp: ${data.metadata.timestamp}\n`;
+                    }
+                    
+                    updateStatus('api-status', 'success');
+                    showResult('api-result', output, 'success');
+                } else {
+                    output += `⚠️ No hay promociones para mostrar en este momento.\n\n`;
+                    output += `Esto es normal si:\n`;
+                    output += `- La promoción ya se ejecutó recientemente\n`;
+                    output += `- No es el horario configurado\n`;
+                    output += `- No es el día configurado\n`;
+                    
+                    updateStatus('api-status', 'warning');
+                    showResult('api-result', output, 'warning');
+                }
+            } catch (error) {
+                showResult('api-result', `❌ ERROR: ${error.message}`, 'error');
+                updateStatus('api-status', 'error');
+            }
+        }
+
+        async function listPromotions() {
+            showResult('list-result', '⏳ Obteniendo promociones...', 'info');
+            updateStatus('list-status', 'pending');
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/admin/auto-promotions`);
+                const data = await response.json();
+
+                let output = `Total de promociones: ${data.promotions?.length || 0}\n\n`;
+
+                if (data.promotions && data.promotions.length > 0) {
+                    data.promotions.forEach((promo, idx) => {
+                        output += `${idx + 1}. ${promo.title}\n`;
+                        output += `   ID: ${promo.id}\n`;
+                        output += `   Estado: ${promo.is_active ? '✅ ACTIVA' : '❌ INACTIVA'}\n`;
+                        output += `   Negocio: ${promo.business_name}\n`;
+                        output += `   Frecuencia: ${promo.frequency_type} - ${promo.frequency_value}\n`;
+                        output += `   Horario: ${promo.start_time} - ${promo.end_time}\n`;
+                        output += `   Días: ${promo.days_of_week}\n`;
+                        output += `   Última ejecución: ${promo.last_executed || 'Nunca'}\n`;
+                        output += `   Prioridad: ${promo.priority}\n\n`;
+                    });
+                    updateStatus('list-status', 'success');
+                } else {
+                    output += `⚠️ No hay promociones registradas.\n`;
+                    updateStatus('list-status', 'warning');
+                }
+
+                showResult('list-result', output, data.promotions?.length > 0 ? 'success' : 'warning');
+            } catch (error) {
+                showResult('list-result', `❌ ERROR: ${error.message}`, 'error');
+                updateStatus('list-status', 'error');
+            }
+        }
+
+        async function testFrequency() {
+            showResult('frequency-result', '⏳ Calculando frecuencia...', 'info');
+            updateStatus('frequency-status', 'pending');
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/admin/auto-promotions`);
+                const data = await response.json();
+
+                if (!data.promotions || data.promotions.length === 0) {
+                    showResult('frequency-result', '⚠️ No hay promociones para calcular.', 'warning');
+                    updateStatus('frequency-status', 'warning');
+                    return;
+                }
+
+                const now = new Date();
+                let output = `🕐 Hora actual: ${now.toLocaleString('es-AR')}\n`;
+                output += `📅 Día actual: ${now.getDay()} (0=Dom, 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb)\n\n`;
+
+                data.promotions.forEach((promo, idx) => {
+                    output += `${idx + 1}. ${promo.title} (${promo.is_active ? 'ACTIVA' : 'INACTIVA'})\n`;
+                    
+                    // Check frequency
+                    let intervalMs = 0;
+                    if (promo.frequency_type === 'hourly') {
+                        intervalMs = (60 / promo.frequency_value) * 60 * 1000;
+                    } else if (promo.frequency_type === 'daily') {
+                        intervalMs = (24 * 60 / promo.frequency_value) * 60 * 1000;
+                    } else if (promo.frequency_type === 'custom') {
+                        intervalMs = promo.frequency_value * 60 * 1000;
+                    }
+
+                    output += `   Intervalo: ${intervalMs / 1000 / 60} minutos\n`;
+                    
+                    if (promo.last_executed) {
+                        const lastExec = new Date(promo.last_executed);
+                        const timeDiff = now - lastExec;
+                        const minutesPassed = Math.floor(timeDiff / 1000 / 60);
+                        output += `   Última ejecución: ${lastExec.toLocaleString('es-AR')}\n`;
+                        output += `   Tiempo desde última: ${minutesPassed} minutos\n`;
+                        output += `   ¿Debería ejecutarse? ${timeDiff >= intervalMs ? '✅ SÍ' : '❌ NO'}\n`;
+                    } else {
+                        output += `   Última ejecución: Nunca\n`;
+                        output += `   ¿Debería ejecutarse? ✅ SÍ (primera vez)\n`;
+                    }
+                    
+                    output += `\n`;
+                });
+
+                showResult('frequency-result', output, 'success');
+                updateStatus('frequency-status', 'success');
+            } catch (error) {
+                showResult('frequency-result', `❌ ERROR: ${error.message}`, 'error');
+                updateStatus('frequency-status', 'error');
+            }
+        }
+
+        async function resetLastExecuted() {
+            const promoId = document.getElementById('promo-id').value.trim();
+            
+            if (!promoId) {
+                showResult('reset-result', '⚠️ Por favor ingresa un ID de promoción.', 'warning');
+                return;
+            }
+
+            showResult('reset-result', '⏳ Obteniendo datos de la promoción...', 'info');
+            updateStatus('reset-status', 'pending');
+
+            try {
+                // Primero obtener la promoción actual
+                const getResponse = await fetch(`${BASE_URL}/api/admin/auto-promotions`);
+                const getData = await getResponse.json();
+                
+                const promo = getData.promotions?.find(p => p.id === promoId);
+                
+                if (!promo) {
+                    showResult('reset-result', `❌ No se encontró una promoción con ID: ${promoId}`, 'error');
+                    updateStatus('reset-status', 'error');
+                    return;
+                }
+
+                // Actualizar con todos los campos + last_executed en null
+                const response = await fetch(`${BASE_URL}/api/admin/auto-promotions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: promoId,
+                        business_id: promo.business_id,
+                        business_name: promo.business_name,
+                        title: promo.title,
+                        message: promo.message,
+                        frequency_type: promo.frequency_type,
+                        frequency_value: promo.frequency_value,
+                        is_active: promo.is_active,
+                        start_time: promo.start_time,
+                        end_time: promo.end_time,
+                        days_of_week: promo.days_of_week,
+                        priority: promo.priority,
+                        last_executed: null
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success || response.ok) {
+                    showResult('reset-result', `✅ Last executed reseteado correctamente para "${promo.title}".\nLa promoción debería ejecutarse en la próxima verificación.`, 'success');
+                    updateStatus('reset-status', 'success');
+                } else {
+                    showResult('reset-result', `❌ Error: ${data.error || 'Error desconocido'}`, 'error');
+                    updateStatus('reset-status', 'error');
+                }
+            } catch (error) {
+                showResult('reset-result', `❌ ERROR: ${error.message}`, 'error');
+                updateStatus('reset-status', 'error');
+            }
+        }
+
+        async function runFullTest() {
+            showResult('full-result', '🚀 Iniciando test completo...\n\n', 'info');
+            updateStatus('full-status', 'pending');
+
+            let fullOutput = '🚀 TEST COMPLETO DE AUTO-PROMOCIONES\n';
+            fullOutput += '='.repeat(60) + '\n\n';
+
+            try {
+                // Test 1: List promotions
+                fullOutput += '📋 1. LISTANDO PROMOCIONES\n';
+                fullOutput += '-'.repeat(60) + '\n';
+                const listResponse = await fetch(`${BASE_URL}/api/admin/auto-promotions`);
+                const listData = await listResponse.json();
+                fullOutput += `Total: ${listData.promotions?.length || 0} promociones\n`;
+                if (listData.promotions && listData.promotions.length > 0) {
+                    const activeCount = listData.promotions.filter(p => p.is_active).length;
+                    fullOutput += `Activas: ${activeCount}\n`;
+                    fullOutput += `Inactivas: ${listData.promotions.length - activeCount}\n`;
+                }
+                fullOutput += '\n';
+
+                // Test 2: Scheduler
+                fullOutput += '⚙️ 2. TEST DE SCHEDULER\n';
+                fullOutput += '-'.repeat(60) + '\n';
+                const schedulerResponse = await fetch(`${BASE_URL}/api/admin/auto-promotions/scheduler`);
+                const schedulerData = await schedulerResponse.json();
+                fullOutput += `Promociones listas: ${schedulerData.count || 0}\n`;
+                fullOutput += `Hora actual: ${schedulerData.current_time}\n`;
+                fullOutput += `Día actual: ${schedulerData.current_day}\n`;
+                fullOutput += '\n';
+
+                // Test 3: Auto-promotion API
+                fullOutput += '🎯 3. TEST DE API AUTO-PROMOTION\n';
+                fullOutput += '-'.repeat(60) + '\n';
+                const apiResponse = await fetch(`${BASE_URL}/api/auto-promotion`);
+                const apiData = await apiResponse.json();
+                fullOutput += `Should show: ${apiData.shouldShow}\n`;
+                if (apiData.shouldShow && apiData.promotion) {
+                    fullOutput += `✅ Promoción retornada: ${apiData.promotion.title}\n`;
+                } else {
+                    fullOutput += `⚠️ No hay promociones para mostrar ahora\n`;
+                }
+                fullOutput += '\n';
+
+                // Diagnosis
+                fullOutput += '🔍 DIAGNÓSTICO\n';
+                fullOutput += '-'.repeat(60) + '\n';
+                
+                if (listData.promotions?.length === 0) {
+                    fullOutput += `❌ PROBLEMA: No hay promociones en la base de datos\n`;
+                    fullOutput += `   SOLUCIÓN: Ejecuta el INSERT SQL para crear una promoción\n`;
+                } else if (listData.promotions?.filter(p => p.is_active).length === 0) {
+                    fullOutput += `❌ PROBLEMA: No hay promociones activas\n`;
+                    fullOutput += `   SOLUCIÓN: Activa al menos una promoción desde el panel admin\n`;
+                } else if (schedulerData.count === 0) {
+                    fullOutput += `⚠️ PROBLEMA: Hay promociones activas pero ninguna cumple los criterios\n`;
+                    fullOutput += `   POSIBLES CAUSAS:\n`;
+                    fullOutput += `   - Horario configurado no coincide con la hora actual\n`;
+                    fullOutput += `   - Día de la semana no está en la configuración\n`;
+                    fullOutput += `   - La promoción se ejecutó muy recientemente\n`;
+                    fullOutput += `   SOLUCIÓN: Revisa la configuración de horarios y días\n`;
+                } else if (!apiData.shouldShow) {
+                    fullOutput += `⚠️ PROBLEMA: El scheduler encuentra promociones pero la API no las retorna\n`;
+                    fullOutput += `   SOLUCIÓN: Verifica el código de /api/auto-promotion\n`;
+                } else {
+                    fullOutput += `✅ TODO FUNCIONA CORRECTAMENTE\n`;
+                    fullOutput += `   La promoción "${apiData.promotion.title}" está lista para ejecutarse\n`;
+                    fullOutput += `   El ChatInterface debería mostrarla en el próximo check (cada 2 min)\n`;
+                }
+
+                showResult('full-result', fullOutput, 'success');
+                updateStatus('full-status', 'success');
+            } catch (error) {
+                fullOutput += `\n❌ ERROR DURANTE EL TEST: ${error.message}\n`;
+                showResult('full-result', fullOutput, 'error');
+                updateStatus('full-status', 'error');
+            }
+        }
+
+        // Auto-load ID from URL parameter if present
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const promoId = urlParams.get('id');
+            if (promoId) {
+                document.getElementById('promo-id').value = promoId;
+            }
+        });
+    </script>
+</body>
+</html>

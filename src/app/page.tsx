@@ -123,42 +123,53 @@ const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onC
 };
 
 const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) => (
-  <button
-    onClick={onClick}
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '12px',
-      background: 'rgba(255,255,255,0.9)',
-      backdropFilter: 'blur(10px)',
-      border: `2px solid ${COLOR_BLUE}33`,
-      borderRadius: '24px',
-      padding: '20px',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      color: COLOR_BLUE,
-      boxShadow: `0 4px 15px rgba(0,0,0,0.1)`
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.background = COLOR_BLUE;
-      e.currentTarget.style.borderColor = COLOR_GOLD;
-      e.currentTarget.style.color = 'white';
-      e.currentTarget.style.transform = 'translateY(-5px)';
-      e.currentTarget.style.boxShadow = `0 10px 25px ${COLOR_BLUE}33`;
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
-      e.currentTarget.style.borderColor = `${COLOR_BLUE}33`;
-      e.currentTarget.style.color = COLOR_BLUE;
-      e.currentTarget.style.transform = 'translateY(0)';
-      e.currentTarget.style.boxShadow = `0 4px 15px rgba(0,0,0,0.1)`;
-    }}
-  >
-    <span style={{ fontSize: '2.5rem', filter: `drop-shadow(0 0 10px ${COLOR_GOLD}44)` }}>{icon}</span>
-    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
-  </button>
+  <>
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '12px',
+        background: 'rgba(255,255,255,0.9)',
+        backdropFilter: 'blur(10px)',
+        border: `2px solid ${COLOR_BLUE}33`,
+        borderRadius: '24px',
+        padding: '20px',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        color: COLOR_BLUE,
+        boxShadow: `0 4px 15px rgba(0,0,0,0.1)`
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = COLOR_BLUE;
+        e.currentTarget.style.borderColor = COLOR_GOLD;
+        e.currentTarget.style.color = 'white';
+        e.currentTarget.style.transform = 'translateY(-5px)';
+        e.currentTarget.style.boxShadow = `0 10px 25px ${COLOR_BLUE}33`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+        e.currentTarget.style.borderColor = `${COLOR_BLUE}33`;
+        e.currentTarget.style.color = COLOR_BLUE;
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = `0 4px 15px rgba(0,0,0,0.1)`;
+      }}
+    >
+      <span className="animated-icon" style={{ fontSize: '2.5rem', filter: `drop-shadow(0 0 10px ${COLOR_GOLD}44)` }}>{icon}</span>
+      <span style={{ fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
+    </button>
+    <style jsx>{`
+      .animated-icon {
+        animation: float 3s ease-in-out infinite;
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+      }
+    `}</style>
+  </>
 );
 
 // Header ESTILO REFERENCIA.PNG - oscuro limpio
@@ -509,7 +520,7 @@ export default function Home() {
           setShowIntro(false);
           sessionStorage.setItem(INTRO_KEY, 'true');
           setTimeout(() => {
-            santiNarrate("¡Hola changos y chinitas! Bienvenidos a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
+            santiNarrate("¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
           }, 1000); // Dar más tiempo para que se establezca el chat
         }}
       />
@@ -987,22 +998,22 @@ export default function Home() {
               border: `1px solid ${COLOR_BLUE}11`
             }}>
               <QuickActionBtn
-                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935115/gastronomia_jjitbf.png"
+                icon="🍽️"
                 label="Gastronomía"
                 onClick={() => santiNarrate("¿Qué lugares para comer hay registrados?")}
               />
               <QuickActionBtn
-                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935120/Hoteles_kgufif.png"
+                icon="🏨"
                 label="Hotelería"
                 onClick={() => santiNarrate("Recomendame hoteles registrados")}
               />
               <QuickActionBtn
-                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935116/cultura_trx5ji.png"
+                icon="🎭"
                 label="Cultura"
                 onClick={() => santiNarrate("¿Qué actividades culturales me sugeris?")}
               />
               <QuickActionBtn
-                icon="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768935117/lugares_rzfnrh.png"
+                icon="📍"
                 label="Lugares"
                 onClick={() => santiNarrate("¿Qué lugares turísticos me recomiendas visitar?")}
               />

@@ -87,7 +87,6 @@ const PwaInstall: React.FC = () => {
 
   // Toast visibility & dismissed tracker to ensure only once per page load
   const [showToast, setShowToast] = useState(false);
-  const toastDismissedRef = React.useRef(false);
 
   // Expose a lightweight global API for header/button integration and dispatch events
   useEffect(() => {
@@ -122,7 +121,7 @@ const PwaInstall: React.FC = () => {
 
   // Show a one-time toast when install is available and app is not installed
   useEffect(() => {
-    if (deferredPrompt && !isInstalled && !toastDismissedRef.current) {
+    if (deferredPrompt && !isInstalled && sessionStorage.getItem('pwaInstallDismissed') !== 'true') {
       // Show the toast shortly after availability to avoid jank
       const t = setTimeout(() => setShowToast(true), 400);
       return () => clearTimeout(t);
@@ -133,7 +132,7 @@ const PwaInstall: React.FC = () => {
     const win = window as unknown as { __santIA_pwa?: SantIAPwaApi };
     const api = win.__santIA_pwa;
     setShowToast(false);
-    toastDismissedRef.current = true;
+    sessionStorage.setItem('pwaInstallDismissed', 'true');
     if (api && api.prompt) {
       await api.prompt();
     }
@@ -141,7 +140,7 @@ const PwaInstall: React.FC = () => {
 
   const handleToastLater = () => {
     setShowToast(false);
-    toastDismissedRef.current = true;
+    sessionStorage.setItem('pwaInstallDismissed', 'true');
   };
 
   // Keep iOS hint UI (but no floating install button) — header will render the install button

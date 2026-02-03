@@ -59,6 +59,7 @@ export default function AdminDashboard() {
     const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
     const [carouselPhotos, setCarouselPhotos] = useState<CarouselPhoto[]>([]);
     const [phrases, setPhrases] = useState<Array<{id: string, phrase: string, category: string}>>([]);
+    const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, is_active: boolean, category: string, priority: number, show_probability: number}>>([]);
     const [attractionCategories, setAttractionCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
     const [businessCategories, setBusinessCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
 
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
         name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: 'historico', gallery: [] as string[]
     });
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
+    const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
     const [newVideo, setNewVideo] = useState({ title: '', url: '' });
     const [newBusiness, setNewBusiness] = useState({ id: '', name: '', category: 'restaurante', contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599 });
 
@@ -131,6 +133,7 @@ export default function AdminDashboard() {
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
+        const { data: promotionalData } = await supabase.from('promotional_messages').select('id,business_name,message,is_active,category,priority,show_probability').order('priority', { ascending: false });
         const { data: plansData, error: plansErr } = await supabase.from('business_plans').select('*').order('priority', { ascending: true });
 
         if (attErr) console.warn('Admin attractions fetch error', attErr);
@@ -146,6 +149,7 @@ export default function AdminDashboard() {
         if (vidData) setVideos(vidData as VideoRecord[]);
         if (carouselData) setCarouselPhotos(carouselData);
         if (phraseData) setPhrases(phraseData);
+        if (promotionalData) setPromotionalMessages(promotionalData);
         if (plansData) setPlans(plansData.map(p => ({ ...p, features: Array.isArray(p.features) ? p.features : [] })));
         console.log('Admin: Loaded plans:', plansData);
         setLoading(false);
@@ -428,6 +432,40 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleAddPromotionalMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPromotionalMessage.business_name.trim() || !newPromotionalMessage.message.trim()) {
+            alert('Por favor completa el nombre del negocio y el mensaje');
+            return;
+        }
+        const { error } = await supabase.from('promotional_messages').insert([{
+            business_name: newPromotionalMessage.business_name.trim(),
+            message: newPromotionalMessage.message.trim(),
+            category: newPromotionalMessage.category,
+            priority: newPromotionalMessage.priority,
+            show_probability: newPromotionalMessage.show_probability,
+            is_active: true
+        }]);
+        if (error) alert(error.message);
+        else {
+            setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+            fetchData();
+        }
+    };
+
+    const handleTogglePromotionalMessage = async (id: string, currentStatus: boolean) => {
+        const { error } = await supabase.from('promotional_messages').update({ is_active: !currentStatus }).eq('id', id);
+        if (error) alert(error.message);
+        else fetchData();
+    };
+
+    const handleDeletePromotionalMessage = async (id: string) => {
+        if (!confirm('¿Eliminar este mensaje promocional?')) return;
+        const { error } = await supabase.from('promotional_messages').delete().eq('id', id);
+        if (error) alert(error.message);
+        else fetchData();
+    };
+
     const handleAddCategory = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newCategory.name.trim() || !newCategory.icon.trim()) {
@@ -577,7 +615,7 @@ export default function AdminDashboard() {
         setLoading(false);
     };
 
-    const startEditingPlan = (plan: any) => {
+    const startEditingPlan = (plan: {id: string, name: string, display_name: string, price_monthly: number, price_yearly: number, features: string[], mercadopago_id: string, max_images: number, priority: number}) => {
         setNewPlan({
             name: plan.name,
             display_name: plan.display_name,
@@ -596,12 +634,12 @@ export default function AdminDashboard() {
         setEditingPlanId(null);
     };
 
-    const handleUpdatePlan = async (id: string, updates: any) => {
+    const handleUpdatePlan = async (id: string, updates: Partial<{name: string, display_name: string, price_monthly: number, price_yearly: number, features: string[], mercadopago_id: string, max_images: number, priority: number, is_active: boolean}>) => {
         try {
             const { error } = await supabase.from('business_plans').update(updates).eq('id', id);
             if (error) throw error;
             fetchData();
-        } catch (err) {
+        } catch {
             alert('Error actualizando plan');
         }
     };
@@ -612,7 +650,7 @@ export default function AdminDashboard() {
             const { error } = await supabase.from('business_plans').delete().eq('id', id);
             if (error) throw error;
             fetchData();
-        } catch (err) {
+        } catch {
             alert('Error eliminando plan');
         }
     };
@@ -713,8 +751,10 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('negocios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'negocios')}>🏢 Negocios</button>
                     <button onClick={() => { setActiveTab('categorias'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'categorias')}>🏷️ Categorías</button>
                     <button onClick={() => { setActiveTab('frases'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'frases')}>💬 Frases</button>
+                    <button onClick={() => { setActiveTab('promociones'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'promociones')}>💼 Mensajes Promocionales</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
+                    <button onClick={() => { router.push('/admin/auto-promotions'); setIsMobileMenuOpen(false); }} style={tabStyle(false)}>🤖 Promociones Automáticas</button>
                     <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
                 </div>
 
@@ -751,6 +791,7 @@ export default function AdminDashboard() {
                             activeTab === 'negocios' ? 'Directorio de Negocios' :
                                 activeTab === 'categorias' ? 'Gestión de Categorías' :
                                 activeTab === 'frases' ? 'Frases de Santi' :
+                                activeTab === 'promociones' ? 'Mensajes Promocionales' :
                                 activeTab === 'videos' ? 'Multimedia' :
                                 activeTab === 'emails' ? 'Emails' :
                                 activeTab === 'planes' ? 'Planes de Pago' : (activeTab === 'ai' ? 'IA y TTS' : 'Santi')}
@@ -1540,12 +1581,175 @@ export default function AdminDashboard() {
                             {phrases.map(phrase => (
                                 <div key={phrase.id} style={listItem}>
                                     <div>
-                                        <p style={{ margin: '0', fontSize: '1rem', fontStyle: 'italic' }}>"{phrase.phrase}"</p>
+                                        <p style={{ margin: '0', fontSize: '1rem', fontStyle: 'italic' }}>&quot;{phrase.phrase}&quot;</p>
                                         <span style={{ fontSize: '0.8rem', color: '#777', textTransform: 'capitalize' }}>{phrase.category}</span>
                                     </div>
                                     <button onClick={async () => { if (confirm('¿Eliminar esta frase?')) { await supabase.from('santis_phrases').delete().eq('id', phrase.id); fetchData(); } }} style={btnAction}>🗑️</button>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab: MENSAJES PROMOCIONALES */}
+                {activeTab === 'promociones' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '15px', fontWeight: 'bold' }}>💼 Mensajes Promocionales de Santi</h3>
+                        <p style={{ color: '#64748b', marginBottom: '25px', fontSize: '0.95rem' }}>
+                            Estos mensajes aparecen de forma aleatoria cuando el usuario está inactivo por 2 minutos. 
+                            La probabilidad por defecto es 25% (ajustable por mensaje).
+                        </p>
+                        
+                        <form onSubmit={handleAddPromotionalMessage} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '40px' }}>
+                            <Input 
+                                label="Nombre del Negocio/Categoría" 
+                                value={newPromotionalMessage.business_name} 
+                                onChange={v => setNewPromotionalMessage({ ...newPromotionalMessage, business_name: v })} 
+                                placeholder="Ej: Nodo Tecnológico" 
+                            />
+                            <div>
+                                <label style={labelStyle}>Mensaje Promocional</label>
+                                <textarea
+                                    style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
+                                    value={newPromotionalMessage.message}
+                                    onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, message: e.target.value })}
+                                    placeholder="Escribe el mensaje completo que Santi dirá..."
+                                    required
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px' }}>
+                                <div>
+                                    <label style={labelStyle}>Categoría</label>
+                                    <select 
+                                        style={inputStyle} 
+                                        value={newPromotionalMessage.category} 
+                                        onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, category: e.target.value })}
+                                    >
+                                        <option value="general">General</option>
+                                        <option value="gastronomia">Gastronomía</option>
+                                        <option value="hoteleria">Hotelería</option>
+                                        <option value="tecnologia">Tecnología</option>
+                                        <option value="cultura">Cultura</option>
+                                        <option value="turismo">Turismo</option>
+                                        <option value="servicios">Servicios</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Prioridad (0-10)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="10"
+                                        style={inputStyle}
+                                        value={newPromotionalMessage.priority}
+                                        onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, priority: parseInt(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Probabilidad (%)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        style={inputStyle}
+                                        value={newPromotionalMessage.show_probability}
+                                        onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, show_probability: parseInt(e.target.value) || 25 })}
+                                    />
+                                </div>
+                            </div>
+                            <button type="submit" style={btnPrimary}>✅ Agregar Mensaje Promocional</button>
+                        </form>
+
+                        <h4>Mensajes Existentes ({promotionalMessages.length})</h4>
+                        <div style={{ display: 'grid', gap: '20px' }}>
+                            {promotionalMessages.map(promo => (
+                                <div 
+                                    key={promo.id} 
+                                    style={{
+                                        ...listItem,
+                                        flexDirection: 'column',
+                                        alignItems: 'stretch',
+                                        padding: '20px',
+                                        background: promo.is_active ? 'white' : '#f8f9fa',
+                                        opacity: promo.is_active ? 1 : 0.6,
+                                        border: promo.is_active ? '2px solid #10b981' : '2px solid #e5e7eb'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                                        <div>
+                                            <h5 style={{ margin: '0 0 8px 0', color: COLOR_BLUE, fontSize: '1.1rem', fontWeight: 'bold' }}>
+                                                {promo.business_name}
+                                            </h5>
+                                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                <span style={{ 
+                                                    fontSize: '0.75rem', 
+                                                    padding: '4px 8px', 
+                                                    borderRadius: '6px',
+                                                    background: '#e0e7ff',
+                                                    color: '#4338ca',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    {promo.category}
+                                                </span>
+                                                <span style={{ 
+                                                    fontSize: '0.75rem', 
+                                                    padding: '4px 8px', 
+                                                    borderRadius: '6px',
+                                                    background: '#fef3c7',
+                                                    color: '#92400e',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    ⭐ Prioridad: {promo.priority}
+                                                </span>
+                                                <span style={{ 
+                                                    fontSize: '0.75rem', 
+                                                    padding: '4px 8px', 
+                                                    borderRadius: '6px',
+                                                    background: '#dbeafe',
+                                                    color: '#1e40af',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    🎲 {promo.show_probability}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button 
+                                                onClick={() => handleTogglePromotionalMessage(promo.id, promo.is_active)}
+                                                style={{
+                                                    ...btnAction,
+                                                    background: promo.is_active ? '#ef4444' : '#10b981',
+                                                    color: 'white',
+                                                    padding: '8px 12px',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {promo.is_active ? '⏸️ Pausar' : '▶️ Activar'}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeletePromotionalMessage(promo.id)}
+                                                style={btnAction}
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p style={{ 
+                                        margin: '0', 
+                                        fontSize: '0.95rem', 
+                                        fontStyle: 'italic', 
+                                        color: '#475569',
+                                        lineHeight: '1.6'
+                                    }}>
+                                        &quot;{promo.message}&quot;
+                                    </p>
+                                </div>
+                            ))}
+                            {promotionalMessages.length === 0 && (
+                                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>
+                                    No hay mensajes promocionales aún. ¡Creá el primero!
+                                </p>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1715,13 +1919,6 @@ const listItem = {
     background: '#fff',
     boxShadow: '0 8px 25px rgba(0,0,0,0.08)',
     transition: 'all 0.2s ease'
-};
-
-const gridList = { 
-    display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-    gap: '25px', 
-    marginTop: '25px' 
 };
 
 const placeCard = { 

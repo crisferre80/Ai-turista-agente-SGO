@@ -20,12 +20,6 @@ const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
 
-// Business registration prompts that Santi may propose occasionally
-const BUSINESS_PROMPTS = [
-    "¿Tenés un negocio que te gustaría que aparezca en la app como destacado? Te explico cómo registrarlo: 1) Entrá a 'Mi Negocio' y completá la ficha con nombre, dirección, horario y contacto. 2) Subí varias fotos y el logo de tu establecimiento. 3) Adjuntá la documentación necesaria y solicitá la acreditación. 4) Nuestro equipo revisará la solicitud y, una vez aprobada, tu negocio podrá aparecer como 'Comercio Certificado' y ser destacado en la app. ¿Querés que te lleve ahora al formulario?",
-    "Si querés aparecer destacado en la app: abrí 'Mi Negocio' → Crear ficha → subí fotos y un texto breve sobre lo que los hace únicos. En 48-72h el equipo revisa y te avisa. ¿Deseás que te muestre cómo?"
-];
-
 const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation }: {
     externalTrigger?: string,
     externalStory?: { url: string, name: string },
@@ -49,6 +43,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isHovering, setIsHovering] = useState(false); // Hover state for bubble
     const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
+    const [promotionalMessages, setPromotionalMessages] = useState<string[]>([]); // Promotional messages from DB
 
     // External triggers effects will be registered after callbacks are defined
 
@@ -71,6 +66,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
     useEffect(() => {
         fetchCloudPhrases();
+        fetchPromotionalMessages();
     }, []);
 
     const fetchCloudPhrases = async () => {
@@ -78,6 +74,20 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         if (data && data.length > 0) {
             const cloudPhrases = data.map((d: { phrase: string }) => d.phrase);
             setEngagementPrompts(prev => [...prev, ...cloudPhrases]);
+        }
+    };
+
+    const fetchPromotionalMessages = async () => {
+        const { data } = await supabase
+            .from('promotional_messages')
+            .select('message')
+            .eq('is_active', true)
+            .order('priority', { ascending: false });
+        
+        if (data && data.length > 0) {
+            const messages = data.map((d: { message: string }) => d.message);
+            setPromotionalMessages(messages);
+            console.log('📢 Loaded promotional messages:', messages.length);
         }
     };
 
@@ -298,6 +308,50 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         }
     }, [cleanTextForSpeech]);
 
+    // Auto-promotion system
+    useEffect(() => {
+        const checkAutoPromotions = async () => {
+            if (isSpeaking || isListening || isLoading || isThinking || showHistory) {
+                return;
+            }
+
+            // Verificar si han pasado al menos 30 segundos desde la última interacción
+            const timeSinceLastInteraction = Date.now() - lastInteractionRef.current;
+            if (timeSinceLastInteraction < 30000) { // 30 segundos
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auto-promotion');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.shouldShow && data.promotion) {
+                        console.log('🤖 Santi: Mostrando promoción automática:', data.promotion.title);
+                        
+                        // Agregar mensaje como asistente
+                        setMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: `🎯 **${data.promotion.business_name}**: ${data.promotion.message}`
+                        }]);
+
+                        // Reproducir audio
+                        playAudioResponse(data.promotion.message, true);
+                        
+                        // Actualizar tiempo de interacción para evitar spam
+                        updateInteractionTime();
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error checking auto-promotions:', error);
+            }
+        };
+
+        // Verificar promociones automáticas cada 2 minutos
+        const autoPromotionInterval = setInterval(checkAutoPromotions, 120000); // 2 minutos
+
+        return () => clearInterval(autoPromotionInterval);
+    }, [isSpeaking, isListening, isLoading, isThinking, showHistory, playAudioResponse]);
+
     const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
@@ -308,200 +362,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             (window as Window & typeof globalThis).focusPlaceOnMap!(text);
         }
     }, [playAudioResponse]);
-
-    // Voice navigation command processor - defined after triggerAssistantMessage and playAudioResponse
-    const processVoiceNavigationCommand = useCallback((transcript: string): boolean => {
-        const lowerTranscript = transcript.toLowerCase().trim();
-        console.log('🎙️ Processing voice command:', lowerTranscript);
-        
-        // Helper to trigger messages without circular dependency
-        const triggerMessage = (text: string, skipMapFocus = false) => {
-            updateInteractionTime();
-            setMessages(prev => [...prev, { role: 'assistant', content: text }]);
-            // Call playAudioResponse directly if it exists
-            if (typeof playAudioResponse === 'function') {
-                playAudioResponse(text);
-            }
-        };
-
-        // Helper for sending regular messages  
-        const sendMessage = (text: string) => {
-            setInput(text);
-            // Call handleSend directly if it exists
-            if (typeof handleSend === 'function') {
-                handleSend(text);
-            }
-        };
-        
-        // Navigation commands
-        const navigationCommands = [
-            // Home/Main page
-            { 
-                keywords: ['inicio', 'página principal', 'home', 'principal', 'ir al inicio', 'volver al inicio'],
-                action: () => {
-                    router.push('/');
-                    triggerMessage('Te llevo al inicio, chango.');
-                }
-            },
-            // Explore/Map
-            {
-                keywords: ['mapa', 'explorar', 'ver mapa', 'mostrar mapa', 'ir al mapa', 'exploración'],
-                action: () => {
-                    router.push('/explorar');
-                    triggerMessage('Te llevo al mapa para explorar, chango.');
-                }
-            },
-            // Profile
-            {
-                keywords: ['perfil', 'mi perfil', 'ver perfil', 'ir al perfil', 'configuración'],
-                action: () => {
-                    router.push('/profile');
-                    triggerMessage('Te llevo a tu perfil, chango.');
-                }
-            },
-            // Dashboard (for admins)
-            {
-                keywords: ['dashboard', 'panel', 'administración', 'admin', 'ir al dashboard'],
-                action: () => {
-                    router.push('/dashboard');
-                    triggerMessage('Te llevo al panel de administración, chango.');
-                }
-            },
-            // Go back
-            {
-                keywords: ['atrás', 'volver', 'regresar', 'ir atrás', 'página anterior'],
-                action: () => {
-                    router.back();
-                    triggerMessage('Volvemos atrás, chango.');
-                }
-            },
-            // Refresh
-            {
-                keywords: ['actualizar', 'refrescar', 'recargar', 'actualizar página'],
-                action: () => {
-                    window.location.reload();
-                    triggerMessage('Actualizando la página, chango.');
-                }
-            },
-            // Audio control commands
-            {
-                keywords: ['silencio', 'cállate', 'para', 'detener', 'basta', 'stop'],
-                action: () => {
-                    // Stop current narration
-                    if (audioRef.current && !audioRef.current.paused) {
-                        audioRef.current.pause();
-                        audioRef.current.currentTime = 0;
-                        setIsSpeaking(false);
-                    }
-                    // Also trigger global stop
-                    if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('santi:narration:end'));
-                    }
-                    triggerMessage('Me quedo callado, chango.');
-                }
-            },
-            {
-                keywords: ['repetir', 'repite', 'otra vez', 'de nuevo'],
-                action: () => {
-                    // Get last assistant message and repeat it
-                    const lastAssistantMessage = messages.findLast(m => m.role === 'assistant');
-                    if (lastAssistantMessage && typeof playAudioResponse === 'function') {
-                        playAudioResponse(lastAssistantMessage.content);
-                        triggerMessage('Te repito lo último, chango.');
-                    }
-                }
-            }
-        ];
-
-        // Check for navigation commands
-        for (const command of navigationCommands) {
-            if (command.keywords.some(keyword => lowerTranscript.includes(keyword))) {
-                console.log('🎯 Voice navigation command detected:', command.keywords[0]);
-                command.action();
-                return true; // Command processed
-            }
-        }
-
-        // Check for search commands
-        const searchPatterns = [
-            /^buscar (.+)$/i,
-            /^busca (.+)$/i,
-            /^búsqueda de (.+)$/i,
-            /^encuentra (.+)$/i,
-            /^encontrar (.+)$/i
-        ];
-
-        for (const pattern of searchPatterns) {
-            const match = lowerTranscript.match(pattern);
-            if (match && match[1]) {
-                console.log('🔍 Voice search command detected:', match[1]);
-                sendMessage(match[1]);
-                triggerMessage(`Buscando ${match[1]}, chango.`);
-                return true; // Command processed
-            }
-        }
-
-        return false; // No navigation command found
-    }, [router, setInput, audioRef, setIsSpeaking, messages]); // Remove circular dependencies
-
-    const playUserStory = useCallback(async (url: string, name: string) => {
-        updateInteractionTime();
-        const intro = `¡Epa! Mirá lo que grabó un viajero sobre ${name}. Prestá atención...`;
-
-        // Add intro message
-        setMessages(prev => [...prev, { role: 'assistant', content: intro }]);
-
-        try {
-            // First, Santi says the intro
-            const response = await fetch('/api/speech', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: intro }),
-            });
-            const blob = await response.blob();
-            const introUrl = URL.createObjectURL(blob);
-
-            if (audioRef.current) {
-                audioRef.current.src = introUrl;
-                audioRef.current.play();
-
-                // When intro finishes, play the actual story
-                audioRef.current.onended = () => {
-                    if (audioRef.current) {
-                        audioRef.current.src = url;
-                        audioRef.current.play();
-                        audioRef.current.onended = null; // Reset
-                    }
-                };
-            }
-        } catch (error) {
-            console.error("Story Playback Error:", error);
-        }
-    }, []);
-
-    // Helper: detect if a message is a business registration prompt
-    const isBusinessPromptText = (text?: string | null) => {
-        if (!text) return false;
-        const pattern = /(Mi Negocio|registrar un negocio|aparezca en la app|destacad|Comercio Certificado|registrarlo|Mi Negocio)/i;
-        return pattern.test(text) || BUSINESS_PROMPTS.some(p => (text || '').includes(p));
-    };
-
-    // Handler for 'Llevame' button - redirect depending on auth state
-    const handleLlevameClick = async () => {
-        try {
-            // supabase.auth.getUser() returns { data: { user } }
-            const { data } = await supabase.auth.getUser();
-            const user = (data as { user?: unknown })?.user;
-            if (user) {
-                window.location.href = '/mi-negocio';
-            } else {
-                window.location.href = '/login?next=/mi-negocio';
-            }
-        } catch (err) {
-            console.error('Redirect error:', err);
-            window.location.href = '/login?next=/mi-negocio';
-        }
-    };
 
     // Send Message Logic
     const handleSend = useCallback(async (overrideText?: string) => {
@@ -636,6 +496,201 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         }
     }, [input, getApiMessages, playAudioResponse, router, userLocation]);
 
+    // Voice navigation command processor - defined after triggerAssistantMessage and playAudioResponse
+    const processVoiceNavigationCommand = useCallback((transcript: string): boolean => {
+        const lowerTranscript = transcript.toLowerCase().trim();
+        console.log('🎙️ Processing voice command:', lowerTranscript);
+        
+        // Helper to trigger messages without circular dependency
+        const triggerMessage = (text: string) => {
+            updateInteractionTime();
+            setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+            // Call playAudioResponse directly if it exists
+            if (typeof playAudioResponse === 'function') {
+                playAudioResponse(text);
+            }
+        };
+
+        // Helper for sending regular messages  
+        const sendMessage = (text: string) => {
+            setInput(text);
+            // Call handleSend directly if it exists
+            if (typeof handleSend === 'function') {
+                handleSend(text);
+            }
+        };
+        
+        // Navigation commands
+        const navigationCommands = [
+            // Home/Main page
+            { 
+                keywords: ['inicio', 'página principal', 'home', 'principal', 'ir al inicio', 'volver al inicio'],
+                action: () => {
+                    router.push('/');
+                    triggerMessage('Te llevo al inicio, chango.');
+                }
+            },
+            // Explore/Map
+            {
+                keywords: ['mapa', 'explorar', 'ver mapa', 'mostrar mapa', 'ir al mapa', 'exploración'],
+                action: () => {
+                    router.push('/explorar');
+                    triggerMessage('Te llevo al mapa para explorar, chango.');
+                }
+            },
+            // Profile
+            {
+                keywords: ['perfil', 'mi perfil', 'ver perfil', 'ir al perfil', 'configuración'],
+                action: () => {
+                    router.push('/profile');
+                    triggerMessage('Te llevo a tu perfil, chango.');
+                }
+            },
+            // Dashboard (for admins)
+            {
+                keywords: ['dashboard', 'panel', 'administración', 'admin', 'ir al dashboard'],
+                action: () => {
+                    router.push('/dashboard');
+                    triggerMessage('Te llevo al panel de administración, chango.');
+                }
+            },
+            // Go back
+            {
+                keywords: ['atrás', 'volver', 'regresar', 'ir atrás', 'página anterior'],
+                action: () => {
+                    router.back();
+                    triggerMessage('Volvemos atrás, chango.');
+                }
+            },
+            // Refresh
+            {
+                keywords: ['actualizar', 'refrescar', 'recargar', 'actualizar página'],
+                action: () => {
+                    window.location.reload();
+                    triggerMessage('Actualizando la página, chango.');
+                }
+            },
+            // Audio control commands
+            {
+                keywords: ['silencio', 'cállate', 'para', 'detener', 'basta', 'stop'],
+                action: () => {
+                    // Stop current narration
+                    if (audioRef.current && !audioRef.current.paused) {
+                        audioRef.current.pause();
+                        audioRef.current.currentTime = 0;
+                        setIsSpeaking(false);
+                    }
+                    // Also trigger global stop
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                    }
+                    triggerMessage('Me quedo callado, chango.');
+                }
+            },
+            {
+                keywords: ['repetir', 'repite', 'otra vez', 'de nuevo'],
+                action: () => {
+                    // Get last assistant message and repeat it
+                    const lastAssistantMessage = messages.findLast(m => m.role === 'assistant');
+                    if (lastAssistantMessage && typeof playAudioResponse === 'function') {
+                        playAudioResponse(lastAssistantMessage.content);
+                        triggerMessage('Te repito lo último, chango.');
+                    }
+                }
+            }
+        ];
+
+        // Check for navigation commands
+        for (const command of navigationCommands) {
+            if (command.keywords.some(keyword => lowerTranscript.includes(keyword))) {
+                console.log('🎯 Voice navigation command detected:', command.keywords[0]);
+                command.action();
+                return true; // Command processed
+            }
+        }
+
+        // Check for search commands
+        const searchPatterns = [
+            /^buscar (.+)$/i,
+            /^busca (.+)$/i,
+            /^búsqueda de (.+)$/i,
+            /^encuentra (.+)$/i,
+            /^encontrar (.+)$/i
+        ];
+
+        for (const pattern of searchPatterns) {
+            const match = lowerTranscript.match(pattern);
+            if (match && match[1]) {
+                console.log('🔍 Voice search command detected:', match[1]);
+                sendMessage(match[1]);
+                triggerMessage(`Buscando ${match[1]}, chango.`);
+                return true; // Command processed
+            }
+        }
+
+        return false; // No navigation command found
+    }, [router, setInput, audioRef, setIsSpeaking, messages, playAudioResponse, handleSend]);
+
+    const playUserStory = useCallback(async (url: string, name: string) => {
+        updateInteractionTime();
+        const intro = `¡Epa! Mirá lo que grabó un viajero sobre ${name}. Prestá atención...`;
+
+        // Add intro message
+        setMessages(prev => [...prev, { role: 'assistant', content: intro }]);
+
+        try {
+            // First, Santi says the intro
+            const response = await fetch('/api/speech', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: intro }),
+            });
+            const blob = await response.blob();
+            const introUrl = URL.createObjectURL(blob);
+
+            if (audioRef.current) {
+                audioRef.current.src = introUrl;
+                audioRef.current.play();
+
+                // When intro finishes, play the actual story
+                audioRef.current.onended = () => {
+                    if (audioRef.current) {
+                        audioRef.current.src = url;
+                        audioRef.current.play();
+                        audioRef.current.onended = null; // Reset
+                    }
+                };
+            }
+        } catch (error) {
+            console.error("Story Playback Error:", error);
+        }
+    }, []);
+
+    // Helper: detect if a message is a business registration prompt
+    const isBusinessPromptText = (text?: string | null) => {
+        if (!text) return false;
+        const pattern = /(Mi Negocio|registrar un negocio|aparezca en la app|destacad|Comercio Certificado|registrarlo|Mi Negocio)/i;
+        return pattern.test(text) || promotionalMessages.some(p => (text || '').includes(p));
+    };
+
+    // Handler for 'Llevame' button - redirect depending on auth state
+    const handleLlevameClick = async () => {
+        try {
+            // supabase.auth.getUser() returns { data: { user } }
+            const { data } = await supabase.auth.getUser();
+            const user = (data as { user?: unknown })?.user;
+            if (user) {
+                window.location.href = '/mi-negocio';
+            } else {
+                window.location.href = '/login?next=/mi-negocio';
+            }
+        } catch (err) {
+            console.error('Redirect error:', err);
+            window.location.href = '/login?next=/mi-negocio';
+        }
+    };
+
+
     // External triggers effects
     useEffect(() => {
         if (externalTrigger) {
@@ -662,20 +717,21 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 setIsIdle(false);
             }
 
-            // Proactive Engagement (includes occasional business registration suggestions)
+            // Proactive Engagement (includes occasional promotional messages from DB)
             if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
-                // 25% chance to propose registering a business
-                const pickBusiness = Math.random() < 0.25;
-                const prompt = pickBusiness
-                    ? BUSINESS_PROMPTS[Math.floor(Math.random() * BUSINESS_PROMPTS.length)]
+                // 25% chance to show a promotional message (if available)
+                const pickPromotion = Math.random() < 0.25 && promotionalMessages.length > 0;
+                const prompt = pickPromotion
+                    ? promotionalMessages[Math.floor(Math.random() * promotionalMessages.length)]
                     : engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
+                console.log('🎯 Proactive engagement:', pickPromotion ? 'PROMOTIONAL' : 'regular', prompt.substring(0, 50));
                 triggerAssistantMessage(prompt);
                 updateInteractionTime();
             }
         }, 5000);
 
         return () => clearInterval(checkInterval);
-    }, [isSpeaking, isThinking, isListening, input, engagementPrompts, triggerAssistantMessage]);
+    }, [isSpeaking, isThinking, isListening, input, engagementPrompts, promotionalMessages, triggerAssistantMessage]);
 
     // Global access for triggers
     useEffect(() => {
@@ -797,7 +853,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             if (window.testSantiAnimation) delete window.testSantiAnimation;
             if (window.forceSantiSpeaking) delete window.forceSantiSpeaking;
         };
-    }, [handleSend, triggerAssistantMessage, playAudioResponse, isSpeaking]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [handleSend, triggerAssistantMessage, playAudioResponse, isSpeaking, isListening]);
 
     // Cleanup mic hover timeout on unmount
     useEffect(() => {
@@ -1541,24 +1598,24 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
                             <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>📍 Navegación</h4>
                             <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
-                                <li><strong>"Inicio"</strong> - Ir a la página principal</li>
-                                <li><strong>"Mapa"</strong> - Explorar lugares</li>
-                                <li><strong>"Perfil"</strong> - Ver mi perfil</li>
-                                <li><strong>"Atrás"</strong> - Página anterior</li>
-                                <li><strong>"Actualizar"</strong> - Recargar página</li>
+                                <li><strong>&quot;Inicio&quot;</strong> - Ir a la página principal</li>
+                                <li><strong>&quot;Mapa&quot;</strong> - Explorar lugares</li>
+                                <li><strong>&quot;Perfil&quot;</strong> - Ver mi perfil</li>
+                                <li><strong>&quot;Atrás&quot;</strong> - Página anterior</li>
+                                <li><strong>&quot;Actualizar&quot;</strong> - Recargar página</li>
                             </ul>
                             
                             <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>🔍 Búsqueda</h4>
                             <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
-                                <li><strong>"Buscar restaurantes"</strong></li>
-                                <li><strong>"Encuentra hoteles"</strong></li>
-                                <li><strong>"¿Dónde puedo comer?"</strong></li>
+                                <li><strong>&quot;Buscar restaurantes&quot;</strong></li>
+                                <li><strong>&quot;Encuentra hoteles&quot;</strong></li>
+                                <li><strong>&quot;¿Dónde puedo comer?&quot;</strong></li>
                             </ul>
                             
                             <h4 style={{ color: COLOR_BLUE, marginBottom: '10px' }}>🔊 Control de Audio</h4>
                             <ul style={{ marginBottom: '20px', paddingLeft: '20px' }}>
-                                <li><strong>"Silencio"</strong> / <strong>"Para"</strong> - Detener narración</li>
-                                <li><strong>"Repetir"</strong> - Repetir último mensaje</li>
+                                <li><strong>&quot;Silencio&quot;</strong> / <strong>&quot;Para&quot;</strong> - Detener narración</li>
+                                <li><strong>&quot;Repetir&quot;</strong> - Repetir último mensaje</li>
                             </ul>
                             
                             <div style={{ 
