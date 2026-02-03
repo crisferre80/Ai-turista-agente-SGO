@@ -754,7 +754,6 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('promociones'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'promociones')}>💼 Mensajes Promocionales</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
-                    <button onClick={() => { router.push('/admin/auto-promotions'); setIsMobileMenuOpen(false); }} style={tabStyle(false)}>🤖 Promociones Automáticas</button>
                     <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
                 </div>
 
