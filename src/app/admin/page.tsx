@@ -70,6 +70,7 @@ export default function AdminDashboard() {
     });
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
     const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+    const [editingPromotionalMessageId, setEditingPromotionalMessageId] = useState<string | null>(null);
     const [newVideo, setNewVideo] = useState({ title: '', url: '' });
     const [newBusiness, setNewBusiness] = useState({ id: '', name: '', category: 'restaurante', contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599 });
 
@@ -79,6 +80,7 @@ export default function AdminDashboard() {
     const [carouselFile, setCarouselFile] = useState<File | null>(null);
     const [newCarouselPhoto, setNewCarouselPhoto] = useState({ title: '', description: '' });
     const [generatingDesc, setGeneratingDesc] = useState(false);
+    const [generatingPromo, setGeneratingPromo] = useState(false);
 
     // Filter States
     const [placeSearch, setPlaceSearch] = useState('');
@@ -129,7 +131,7 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         setLoading(true);
         const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category').order('created_at', { ascending: false });
-        const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,lat,lng,is_active,payment_status,phone,address,description').order('created_at', { ascending: false });
+        const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,is_active,payment_status,phone,address,description,lat,lng').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
@@ -365,6 +367,40 @@ export default function AdminDashboard() {
         }
     };
 
+    const generatePromotionalMessage = async () => {
+        const businessName = newPromotionalMessage.business_name;
+        const category = newPromotionalMessage.category;
+
+        if (!businessName.trim()) {
+            alert('Por favor ingresa el nombre del negocio primero');
+            return;
+        }
+
+        setGeneratingPromo(true);
+        try {
+            const response = await fetch('/api/generate-promotional-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    businessName,
+                    category
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al generar mensaje promocional');
+            }
+
+            const data = await response.json();
+            setNewPromotionalMessage({ ...newPromotionalMessage, message: data.message });
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al generar mensaje promocional. Verifica tu conexión e intenta nuevamente.');
+        } finally {
+            setGeneratingPromo(false);
+        }
+    };
+
     const startEditing = (p: PlaceRecord) => {
         setEditingId(p.id ?? null);
         setNewPlace({
@@ -438,22 +474,69 @@ export default function AdminDashboard() {
             alert('Por favor completa el nombre del negocio y el mensaje');
             return;
         }
-        const { error } = await supabase.from('promotional_messages').insert([{
-            business_name: newPromotionalMessage.business_name.trim(),
-            message: newPromotionalMessage.message.trim(),
-            category: newPromotionalMessage.category,
-            priority: newPromotionalMessage.priority,
-            show_probability: newPromotionalMessage.show_probability,
-            is_active: true
-        }]);
-        if (error) alert(error.message);
-        else {
-            setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
-            fetchData();
+        
+        // Verificar autenticación
+        const isAuth = await ensureAuthenticated();
+        if (!isAuth) return;
+        
+        if (editingPromotionalMessageId) {
+            // Actualizar mensaje existente
+            const { error } = await supabase.from('promotional_messages')
+                .update({
+                    business_name: newPromotionalMessage.business_name.trim(),
+                    message: newPromotionalMessage.message.trim(),
+                    category: newPromotionalMessage.category,
+                    priority: newPromotionalMessage.priority,
+                    show_probability: newPromotionalMessage.show_probability
+                })
+                .eq('id', editingPromotionalMessageId);
+            
+            if (error) alert(error.message);
+            else {
+                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+                setEditingPromotionalMessageId(null);
+                fetchData();
+            }
+        } else {
+            // Insertar nuevo mensaje
+            const { error } = await supabase.from('promotional_messages').insert([{
+                business_name: newPromotionalMessage.business_name.trim(),
+                message: newPromotionalMessage.message.trim(),
+                category: newPromotionalMessage.category,
+                priority: newPromotionalMessage.priority,
+                show_probability: newPromotionalMessage.show_probability,
+                is_active: true
+            }]);
+            if (error) alert(error.message);
+            else {
+                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+                fetchData();
+            }
         }
     };
 
+    const handleEditPromotionalMessage = (message: {id: string, business_name: string, message: string, category: string, priority: number, show_probability: number}) => {
+        setNewPromotionalMessage({
+            business_name: message.business_name,
+            message: message.message,
+            category: message.category,
+            priority: message.priority,
+            show_probability: message.show_probability
+        });
+        setEditingPromotionalMessageId(message.id);
+        // Scroll al formulario
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEditPromotionalMessage = () => {
+        setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+        setEditingPromotionalMessageId(null);
+    };
+
     const handleTogglePromotionalMessage = async (id: string, currentStatus: boolean) => {
+        const isAuth = await ensureAuthenticated();
+        if (!isAuth) return;
+        
         const { error } = await supabase.from('promotional_messages').update({ is_active: !currentStatus }).eq('id', id);
         if (error) alert(error.message);
         else fetchData();
@@ -461,6 +544,10 @@ export default function AdminDashboard() {
 
     const handleDeletePromotionalMessage = async (id: string) => {
         if (!confirm('¿Eliminar este mensaje promocional?')) return;
+        
+        const isAuth = await ensureAuthenticated();
+        if (!isAuth) return;
+        
         const { error } = await supabase.from('promotional_messages').delete().eq('id', id);
         if (error) alert(error.message);
         else fetchData();
@@ -1607,7 +1694,23 @@ export default function AdminDashboard() {
                                 placeholder="Ej: Nodo Tecnológico" 
                             />
                             <div>
-                                <label style={labelStyle}>Mensaje Promocional</label>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label style={labelStyle}>Mensaje Promocional</label>
+                                    <button 
+                                        type="button"
+                                        onClick={generatePromotionalMessage}
+                                        disabled={generatingPromo || !newPromotionalMessage.business_name.trim()}
+                                        style={{ 
+                                            ...btnAction, 
+                                            fontSize: '0.85rem',
+                                            padding: '6px 12px',
+                                            opacity: (generatingPromo || !newPromotionalMessage.business_name.trim()) ? 0.5 : 1,
+                                            cursor: (generatingPromo || !newPromotionalMessage.business_name.trim()) ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        {generatingPromo ? '⏳ Generando...' : '✨ Generar con IA'}
+                                    </button>
+                                </div>
                                 <textarea
                                     style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }}
                                     value={newPromotionalMessage.message}
@@ -1656,7 +1759,25 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                             </div>
-                            <button type="submit" style={btnPrimary}>✅ Agregar Mensaje Promocional</button>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button type="submit" style={{ ...btnPrimary, flex: 1 }}>
+                                    {editingPromotionalMessageId ? '💾 Actualizar Mensaje' : '✅ Agregar Mensaje Promocional'}
+                                </button>
+                                {editingPromotionalMessageId && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleCancelEditPromotionalMessage}
+                                        style={{ 
+                                            ...btnAction, 
+                                            background: '#6b7280',
+                                            color: 'white',
+                                            padding: '12px 20px'
+                                        }}
+                                    >
+                                        ❌ Cancelar
+                                    </button>
+                                )}
+                            </div>
                         </form>
 
                         <h4>Mensajes Existentes ({promotionalMessages.length})</h4>
@@ -1713,6 +1834,18 @@ export default function AdminDashboard() {
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button 
+                                                onClick={() => handleEditPromotionalMessage(promo)}
+                                                style={{
+                                                    ...btnAction,
+                                                    background: '#3b82f6',
+                                                    color: 'white',
+                                                    padding: '8px 12px',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                ✏️ Editar
+                                            </button>
                                             <button 
                                                 onClick={() => handleTogglePromotionalMessage(promo.id, promo.is_active)}
                                                 style={{

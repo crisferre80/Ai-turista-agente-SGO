@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 const SANTI_AVATAR = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png";
 
@@ -23,8 +24,32 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isVisible, setIsVisible] = useState(true);
     const [images] = useState<string[]>(INTRO_IMAGES);
+    const [userName, setUserName] = useState<string | null>(null);
     const audioRef = React.useRef<HTMLAudioElement | null>(null);
     const [isSpeaking] = useState(false);
+
+    useEffect(() => {
+        fetchUserProfile();
+    }, []);
+
+    const fetchUserProfile = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('name')
+                    .eq('id', user.id)
+                    .single();
+                
+                if (profile?.name) {
+                    setUserName(profile.name);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+        }
+    };
 
     // No hacer autoplay de audio aquí, ya que el chat se encargará del mensaje de bienvenida
     // useEffect(() => {
@@ -141,7 +166,13 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 marginBottom: 50,
                                 textShadow: '0 2px 10px rgba(0,0,0,1)',
                                 maxWidth: 500
-                            }}>¡Epa chango! Te doy la bienvenida a mi tierra. Soy <strong>Santi</strong> y hoy voy a ser tu guía virtual en este viaje inolvidable.</p>
+                            }}>
+                                {userName ? (
+                                    <>¡Hola de nuevo <strong>{userName}</strong>! Me alegro de verte otra vez por acá. Preparate para seguir descubriendo Santiago.</>
+                                ) : (
+                                    <>¡Epa chango! Te doy la bienvenida a mi tierra. Soy <strong>Santi</strong> y hoy voy a ser tu guía virtual en este viaje inolvidable.</>
+                                )}
+                            </p>
                             <button onClick={handleStart} className="start-button" style={{
                                 padding: '20px 60px',
                                 fontSize: '1.4rem',

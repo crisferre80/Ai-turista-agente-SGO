@@ -38,10 +38,40 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
         }
 
-        // Rate limiting check - usar IP o un identificador del usuario
+        // Obtener datos del usuario autenticado
+        const authHeader = req.headers.get('Authorization');
+        let userProfile = null;
+        let userId: string | null = null;
+
+        if (authHeader) {
+            try {
+                const token = authHeader.replace('Bearer ', '');
+                const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+                
+                if (user && !authError) {
+                    userId = user.id;
+                    // Obtener perfil del usuario
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('name, bio, preferences, created_at')
+                        .eq('id', user.id)
+                        .single();
+                    
+                    if (profile) {
+                        userProfile = profile;
+                        console.log('👤 Usuario autenticado:', profile.name || user.email);
+                    }
+                }
+            } catch (authErr) {
+                console.log('No hay usuario autenticado o token inválido');
+            }
+        }
+
+        // Rate limiting check - usar userId si existe, sino IP
         const forwardedFor = req.headers.get('x-forwarded-for');
         const userIp = forwardedFor ? forwardedFor.split(',')[0] : 'unknown';
-        const rateLimit = checkRateLimit(userIp);
+        const rateLimitKey = userId || userIp;
+        const rateLimit = checkRateLimit(rateLimitKey);
         
         if (!rateLimit.allowed) {
             return NextResponse.json({ 
@@ -138,6 +168,7 @@ export async function POST(req: Request) {
         // 1. Fetch Local Data for Context
         const { data: attractions } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng');
         const { data: businesses } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng');
+        const { data: videos } = await supabase.from('app_videos').select('id, title, video_url');
 
         const localContext = `
         INFORMACIÓN LOCAL REGISTRADA (PRIORIDAD ALTA):
@@ -145,12 +176,38 @@ export async function POST(req: Request) {
         Negocios/Servicios: ${JSON.stringify(businesses || [])}
         `;
 
+        // Construir información del usuario si está autenticado
+        let userContext = '';
+        if (userProfile) {
+            const userName = userProfile.name || 'turista';
+            const userBio = userProfile.bio || '';
+            const userPreferences = userProfile.preferences || '';
+            const visitNumber = userProfile.created_at ? 
+                `Usuario registrado desde ${new Date(userProfile.created_at).toLocaleDateString('es-AR')}` : 
+                'Usuario nuevo';
+            
+            userContext = `
+        
+        INFORMACIÓN DEL USUARIO (PERSONALIZACIÓN):
+        - Nombre: ${userName}
+        - ${visitNumber}
+        ${userBio ? `- Bio: ${userBio}` : ''}
+        ${userPreferences ? `- Preferencias/Intereses: ${userPreferences}` : ''}
+        
+        IMPORTANTE: Este usuario ya está registrado. Dirígete a él por su nombre (${userName}) de manera natural y amigable.
+        NO le preguntes su nombre ni información personal que ya tenés. 
+        Usa sus preferencias e intereses para personalizar tus recomendaciones y hacer sugerencias más relevantes.
+        Si no tiene preferencias registradas, podés preguntarle sutilmente sobre sus gustos para mejorar las recomendaciones.
+        `;
+        }
+
         const systemPrompt = `
     Sos "Santi", un amigable asistente robot turístico de la provincia de Santiago del Estero, Argentina.
     
     Tu personalidad:
     - Alegre, servicial y usas modismos santiagueños sutiles (ej: "chango", "changuito", "changuita").
     - Conoces muy bien la cultura, el folclore, y lugares icónicos.
+    ${userProfile ? `- Conoces al usuario: ${userProfile.name || 'turista'}, tratalo con familiaridad y personaliza tus respuestas según sus intereses.` : '- Sos amigable con los visitantes y te gusta conocerlos.'}
     
     INSTRUCCIONES CRÍTICAS:
     1. PRIORIDAD DE DATOS: Antes de usar tu conocimiento general, REVISA SIEMPRE la "INFORMACIÓN LOCAL REGISTRADA" provista arriba.
@@ -166,9 +223,11 @@ export async function POST(req: Request) {
        - NO menciones coordenadas ni ubicaciones específicas en estos casos
     7. Diferencia entre consultas de INFORMACIÓN (mostrar detalles del lugar) y consultas de RUTA (solo trazar camino)
     8. Sé conversacional pero conciso en consultas de ruta.
+    ${userProfile ? `9. PERSONALIZACIÓN: El usuario ya está registrado. Usá su nombre (${userProfile.name}) naturalmente y NO le preguntes información que ya tenés (nombre, edad, origen). Personalizá tus recomendaciones según sus preferencias.` : '9. Si el usuario no está registrado, podés preguntarle su nombre y conocerlo mejor.'}
 
     Contexto actual de la app:
     ${localContext}
+    ${userContext}
     `;
 
                 // Decide provider based on app settings
@@ -356,12 +415,142 @@ export async function POST(req: Request) {
             }
         }
         
+        // Buscar video relevante basado en el contenido del mensaje del usuario y la respuesta
+        let relevantVideo = null;
+        if (!isRouteOnly) {
+            const searchText = (lastMessage?.content + ' ' + reply).toLowerCase();
+            
+            // Normalizar texto para búsqueda (remover acentos y caracteres especiales)
+            const normalizeText = (text: string) => {
+                return text
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+            
+            const normalizedSearch = normalizeText(searchText);
+            
+            // Palabras comunes que no deben contar como coincidencias significativas
+            const commonWords = new Set(['de', 'del', 'la', 'el', 'en', 'los', 'las', 'un', 'una', 'con', 'por', 'para', 'santiago', 'estero']);
+            
+            let bestMatch: { video: typeof videos[0], score: number } | null = null;
+            
+            // Buscar coincidencias en títulos de videos locales
+            if (videos && videos.length > 0) {
+                for (const video of videos) {
+                    const normalizedTitle = normalizeText(video.title);
+                    const titleWords = normalizedTitle.split(/\s+/).filter(w => w.length > 2 && !commonWords.has(w));
+                    const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length > 2 && !commonWords.has(w));
+                    
+                    // Contar palabras coincidentes exactas y parciales
+                    let exactMatches = 0;
+                    let partialMatches = 0;
+                    
+                    for (const titleWord of titleWords) {
+                        for (const searchWord of searchWords) {
+                            if (titleWord === searchWord) {
+                                exactMatches++;
+                            } else if (titleWord.length > 4 && searchWord.length > 4) {
+                                // Para palabras largas, permitir coincidencias parciales
+                                if (titleWord.includes(searchWord) || searchWord.includes(titleWord)) {
+                                    partialMatches++;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Calcular score: exactas valen más que parciales
+                    const score = (exactMatches * 2) + partialMatches;
+                    
+                    // Guardar mejor match
+                    if (score >= 3 && (!bestMatch || score > bestMatch.score)) {
+                        bestMatch = { video, score };
+                    }
+                }
+            }
+            
+            // Si encontramos video local, usarlo
+            if (bestMatch) {
+                relevantVideo = {
+                    id: bestMatch.video.id,
+                    title: bestMatch.video.title,
+                    url: bestMatch.video.video_url
+                };
+                console.log(`📹 Video local encontrado: "${bestMatch.video.title}" (score: ${bestMatch.score})`);
+            } else {
+                // Si no hay video local, detectar si la consulta es sobre un evento/tema que podría tener video
+                const videoKeywords = [
+                    'video', 'ver', 'muestra', 'muéstrame', 'mostrame', 'mira',
+                    'marcha', 'festival', 'evento', 'fiesta', 'celebración', 'celebracion',
+                    'baile', 'danza', 'música', 'musica', 'folklore', 'folclore',
+                    'bombos', 'chacarera', 'carnaval', 'procesión', 'procesion'
+                ];
+                
+                const hasVideoIntent = videoKeywords.some(keyword => 
+                    normalizedSearch.includes(keyword)
+                );
+                
+                // Si la consulta sugiere búsqueda de video, buscar en YouTube usando la API
+                if (hasVideoIntent) {
+                    try {
+                        // Extraer términos relevantes para la búsqueda
+                        const searchWords = normalizedSearch
+                            .split(/\s+/)
+                            .filter(w => w.length > 3 && !commonWords.has(w))
+                            .slice(0, 5); // Tomar máximo 5 palabras relevantes
+                        
+                        const youtubeSearchQuery = `${searchWords.join(' ')} Santiago del Estero`;
+                        console.log(`🔍 Buscando en YouTube: "${youtubeSearchQuery}"`);
+                        
+                        // Usar YouTube Data API v3 para buscar videos
+                        const youtubeApiKey = process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY;
+                        if (!youtubeApiKey) {
+                            console.warn('No YouTube API key available');
+                        } else {
+                            const youtubeResponse = await fetch(
+                                `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(youtubeSearchQuery)}&type=video&key=${youtubeApiKey}`,
+                                { method: 'GET' }
+                            );
+                            
+                            if (youtubeResponse.ok) {
+                                const youtubeData = await youtubeResponse.json();
+                                console.log('YouTube API response:', youtubeData);
+                                
+                                if (youtubeData.items && youtubeData.items.length > 0) {
+                                    const firstVideo = youtubeData.items[0];
+                                    const videoId = firstVideo.id.videoId;
+                                    const videoTitle = firstVideo.snippet.title;
+                                    const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                                    
+                                    relevantVideo = {
+                                        id: videoId,
+                                        title: videoTitle,
+                                        url: embedUrl,
+                                        isYouTube: true
+                                    };
+                                    console.log(`📹 Video de YouTube encontrado: "${videoTitle}" (${videoId})`);
+                                }
+                            } else {
+                                console.warn('YouTube API error:', youtubeResponse.status, await youtubeResponse.text());
+                            }
+                        }
+                    } catch (youtubeError) {
+                        console.error('Error buscando en YouTube:', youtubeError);
+                    }
+                }
+            }
+        }
+        
         return NextResponse.json({ 
             reply, 
             placeId, 
             placeName, 
             placeDescription,
             isRouteOnly,
+            relevantVideo,
             remainingRequests: rateLimit.remainingRequests
         });
 

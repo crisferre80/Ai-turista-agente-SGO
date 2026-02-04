@@ -103,13 +103,62 @@ export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: 
   }
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-      gap: '25px',
-      padding: '20px 0'
-    }}>
-      {reviews.map((review) => (
+    <>
+      {/* Botón para agregar reseña */}
+      {placeId && (
+        <div style={{
+          textAlign: 'center',
+          marginBottom: '30px',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%)',
+          borderRadius: '16px',
+          border: `2px solid ${COLOR_GOLD}44`
+        }}>
+          <p style={{
+            color: COLOR_BLUE,
+            fontSize: '1.1rem',
+            fontWeight: '600',
+            marginBottom: '15px'
+          }}>
+            💬 ¿Ya visitaste este lugar? ¡Comparte tu experiencia!
+          </p>
+          <button 
+            onClick={() => setShowModal(true)} 
+            style={{ 
+              padding: '12px 24px', 
+              borderRadius: '12px', 
+              background: COLOR_BLUE, 
+              color: 'white', 
+              border: 'none',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 4px 12px rgba(26, 58, 108, 0.3)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#0f2952';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(26, 58, 108, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = COLOR_BLUE;
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(26, 58, 108, 0.3)';
+            }}
+          >
+            ✨ Dejar mi Reseña
+          </button>
+        </div>
+      )}
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: '25px',
+        padding: '20px 0'
+      }}>
+        {reviews.map((review) => (
         <div
           key={review.id}
           className="user-review-card"
@@ -190,8 +239,12 @@ export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: 
                   width={32}
                   height={32}
                   style={{
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '50%',
-                    border: `2px solid ${COLOR_GOLD}`
+                    border: `2px solid ${COLOR_GOLD}`,
+                    objectFit: 'cover',
+                    flexShrink: 0
                   }}
                 />
               ) : (
@@ -232,6 +285,21 @@ export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: 
         </div>
       ))}
 
+      {/* Modal de creación de reseña */}
+      {showModal && placeId && (
+        <UserReviewModal 
+          isOpen={true} 
+          onClose={() => { 
+            setShowModal(false); 
+            fetchReviews(); 
+          }} 
+          attractionId={!isBusiness ? placeId : undefined} 
+          businessId={isBusiness ? placeId : undefined} 
+          locationName={reviews[0]?.location_name || ''} 
+        />
+      )}
+    </div>
+
       <style jsx>{`
         .user-review-card:hover {
           transform: translateY(-8px);
@@ -239,6 +307,6 @@ export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: 
           border-color: ${COLOR_GOLD};
         }
       `}</style>
-    </div>
+    </>
   );
 }

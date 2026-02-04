@@ -44,6 +44,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
     const [promotionalMessages, setPromotionalMessages] = useState<string[]>([]); // Promotional messages from DB
+    const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video
+    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string } | null>(null); // Video actual
 
     // External triggers effects will be registered after callbacks are defined
 
@@ -53,21 +55,67 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const lastInteractionRef = useRef(Date.now()); // Track inactivity
     const micHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to auto-hide mic legend on touch
 
-    const [engagementPrompts, setEngagementPrompts] = useState([
-        "¿Hay algo en que pueda ayudarte?",
-        "¿De dónde nos visitas?",
-        "¿Cómo te llamas?",
-        "¿Cuál es tu edad?",
-        "Cuanto más sepa de vos, mejor podré guiarte.",
-        "¿Te gustaría conocer algún lugar histórico?",
-        "¿Sabías que Santiago es la Madre de Ciudades?",
-        "Si buscas comida rica, puedo recomendarte lugares."
-    ]);
+    const [engagementPrompts, setEngagementPrompts] = useState<string[]>([]);
+    const [userProfile, setUserProfile] = useState<{ name: string | null; preferences: string | null } | null>(null);
 
     useEffect(() => {
+        fetchUserProfile();
         fetchCloudPhrases();
         fetchPromotionalMessages();
     }, []);
+
+    const fetchUserProfile = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('name, preferences')
+                    .eq('id', user.id)
+                    .single();
+                
+                if (profile) {
+                    setUserProfile(profile);
+                    console.log('👤 Usuario autenticado en ChatInterface:', profile.name);
+                    
+                    // Frases para usuarios registrados (personalizadas)
+                    const registeredPrompts = [
+                        "¿Hay algo en que pueda ayudarte?",
+                        "¿Te gustaría conocer algún lugar histórico?",
+                        "¿Sabías que Santiago es la Madre de Ciudades?",
+                        "Si buscas comida rica, puedo recomendarte lugares.",
+                        "¿Querés saber sobre eventos culturales?",
+                        "¿Te interesa conocer lugares nocturnos?"
+                    ];
+                    setEngagementPrompts(registeredPrompts);
+                } else {
+                    // Usuario no registrado o sin perfil
+                    loadGuestPrompts();
+                }
+            } else {
+                // No hay usuario autenticado
+                loadGuestPrompts();
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+            loadGuestPrompts();
+        }
+    };
+
+    const loadGuestPrompts = () => {
+        // Frases para visitantes no registrados (incluyen preguntas personales)
+        const guestPrompts = [
+            "¿Hay algo en que pueda ayudarte?",
+            "¿De dónde nos visitas?",
+            "¿Cómo te llamas?",
+            "¿Cuál es tu edad?",
+            "Cuanto más sepa de vos, mejor podré guiarte.",
+            "¿Te gustaría conocer algún lugar histórico?",
+            "¿Sabías que Santiago es la Madre de Ciudades?",
+            "Si buscas comida rica, puedo recomendarte lugares."
+        ];
+        setEngagementPrompts(guestPrompts);
+    };
 
     const fetchCloudPhrases = async () => {
         const { data } = await supabase.from('santis_phrases').select('phrase');
@@ -377,10 +425,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         setIsThinking(true);
 
         try {
+            // Obtener token del usuario autenticado
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers: HeadersInit = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+
             // Call Chat API
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                     messages: [...getApiMessages(), { role: 'user', content: textToSend }],
                     userLocation: userLocation || undefined
@@ -406,12 +461,24 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 return;
             }
             
-            const botReply = data.reply || "Lo siento, tuve un problema al pensar. ¿Podrías repetir?";
+            let botReply = data.reply || "Lo siento, tuve un problema al pensar. ¿Podrías repetir?";
             const placeId = data.placeId;
             const placeName = data.placeName;
             const isRouteOnly = data.isRouteOnly; // Flag para indicar consulta de ruta únicamente
+            const relevantVideo = data.relevantVideo; // Video relevante si existe
 
-            console.log('Chat API response:', { botReply: botReply.substring(0, 50), placeId, placeName, isRouteOnly });
+            // Si hay video relevante, modificar la respuesta y preparar modal
+            if (relevantVideo && relevantVideo.url) {
+                const videoTitle = relevantVideo.title;
+                botReply = `${botReply}\n\n¡Mirá! Te muestro imágenes de "${videoTitle}" para que lo veas mejor.`;
+                setCurrentVideo({ title: videoTitle, url: relevantVideo.url });
+                // Mostrar modal después de un pequeño delay
+                setTimeout(() => {
+                    setShowVideoModal(true);
+                }, 1500);
+            }
+
+            console.log('Chat API response:', { botReply: botReply.substring(0, 50), placeId, placeName, isRouteOnly, hasVideo: !!relevantVideo });
 
             // Add Assistant Message
             setMessages(prev => [...prev, { role: 'assistant', content: botReply }]);
@@ -1091,6 +1158,140 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                 animation: 'bounce 1.4s infinite ease-in-out 0.4s'
                             }} />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* VIDEO MODAL */}
+            {showVideoModal && currentVideo && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 30000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0, 0, 0, 0.8)',
+                    backdropFilter: 'blur(10px)',
+                    animation: 'fadeIn 0.3s ease-out',
+                    padding: '20px'
+                }}
+                onClick={() => {
+                    setShowVideoModal(false);
+                    setCurrentVideo(null);
+                }}
+                >
+                    <div style={{
+                        background: 'white',
+                        borderRadius: 20,
+                        padding: '30px',
+                        boxShadow: '0 25px 70px rgba(0,0,0,0.4)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 20,
+                        maxWidth: '90%',
+                        maxHeight: '90%',
+                        width: '800px',
+                        animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        position: 'relative'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Botón cerrar */}
+                        <button
+                            onClick={() => {
+                                setShowVideoModal(false);
+                                setCurrentVideo(null);
+                            }}
+                            style={{
+                                position: 'absolute',
+                                top: 15,
+                                right: 15,
+                                background: COLOR_RED,
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: 40,
+                                height: 40,
+                                fontSize: '20px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                                transition: 'all 0.2s ease',
+                                zIndex: 1
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                            }}
+                        >
+                            ✕
+                        </button>
+
+                        {/* Título */}
+                        <div style={{ paddingRight: '50px' }}>
+                            <h3 style={{
+                                margin: 0,
+                                fontSize: '1.5rem',
+                                fontWeight: 900,
+                                color: COLOR_BLUE,
+                                marginBottom: 8
+                            }}>
+                                {currentVideo.title}
+                            </h3>
+                            <p style={{
+                                margin: 0,
+                                fontSize: '0.95rem',
+                                color: '#64748b',
+                                fontWeight: 500
+                            }}>
+                                Mirá este video que encontré para vos
+                            </p>
+                        </div>
+
+                        {/* Video de YouTube */}
+                        <div style={{
+                            position: 'relative',
+                            paddingBottom: '56.25%', // 16:9 aspect ratio
+                            height: 0,
+                            overflow: 'hidden',
+                            borderRadius: 12,
+                            background: '#000',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+                        }}>
+                            <iframe
+                                src={`${currentVideo.url.replace('watch?v=', 'embed/')}${currentVideo.url.includes('?') ? '&' : '?'}mute=1`}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none',
+                                    borderRadius: 12
+                                }}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                            />
+                        </div>
+
+                        {/* Info adicional */}
+                        <p style={{
+                            margin: 0,
+                            fontSize: '0.85rem',
+                            color: '#94a3b8',
+                            textAlign: 'center',
+                            fontStyle: 'italic'
+                        }}>
+                            Podés cerrar este video cuando quieras y seguir charlando conmigo
+                        </p>
                     </div>
                 </div>
             )}

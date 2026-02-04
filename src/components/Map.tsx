@@ -140,6 +140,102 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                 } catch {}
 
+                // Animación 3D suave y constante
+                let animationId: number | null = null;
+                let inactivityTimer: NodeJS.Timeout | null = null;
+                let isAnimating = false;
+                let startTime = Date.now();
+                const animationDuration = 60000; // 60 segundos por ciclo completo
+                const inactivityDelay = 5000; // 5 segundos de inactividad antes de reanudar
+                
+                const animate3D = () => {
+                    if (!map.current || !isAnimating) return;
+                    
+                    const elapsed = Date.now() - startTime;
+                    const progress = (elapsed % animationDuration) / animationDuration;
+                    
+                    // Rotación suave de 0 a 360 grados
+                    const bearing = progress * 360;
+                    
+                    // Pitch oscilante entre 5 y 35 grados (usa seno para movimiento suave)
+                    const pitch = 20 + Math.sin(progress * Math.PI * 2) * 15;
+                    
+                    // Zoom sutil que oscila
+                    const zoomOffset = Math.sin(progress * Math.PI * 4) * 0.3;
+                    
+                    map.current.setBearing(bearing);
+                    map.current.setPitch(pitch);
+                    map.current.setZoom(zoom + zoomOffset);
+                    
+                    animationId = requestAnimationFrame(animate3D);
+                };
+                
+                const startAnimation = () => {
+                    if (isAnimating) return;
+                    isAnimating = true;
+                    startTime = Date.now(); // Reset timer para animación suave
+                    console.log('🎬 Iniciando animación del mapa');
+                    animate3D();
+                };
+                
+                const stopAnimation = () => {
+                    if (!isAnimating) return;
+                    isAnimating = false;
+                    if (animationId !== null) {
+                        cancelAnimationFrame(animationId);
+                        animationId = null;
+                    }
+                    console.log('⏸️ Animación del mapa detenida');
+                };
+                
+                const resetInactivityTimer = () => {
+                    // Detener animación inmediatamente cuando hay interacción
+                    stopAnimation();
+                    
+                    // Limpiar timer anterior
+                    if (inactivityTimer !== null) {
+                        clearTimeout(inactivityTimer);
+                    }
+                    
+                    // Configurar nuevo timer de inactividad
+                    inactivityTimer = setTimeout(() => {
+                        startAnimation();
+                    }, inactivityDelay);
+                };
+                
+                // Detectar interacciones del usuario
+                const interactionEvents = [
+                    'mousedown', 'touchstart',  // Inicio de interacción
+                    'wheel',                     // Zoom con rueda
+                    'dragstart', 'drag',        // Arrastre
+                    'zoomstart', 'zoom'         // Zoom
+                ];
+                
+                interactionEvents.forEach(event => {
+                    m.on(event as any, resetInactivityTimer);
+                });
+                
+                // Iniciar animación después de 2 segundos
+                setTimeout(() => {
+                    if (map.current) {
+                        startAnimation();
+                    }
+                }, 2000);
+                
+                // Limpiar animación y timers cuando el componente se desmonte
+                const originalRemove = m.remove.bind(m);
+                m.remove = () => {
+                    stopAnimation();
+                    if (inactivityTimer !== null) {
+                        clearTimeout(inactivityTimer);
+                    }
+                    // Remover event listeners
+                    interactionEvents.forEach(event => {
+                        m.off(event as any, resetInactivityTimer);
+                    });
+                    originalRemove();
+                };
+
                 // Intentar obtener ubicación inicial
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(

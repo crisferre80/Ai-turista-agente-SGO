@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
 import GalleryModal from '@/components/GalleryModal';
+import UserAvatar from '@/components/UserAvatar';
 import UserReviewModal from '@/components/UserReviewModal';
 import UserReviewsGallery from '@/components/UserReviewsGallery';
 
@@ -435,7 +436,7 @@ export default function ExplorePage() {
                             Explorar Santiago
                         </h1>
 
-                        <div style={{ width: '100px' }}></div> {/* Spacer for mobile balance */}
+                        <UserAvatar size={32} showName={true} />
                     </div>
 
                     {/* Search and Filters */}

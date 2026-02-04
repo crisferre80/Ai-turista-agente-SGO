@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isAdminMode, setIsAdminMode] = useState(true);
+    const [isAdminMode, setIsAdminMode] = useState(false);
     const [isTourist, setIsTourist] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -24,18 +24,139 @@ export default function LoginPage() {
 
         try {
             if (isAdminMode) {
-                // Admin simple key legacy support
-                if (password === 'santi2024') {
-                    localStorage.setItem('adminToken', 'granted');
-                    router.push('/admin');
-                } else {
-                    setError('Clave incorrecta, chango.');
+                // Admin: Autenticación real con Supabase
+                if (!email || !password) {
+                    setError('Por favor completa email y contraseña de admin');
+                    setLoading(false);
+                    return;
                 }
+
+                const { data, error: authError } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+
+                if (authError) {
+                    console.error('Admin login error:', authError);
+                    setError('Credenciales de admin incorrectas. Verifica email y contraseña.');
+                    setLoading(false);
+                    return;
+                }
+
+                // Verificar que el usuario tiene role 'admin'
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', data.user?.id)
+                    .single();
+
+                if (profileError || profileData?.role !== 'admin') {
+                    await supabase.auth.signOut();
+                    setError('Esta cuenta no tiene permisos de administrador.');
+                    setLoading(false);
+                    return;
+                }
+
+                // Login exitoso - mantener compatibilidad con localStorage
+                localStorage.setItem('adminToken', 'granted');
+                router.push('/admin');
             } else if (isTourist) {
-                // Tourist: send magic link via Supabase
-                const { data, error: authError } = await supabase.auth.signInWithOtp({ email });
-                if (authError) throw authError;
-                setSuccess('Te enviamos un enlace de acceso a tu email. Revisalo y hacé click para ingresar.');
+                // Tourist: usar email/password tradicional
+                if (!email || !password) {
+                    setError('Por favor completa email y contraseña');
+                    setLoading(false);
+                    return;
+                }
+
+                if (isRegistering) {
+                    // Registro nuevo de turista
+                    const { data, error: authError } = await supabase.auth.signUp({
+                        email,
+                        password,
+                        options: {
+                            data: {
+                                role: 'tourist'
+                            }
+                        }
+                    });
+
+                    if (authError) throw authError;
+
+                    // El trigger 'on_auth_user_created' ya crea el perfil automáticamente
+                    // Solo verificamos que se haya creado correctamente
+                    if (data.user) {
+                        // Esperar un momento para que el trigger complete
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        // Verificar que el perfil se creó
+                        const { data: profile, error: profileError } = await supabase
+                            .from('profiles')
+                            .select('id, name, role')
+                            .eq('id', data.user.id)
+                            .maybeSingle();
+
+                        if (profileError) {
+                            console.error('Error verificando perfil de turista:', profileError);
+                        } else if (!profile) {
+                            // Si el trigger falló, crear manualmente como fallback
+                            console.log('Trigger no creó el perfil, creando manualmente...');
+                            const { error: insertError } = await supabase
+                                .from('profiles')
+                                .insert({
+                                    id: data.user.id,
+                                    name: email.split('@')[0],
+                                    role: 'tourist',
+                                    avatar_url: null
+                                });
+                            
+                            if (insertError && insertError.code !== '23505') { // 23505 = duplicate key
+                                console.error('Error creando perfil manualmente:', insertError);
+                            }
+                        } else {
+                            console.log('✅ Perfil creado correctamente:', profile);
+                        }
+                    }
+
+                    setSuccess('🎉 ¡Cuenta creada! Revisá tu email para confirmar tu cuenta.');
+                    setTimeout(() => {
+                        setIsRegistering(false);
+                        setEmail('');
+                        setPassword('');
+                    }, 2000);
+                } else {
+                    // Login turista existente
+                    const { data, error: authError } = await supabase.auth.signInWithPassword({
+                        email,
+                        password
+                    });
+
+                    if (authError) {
+                        console.error('Tourist login error:', authError);
+                        setError('Email o contraseña incorrectos. ¿No tenés cuenta? Registrate primero.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Verificar que el perfil existe y es turista
+                    const { data: profileData, error: profileError } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', data.user?.id)
+                        .maybeSingle();
+
+                    if (profileError || !profileData) {
+                        // Si no existe el perfil, crearlo
+                        await supabase.from('profiles').insert({
+                            id: data.user.id,
+                            name: email.split('@')[0],
+                            role: 'tourist',
+                            avatar_url: null
+                        });
+                    }
+
+                    setSuccess('✅ ¡Sesión iniciada! Redirigiendo...');
+                    setTimeout(() => router.push('/explorar'), 1000);
+                }
             } else {
                 if (isRegistering) {
                     // Sign Up Business
@@ -207,24 +328,6 @@ export default function LoginPage() {
                     border: `2px solid ${COLOR_GOLD}22`
                 }}>
                     <button
-                        onClick={() => { setIsAdminMode(true); setIsRegistering(false); setIsTourist(false); }}
-                        style={{
-                            flex: 1, 
-                            padding: '14px 20px', 
-                            borderRadius: '50px', 
-                            border: 'none',
-                            background: isAdminMode ? COLOR_DARK : 'transparent',
-                            color: isAdminMode ? COLOR_GOLD : '#64748b',
-                            fontWeight: isAdminMode ? 'bold' : '600',
-                            cursor: 'pointer',
-                            fontSize: '15px',
-                            transition: 'all 0.2s ease',
-                            boxShadow: isAdminMode ? `0 8px 20px ${COLOR_DARK}44` : 'none'
-                        }}
-                    >
-                        Admin
-                    </button>
-                    <button
                         onClick={() => { setIsAdminMode(false); setIsRegistering(false); setIsTourist(false); }}
                         style={{
                             flex: 1, 
@@ -263,32 +366,70 @@ export default function LoginPage() {
                 </div>
 
                 <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-{!isAdminMode && !isTourist && (
-                    <input
-                        type="email"
-                        placeholder="Email del negocio"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        style={inputStyle}
-                        required
-                    />
-                )}
+                    {isAdminMode && (
+                        <input
+                            type="email"
+                            placeholder="Email de administrador"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            style={inputStyle}
+                            required
+                        />
+                    )}
+
+                    {!isAdminMode && !isTourist && (
+                        <input
+                            type="email"
+                            placeholder="Email del negocio"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            style={inputStyle}
+                            required
+                        />
+                    )}
 
                 {isTourist && (
-                  <input
-                    type="email"
-                    placeholder="Tu email (te enviaremos enlace de acceso)"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={inputStyle}
-                    required
-                  />
+                  <>
+                    <input
+                      type="email"
+                      placeholder="Tu email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                    <input
+                      type="password"
+                      placeholder="Tu contraseña"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                    <div style={{
+                      background: '#e0f2fe',
+                      border: '1px solid #38bdf8',
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      fontSize: '0.875rem',
+                      color: '#0c4a6e',
+                      lineHeight: '1.5'
+                    }}>
+                      <strong>ℹ️ Tu sesión se mantendrá activa</strong>
+                      <br />
+                      • <strong>{isRegistering ? 'Crear cuenta nueva' : 'Iniciar sesión'}</strong>
+                      <br />
+                      <span style={{ fontSize: '0.8rem', color: '#0369a1', fontStyle: 'italic' }}>
+                        No tendrás que ingresar tu email cada vez 🔐
+                      </span>
+                    </div>
+                  </>
                 )}
 
                 {!isTourist && (
                   <input
                     type="password"
-                    placeholder={isAdminMode ? "Clave maestra" : "Contraseña"}
+                    placeholder={isAdminMode ? "Contraseña de admin" : "Contraseña"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     style={inputStyle}
@@ -339,9 +480,30 @@ export default function LoginPage() {
                             letterSpacing: '0.3px'
                         }}
                     >
-                        {loading ? 'Procesando...' : (isRegistering ? 'Registrarse' : (isTourist ? 'Enviar enlace' : 'Ingresar'))}
+                        {loading ? 'Procesando...' : (isRegistering ? (isTourist ? '🎉 Crear Cuenta' : 'Registrarse') : 'Ingresar')}
                     </button>
                 </form>
+
+                {isTourist && (
+                    <div style={{ marginTop: '20px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => setIsRegistering(!isRegistering)}
+                                style={{ 
+                                    background: 'none', 
+                                    border: 'none', 
+                                    color: '#20B2AA', 
+                                    cursor: 'pointer', 
+                                    fontSize: '14px', 
+                                    textDecoration: 'underline',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                {isRegistering ? '¿Ya tenés cuenta? Ingresá' : '¿Primera vez? Creá tu cuenta'}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {!isAdminMode && !isTourist && (
                     <div style={{ marginTop: '20px' }}>
@@ -419,8 +581,57 @@ export default function LoginPage() {
                     </button>
 
                     {isTourist && (
-                      <div style={{ marginTop: 12 }}>
-                        <Link href="/explorar" style={{ color: COLOR_BLUE, textDecoration: 'underline', fontWeight: 700 }}>Ingresar como Invitado</Link>
+                      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                        <Link href="/explorar" style={{ color: COLOR_BLUE, textDecoration: 'underline', fontWeight: 700, fontSize: '14px' }}>
+                          Ingresar como Invitado
+                        </Link>
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                          💡 Tu sesión se mantiene activa, no necesitas ingresar cada vez
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Enlace discreto para admin */}
+                    {!isAdminMode && (
+                      <div style={{ marginTop: 20, paddingTop: 15, borderTop: '1px solid #f1f5f9' }}>
+                        <button
+                          onClick={() => { setIsAdminMode(true); setIsRegistering(false); setIsTourist(false); }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#94a3b8',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            textDecoration: 'underline',
+                            fontWeight: '500',
+                            opacity: 0.6,
+                            transition: 'opacity 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                        >
+                          Acceso administrativo
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Botón para volver al modo normal desde admin */}
+                    {isAdminMode && (
+                      <div style={{ marginTop: 15 }}>
+                        <button
+                          onClick={() => { setIsAdminMode(false); setIsRegistering(false); setIsTourist(false); }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: COLOR_BLUE,
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            textDecoration: 'underline',
+                            fontWeight: '600'
+                          }}
+                        >
+                          ← Volver a opciones principales
+                        </button>
                       </div>
                     )}
                 </div>

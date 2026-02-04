@@ -21,14 +21,26 @@ CREATE INDEX IF NOT EXISTS idx_promotional_messages_priority ON promotional_mess
 -- RLS
 ALTER TABLE promotional_messages ENABLE ROW LEVEL SECURITY;
 
+-- Eliminar TODAS las políticas existentes primero
+DO $$ 
+DECLARE
+    pol record;
+BEGIN
+    FOR pol IN 
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE tablename = 'promotional_messages'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON promotional_messages', pol.policyname);
+    END LOOP;
+END $$;
+
 -- Policy: lectura pública para mensajes activos
-DROP POLICY IF EXISTS "Anyone can view active promotional messages" ON promotional_messages;
 CREATE POLICY "Anyone can view active promotional messages"
     ON promotional_messages FOR SELECT
     USING (is_active = true);
 
 -- Policy: usuarios autenticados pueden gestionar (el control de admin se hace en la app)
-DROP POLICY IF EXISTS "Only admins can manage promotional messages" ON promotional_messages;
 CREATE POLICY "Authenticated users can manage promotional messages"
     ON promotional_messages FOR ALL
     USING (auth.role() = 'authenticated')
@@ -49,6 +61,9 @@ CREATE TRIGGER promotional_messages_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_promotional_messages_updated_at();
 
+-- Deshabilitar RLS temporalmente para insertar datos de ejemplo
+ALTER TABLE promotional_messages DISABLE ROW LEVEL SECURITY;
+
 -- Insertar datos de ejemplo
 INSERT INTO promotional_messages (business_name, message, is_active, category, priority, show_probability) VALUES
     ('Nodo Tecnológico', '¿Sabías que en Nodo Tecnológico podés encontrar servicio técnico, reparación de PC, venta de equipos y más? ¡Visitanos en nuestra sucursal!', true, 'tecnologia', 5, 25),
@@ -56,6 +71,9 @@ INSERT INTO promotional_messages (business_name, message, is_active, category, p
     ('Registro de Negocios', '¿Tenés un negocio que te gustaría que aparezca en la app como destacado? Te explico cómo registrarlo: 1) Entrá a ''Mi Negocio'' y completá la ficha con nombre, dirección, horario y contacto. 2) Subí varias fotos y el logo de tu establecimiento. 3) Adjuntá la documentación necesaria y solicitá la acreditación. 4) Nuestro equipo revisará la solicitud y, una vez aprobada, tu negocio podrá aparecer como ''Comercio Certificado'' y ser destacado en la app. ¿Querés que te lleve ahora al formulario?', true, 'general', 3, 25),
     ('Registro de Negocios', 'Si querés aparecer destacado en la app: abrí ''Mi Negocio'' → Crear ficha → subí fotos y un texto breve sobre lo que los hace únicos. En 48-72h el equipo revisa y te avisa. ¿Deseás que te muestre cómo?', true, 'general', 3, 25)
 ON CONFLICT DO NOTHING;
+
+-- Reactivar RLS después de los inserts
+ALTER TABLE promotional_messages ENABLE ROW LEVEL SECURITY;
 
 -- Verificar que se creó correctamente
 SELECT COUNT(*) as total_messages FROM promotional_messages;

@@ -113,64 +113,79 @@ export default function ProfilePage() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            // Mock profile for demo purposes
-            const mockProfile: UserProfile = {
-                id: 'mock-user',
-                name: 'Turista Santiagueño',
-                bio: 'Amante de la chacarera y el calor del Pago. Explorando los rincones más hermosos de Santiago del Estero.',
-                avatar_url: 'https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png',
-                role: 'user',
-                created_at: new Date().toISOString(),
-                preferences: {
-                    favorite_categories: ['historico', 'naturaleza'],
-                    language: 'es',
-                    notifications: true
-                },
-                stats: {
-                    places_visited: 12,
-                    stories_recorded: 5,
-                    reviews_left: 8,
-                    badges_earned: ['Explorador Novato', 'Contador de Historias']
-                }
-            };
-            setProfile(mockProfile);
-            setFormData({
-                name: mockProfile.name,
-                bio: mockProfile.bio || '',
-                favorite_categories: mockProfile.preferences?.favorite_categories || [],
-                language: mockProfile.preferences?.language || 'es',
-                notifications: mockProfile.preferences?.notifications || true
-            });
-            setLoading(false);
+            // Redirect to login if not authenticated
+            router.push('/login');
             return;
         }
 
+        // Obtener perfil
         const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
             .single();
 
-        if (data) {
-            const profileWithStats: UserProfile = {
-                ...data,
-                stats: {
-                    places_visited: 0,
-                    stories_recorded: 0,
-                    reviews_left: 0,
-                    badges_earned: []
+        if (error && error.code === 'PGRST116') {
+            // Si no existe el perfil, crearlo
+            const { error: insertError } = await supabase
+                .from('profiles')
+                .insert({
+                    id: user.id,
+                    name: user.email?.split('@')[0] || 'Usuario',
+                    role: 'tourist',
+                    avatar_url: null
+                });
+
+            if (!insertError) {
+                // Volver a obtener el perfil recién creado
+                const { data: newData } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', user.id)
+                    .single();
+                
+                if (newData) {
+                    await loadProfileWithStats(newData, user.id);
                 }
-            };
-            setProfile(profileWithStats);
-            setFormData({
-                name: data.name || '',
-                bio: data.bio || '',
-                favorite_categories: data.preferences?.favorite_categories || [],
-                language: data.preferences?.language || 'es',
-                notifications: data.preferences?.notifications || true
-            });
+            }
+        } else if (data) {
+            await loadProfileWithStats(data, user.id);
         }
+        
         setLoading(false);
+    };
+
+    const loadProfileWithStats = async (profileData: any, userId: string) => {
+        // Obtener estadísticas de reseñas
+        const { count: reviewsCount } = await supabase
+            .from('user_reviews')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+        // Obtener estadísticas de narraciones
+        const { count: narrationsCount } = await supabase
+            .from('narrations')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+        const profileWithStats: UserProfile = {
+            ...profileData,
+            stats: {
+                places_visited: reviewsCount || 0,
+                stories_recorded: narrationsCount || 0,
+                reviews_left: reviewsCount || 0,
+                badges_earned: []
+            }
+        };
+        
+        setProfile(profileWithStats);
+        setFormData({
+            name: profileData.name || '',
+            bio: profileData.bio || '',
+            favorite_categories: profileData.preferences?.favorite_categories || [],
+            language: profileData.preferences?.language || 'es',
+            notifications: profileData.preferences?.notifications || true
+        });
     };
 
     const fetchNarrations = async () => {

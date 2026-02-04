@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
+import UserAvatar from '@/components/UserAvatar';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
 import { santiSpeak, santiNarrate, stopSantiNarration } from '@/lib/speech';
@@ -176,6 +177,7 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
 const HeaderBar: React.FC = () => {
   const [pwaAvailable, setPwaAvailable] = useState(false);
   const [pwaInstalled, setPwaInstalled] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     type PwaDetail = { available?: boolean; installed?: boolean; showIosHint?: boolean };
@@ -202,7 +204,23 @@ const HeaderBar: React.FC = () => {
     };
 
     window.addEventListener('santIA-pwa', handler as EventListener);
-    return () => window.removeEventListener('santIA-pwa', handler as EventListener);
+
+    // Check user authentication
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    checkUser();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      window.removeEventListener('santIA-pwa', handler as EventListener);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleInstallClick = async () => {
@@ -267,18 +285,22 @@ const HeaderBar: React.FC = () => {
         }}>
           Explorar
         </Link>
-        <Link href="/login" style={{ 
-          color: '#0e1f1d', 
-          background: COLOR_GOLD, 
-          padding: '10px 20px', 
-          borderRadius: 8, 
-          fontWeight: 800, 
-          textDecoration: 'none',
-          boxShadow: `0 4px 15px ${COLOR_GOLD}44`,
-          transition: 'transform 0.2s'
-        }}>
-          Acreditación
-        </Link>
+        {user ? (
+          <UserAvatar size={32} showName={false} />
+        ) : (
+          <Link href="/login" style={{ 
+            color: '#0e1f1d', 
+            background: COLOR_GOLD, 
+            padding: '10px 20px', 
+            borderRadius: 8, 
+            fontWeight: 800, 
+            textDecoration: 'none',
+            boxShadow: `0 4px 15px ${COLOR_GOLD}44`,
+            transition: 'transform 0.2s'
+          }}>
+            Acreditación
+          </Link>
+        )}
         {pwaAvailable && !pwaInstalled && (
           <button onClick={handleInstallClick} style={{ background: '#fff', color: '#0e1f1d', padding: '8px 12px', borderRadius: 8, fontWeight: 800 }}>Instalar</button>
         )}
@@ -355,6 +377,35 @@ export default function Home() {
         }
       }, 2000);
     }
+
+    // Manejar autenticación de turistas que llegan desde magic link
+    const checkAuthState = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        const userId = session.user.id;
+        
+        // Verificar si tiene perfil
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .eq('id', userId)
+          .maybeSingle();
+
+        // Si no tiene perfil, crearlo como turista
+        if (!profile) {
+          console.log('📝 Creando perfil de turista desde página principal...');
+          await supabase.from('profiles').insert({
+            id: userId,
+            name: session.user.email?.split('@')[0] || 'Turista',
+            role: 'tourist',
+            avatar_url: null
+          });
+        }
+      }
+    };
+
+    checkAuthState();
   }, []);
 
   const fetchData = async () => {
@@ -516,11 +567,37 @@ export default function Home() {
   if (showIntro) {
     return (
       <IntroOverlay
-        onComplete={() => {
+        onComplete={async () => {
           setShowIntro(false);
           sessionStorage.setItem(INTRO_KEY, 'true');
-          setTimeout(() => {
-            santiNarrate("¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
+          
+          // Obtener datos del usuario para personalizar el mensaje
+          setTimeout(async () => {
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              let welcomeMessage = "¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.";
+              
+              if (user) {
+                // Usuario autenticado, obtener su nombre del perfil
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('name')
+                  .eq('id', user.id)
+                  .single();
+                
+                if (profile?.name) {
+                  welcomeMessage = `¡Hola ${profile.name}! Me alegro de verte de nuevo. Soy Santi, tu guía turístico virtual, y estoy listo para mostrarte más maravillas de Santiago del Estero. ¿A dónde querés ir hoy?`;
+                } else {
+                  welcomeMessage = `¡Hola de nuevo! Me alegro de verte. Soy Santi, tu guía turístico virtual. ¿A dónde querés ir hoy?`;
+                }
+              }
+              
+              santiNarrate(welcomeMessage, { source: 'intro-welcome' });
+            } catch (error) {
+              console.error('Error personalizing welcome:', error);
+              // Fallback al mensaje genérico
+              santiNarrate("¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
+            }
           }, 1000); // Dar más tiempo para que se establezca el chat
         }}
       />
