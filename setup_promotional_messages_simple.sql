@@ -27,12 +27,12 @@ CREATE POLICY "Anyone can view active promotional messages"
     ON promotional_messages FOR SELECT
     USING (is_active = true);
 
--- Policy: admins pueden gestionar
+-- Policy: usuarios autenticados pueden gestionar (el control de admin se hace en la app)
 DROP POLICY IF EXISTS "Only admins can manage promotional messages" ON promotional_messages;
-CREATE POLICY "Only admins can manage promotional messages"
+CREATE POLICY "Authenticated users can manage promotional messages"
     ON promotional_messages FOR ALL
-    USING (true)
-    WITH CHECK (true);
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
 -- Trigger para updated_at
 CREATE OR REPLACE FUNCTION update_promotional_messages_updated_at()
