@@ -1272,7 +1272,7 @@ export default function ProfilePage() {
                                 )}
 
                                 {/* Sección: Intereses y Preferencias */}
-                                {(profile?.interests?.length > 0 || profile?.accessibility_needs?.length > 0 || profile?.dietary_restrictions?.length > 0) && (
+                                {((profile?.interests?.length ?? 0) > 0 || (profile?.accessibility_needs?.length ?? 0) > 0 || (profile?.dietary_restrictions?.length ?? 0) > 0) && (
                                     <div style={{
                                         background: '#fefce8',
                                         borderRadius: '16px',
@@ -1446,7 +1446,7 @@ export default function ProfilePage() {
                                                     <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Satisfacción general</div>
                                                     <div style={{ fontSize: '28px', letterSpacing: '4px' }}>
                                                         {Array.from({ length: 5 }, (_, i) => (
-                                                            <span key={i} style={{ color: i < profile.overall_satisfaction ? COLOR_GOLD : '#cbd5e1' }}>
+                                                            <span key={i} style={{ color: i < (profile.overall_satisfaction ?? 0) ? COLOR_GOLD : '#cbd5e1' }}>
                                                                 ⭐
                                                             </span>
                                                         ))}
