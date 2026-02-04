@@ -45,7 +45,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
     const [promotionalMessages, setPromotionalMessages] = useState<string[]>([]); // Promotional messages from DB
     const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video
-    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string } | null>(null); // Video actual
+    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: any[] } | null>(null); // Video actual o lista de videos
+    const [showVideoList, setShowVideoList] = useState(false); // Mostrar lista de videos de YouTube
 
     // External triggers effects will be registered after callbacks are defined
 
@@ -468,14 +469,32 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             const relevantVideo = data.relevantVideo; // Video relevante si existe
 
             // Si hay video relevante, modificar la respuesta y preparar modal
-            if (relevantVideo && relevantVideo.url) {
-                const videoTitle = relevantVideo.title;
-                botReply = `${botReply}\n\n¡Mirá! Te muestro imágenes de "${videoTitle}" para que lo veas mejor.`;
-                setCurrentVideo({ title: videoTitle, url: relevantVideo.url });
-                // Mostrar modal después de un pequeño delay
-                setTimeout(() => {
-                    setShowVideoModal(true);
-                }, 1500);
+            if (relevantVideo) {
+                // Verificar si es una lista de videos de YouTube
+                if (relevantVideo.isYouTubeList && relevantVideo.videos && relevantVideo.videos.length > 0) {
+                    const videoCount = relevantVideo.videos.length;
+                    botReply = `${botReply}\n\n¡Mirá! Encontré ${videoCount} videos sobre esto en YouTube. Elegí el que más te guste.`;
+                    setCurrentVideo({ 
+                        title: relevantVideo.title, 
+                        url: '', 
+                        videos: relevantVideo.videos 
+                    });
+                    setShowVideoList(true);
+                    // Mostrar lista después de un pequeño delay
+                    setTimeout(() => {
+                        setShowVideoModal(true);
+                    }, 1500);
+                } else if (relevantVideo.url) {
+                    // Video único (local o YouTube)
+                    const videoTitle = relevantVideo.title;
+                    botReply = `${botReply}\n\n¡Mirá! Te muestro imágenes de "${videoTitle}" para que lo veas mejor.`;
+                    setCurrentVideo({ title: videoTitle, url: relevantVideo.url });
+                    setShowVideoList(false);
+                    // Mostrar modal después de un pequeño delay
+                    setTimeout(() => {
+                        setShowVideoModal(true);
+                    }, 1500);
+                }
             }
 
             console.log('Chat API response:', { botReply: botReply.substring(0, 50), placeId, placeName, isRouteOnly, hasVideo: !!relevantVideo });
@@ -1179,6 +1198,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 onClick={() => {
                     setShowVideoModal(false);
                     setCurrentVideo(null);
+                    setShowVideoList(false);
                 }}
                 >
                     <div style={{
@@ -1191,9 +1211,10 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         gap: 20,
                         maxWidth: '90%',
                         maxHeight: '90%',
-                        width: '800px',
+                        width: showVideoList ? '900px' : '800px',
                         animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        position: 'relative'
+                        position: 'relative',
+                        overflowY: showVideoList ? 'auto' : 'visible'
                     }}
                     onClick={(e) => e.stopPropagation()}
                     >
@@ -1244,7 +1265,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                 color: COLOR_BLUE,
                                 marginBottom: 8
                             }}>
-                                {currentVideo.title}
+                                {showVideoList ? 'Videos de YouTube' : currentVideo.title}
                             </h3>
                             <p style={{
                                 margin: 0,
@@ -1252,35 +1273,120 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                 color: '#64748b',
                                 fontWeight: 500
                             }}>
-                                Mirá este video que encontré para vos
+                                {showVideoList ? 'Elegí el video que más te guste' : 'Mirá este video que encontré para vos'}
                             </p>
                         </div>
 
-                        {/* Video de YouTube */}
-                        <div style={{
-                            position: 'relative',
-                            paddingBottom: '56.25%', // 16:9 aspect ratio
-                            height: 0,
-                            overflow: 'hidden',
-                            borderRadius: 12,
-                            background: '#000',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
-                        }}>
-                            <iframe
-                                src={`${currentVideo.url.replace('watch?v=', 'embed/')}${currentVideo.url.includes('?') ? '&' : '?'}mute=1`}
-                                style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    border: 'none',
-                                    borderRadius: 12
-                                }}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                            />
-                        </div>
+                        {/* Lista de videos de YouTube o video único */}
+                        {showVideoList && currentVideo.videos ? (
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 15,
+                                maxHeight: '500px',
+                                overflowY: 'auto',
+                                paddingRight: '10px'
+                            }}>
+                                {currentVideo.videos.map((video: any, index: number) => (
+                                    <div
+                                        key={video.id}
+                                        onClick={() => {
+                                            setCurrentVideo({ title: video.title, url: video.url });
+                                            setShowVideoList(false);
+                                        }}
+                                        style={{
+                                            display: 'flex',
+                                            gap: 15,
+                                            padding: 15,
+                                            background: '#f8fafc',
+                                            borderRadius: 12,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                            border: '2px solid transparent'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = '#e0f2fe';
+                                            e.currentTarget.style.borderColor = COLOR_BLUE;
+                                            e.currentTarget.style.transform = 'scale(1.02)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = '#f8fafc';
+                                            e.currentTarget.style.borderColor = 'transparent';
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                        }}
+                                    >
+                                        <img
+                                            src={video.thumbnail}
+                                            alt={video.title}
+                                            style={{
+                                                width: 160,
+                                                height: 90,
+                                                objectFit: 'cover',
+                                                borderRadius: 8,
+                                                flexShrink: 0
+                                            }}
+                                        />
+                                        <div style={{ flex: 1 }}>
+                                            <h4 style={{
+                                                margin: 0,
+                                                fontSize: '1rem',
+                                                fontWeight: 700,
+                                                color: COLOR_BLUE,
+                                                marginBottom: 6,
+                                                lineHeight: 1.3
+                                            }}>
+                                                {video.title}
+                                            </h4>
+                                            <p style={{
+                                                margin: 0,
+                                                fontSize: '0.85rem',
+                                                color: '#64748b',
+                                                marginBottom: 4
+                                            }}>
+                                                {video.channelTitle}
+                                            </p>
+                                            <p style={{
+                                                margin: 0,
+                                                fontSize: '0.8rem',
+                                                color: '#94a3b8',
+                                                lineHeight: 1.4,
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}>
+                                                {video.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{
+                                position: 'relative',
+                                paddingBottom: '56.25%', // 16:9 aspect ratio
+                                height: 0,
+                                overflow: 'hidden',
+                                borderRadius: 12,
+                                background: '#000',
+                                boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+                            }}>
+                                <iframe
+                                    src={`${currentVideo.url.replace('watch?v=', 'embed/')}${currentVideo.url.includes('?') ? '&' : '?'}mute=1`}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        border: 'none',
+                                        borderRadius: 12
+                                    }}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                />
+                            </div>
+                        )}
 
                         {/* Info adicional */}
                         <p style={{
@@ -1290,7 +1396,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             textAlign: 'center',
                             fontStyle: 'italic'
                         }}>
-                            Podés cerrar este video cuando quieras y seguir charlando conmigo
+                            {showVideoList ? 'Hacé clic en un video para verlo' : 'Podés cerrar este video cuando quieras y seguir charlando conmigo'}
                         </p>
                     </div>
                 </div>

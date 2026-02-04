@@ -9,7 +9,7 @@ const supabase = createClient(
 
 // Rate limiting: almacenar timestamps de últimas llamadas por usuario
 const requestTimestamps = new Map<string, number[]>();
-const MAX_REQUESTS_PER_MINUTE = 10;
+const MAX_REQUESTS_PER_MINUTE = 20; // Aumentado de 10 a 20
 const TIME_WINDOW_MS = 60000; // 1 minuto
 
 function checkRateLimit(userId: string): { allowed: boolean; remainingRequests: number } {
@@ -223,7 +223,13 @@ export async function POST(req: Request) {
        - NO menciones coordenadas ni ubicaciones específicas en estos casos
     7. Diferencia entre consultas de INFORMACIÓN (mostrar detalles del lugar) y consultas de RUTA (solo trazar camino)
     8. Sé conversacional pero conciso en consultas de ruta.
-    ${userProfile ? `9. PERSONALIZACIÓN: El usuario ya está registrado. Usá su nombre (${userProfile.name}) naturalmente y NO le preguntes información que ya tenés (nombre, edad, origen). Personalizá tus recomendaciones según sus preferencias.` : '9. Si el usuario no está registrado, podés preguntarle su nombre y conocerlo mejor.'}
+    9. BÚSQUEDA DE VIDEOS: Cuando el usuario pida ver videos, mostrar videos, o pregunte sobre eventos/espectáculos (ej: "marcha de los bombos", "carnaval", "chacarera", "MotoGP", "fútbol", etc.):
+       - SIEMPRE responde que estás buscando videos en YouTube
+       - Di algo como: "¡Dale! Estoy buscando videos sobre [TEMA] en YouTube..."
+       - NO digas que no puedes mostrar videos
+       - El sistema automáticamente buscará y mostrará una lista de videos para que el usuario elija
+       - Sé entusiasta sobre los resultados que vas a mostrar
+    ${userProfile ? `10. PERSONALIZACIÓN: El usuario ya está registrado. Usá su nombre (${userProfile.name}) naturalmente y NO le preguntes información que ya tenés (nombre, edad, origen). Personalizá tus recomendaciones según sus preferencias.` : '10. Si el usuario no está registrado, podés preguntarle su nombre y conocerlo mejor.'}
 
     Contexto actual de la app:
     ${localContext}
@@ -256,22 +262,44 @@ export async function POST(req: Request) {
             // Gemini
             try {
                 const model = getGeminiModel(iaModel);
-                let chatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
-                    role: msg.role === 'assistant' ? 'model' : 'user',
-                    parts: [{ text: msg.content }]
-                }));
+                
+                // Filter out system messages and map to Gemini format
+                let chatHistory = messages.slice(0, -1)
+                    .filter((msg: { role: string; content: string }) => msg.role !== 'system')
+                    .map((msg: { role: string; content: string }) => ({
+                        role: msg.role === 'assistant' ? 'model' : 'user',
+                        parts: [{ text: msg.content }]
+                    }));
                 
                 // Gemini requires chat history to start with a 'user' message
-                // If the first message is from 'model', remove it or adjust the history
-                if (chatHistory.length > 0 && chatHistory[0].role === 'model') {
+                // Remove any leading 'model' messages
+                while (chatHistory.length > 0 && chatHistory[0].role === 'model') {
                     console.log('Gemini: Removing leading model message to fix history format');
                     chatHistory = chatHistory.slice(1);
                 }
                 
-                // If history is empty or starts with model, ensure we have a valid structure
+                // Ensure alternating user/model pattern by removing consecutive same-role messages
+                const validHistory = [];
+                let lastRole = '';
+                for (const msg of chatHistory) {
+                    if (msg.role !== lastRole) {
+                        validHistory.push(msg);
+                        lastRole = msg.role;
+                    }
+                }
+                
                 const lastUserMessage = messages[messages.length - 1].content;
-                const chat = model.startChat({ history: chatHistory, generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } });
-                const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
+                
+                // Include system prompt in the first user message if history is empty
+                const messageToSend = validHistory.length === 0 
+                    ? `${systemPrompt}\n\nUsuario: ${lastUserMessage}`
+                    : lastUserMessage;
+                
+                const chat = model.startChat({ 
+                    history: validHistory, 
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+                });
+                const result = await chat.sendMessage(messageToSend);
                 reply = result.response.text();
             } catch (err) {
                 console.error('Gemini error:', err);
@@ -279,28 +307,67 @@ export async function POST(req: Request) {
                 // Extract last user message for fallback use
                 const lastUserMessage = messages[messages.length - 1].content;
                 
-                // If it's a model not found error, attempt fallback to a working model
-                if ((err as any).message?.includes('not found') || (err as any).message?.includes('404')) {
+                // Check if it's a rate limit error (429) - fallback to OpenAI
+                if ((err as any).message?.includes('429') || (err as any).message?.includes('Too Many Requests') || (err as any).message?.includes('Resource exhausted')) {
+                    console.log('⚠️ Gemini rate limit exceeded, falling back to OpenAI');
+                    try {
+                        const openai = (await import('@/lib/openai')).default;
+                        const oaModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+                        const response = await openai.chat.completions.create({
+                            model: oaModel,
+                            messages: [
+                                { role: 'system', content: systemPrompt },
+                                ...messages
+                            ],
+                            temperature: 0.7
+                        });
+
+                        reply = response.choices[0].message.content || 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?';
+                        console.log('✅ OpenAI fallback successful');
+                    } catch (openaiErr) {
+                        console.error('OpenAI fallback also failed:', openaiErr);
+                        throw new Error('Los servicios de IA están temporalmente sobrecargados. Por favor, intenta de nuevo en unos segundos.');
+                    }
+                } else if ((err as any).message?.includes('not found') || (err as any).message?.includes('404')) {
+                    // If it's a model not found error, attempt fallback to a working model
                     console.log('Model not found, attempting fallback to gemini-1.5-flash');
                     try {
                         const fallbackModel = getGeminiModel('gemini-1.5-flash');
-                        // Recreate chatHistory for fallback to ensure it's valid
-                        let fallbackChatHistory = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
-                            role: msg.role === 'assistant' ? 'model' : 'user',
-                            parts: [{ text: msg.content }]
-                        }));
                         
-                        // Ensure fallback history also starts with 'user'
-                        if (fallbackChatHistory.length > 0 && fallbackChatHistory[0].role === 'model') {
-                            console.log('Gemini fallback: Removing leading model message to fix history format');
+                        // Recreate chatHistory for fallback using same validation logic
+                        let fallbackChatHistory = messages.slice(0, -1)
+                            .filter((msg: { role: string; content: string }) => msg.role !== 'system')
+                            .map((msg: { role: string; content: string }) => ({
+                                role: msg.role === 'assistant' ? 'model' : 'user',
+                                parts: [{ text: msg.content }]
+                            }));
+                        
+                        // Remove leading 'model' messages
+                        while (fallbackChatHistory.length > 0 && fallbackChatHistory[0].role === 'model') {
                             fallbackChatHistory = fallbackChatHistory.slice(1);
                         }
                         
+                        // Ensure alternating pattern
+                        const validFallbackHistory = [];
+                        let lastRole = '';
+                        for (const msg of fallbackChatHistory) {
+                            if (msg.role !== lastRole) {
+                                validFallbackHistory.push(msg);
+                                lastRole = msg.role;
+                            }
+                        }
+                        
+                        // Include system prompt in first message if needed
+                        const messageToSend = validFallbackHistory.length === 0 
+                            ? `${systemPrompt}\n\nUsuario: ${lastUserMessage}`
+                            : lastUserMessage;
+                        
                         const chat = fallbackModel.startChat({ 
-                            history: fallbackChatHistory, 
-                            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } 
+                            history: validFallbackHistory, 
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
                         });
-                        const result = await chat.sendMessage(systemPrompt + '\n\nUsuario: ' + lastUserMessage);
+                        const result = await chat.sendMessage(messageToSend);
                         reply = result.response.text();
                         console.log('Fallback model successful, consider updating admin settings');
                     } catch (fallbackErr) {
@@ -496,14 +563,55 @@ export async function POST(req: Request) {
                 // Si la consulta sugiere búsqueda de video, buscar en YouTube usando la API
                 if (hasVideoIntent) {
                     try {
-                        // Extraer términos relevantes para la búsqueda
-                        const searchWords = normalizedSearch
-                            .split(/\s+/)
-                            .filter(w => w.length > 3 && !commonWords.has(w))
-                            .slice(0, 5); // Tomar máximo 5 palabras relevantes
+                        // Términos compuestos que deben mantenerse juntos
+                        const compoundTerms: { [key: string]: string } = {
+                            'motogp': 'MotoGP',
+                            'moto gp': 'MotoGP',
+                            'formula 1': 'Formula 1',
+                            'formula1': 'Formula 1',
+                            'champions league': 'Champions League',
+                            'copa america': 'Copa America',
+                            'marcha bombos': 'marcha de los bombos',
+                            'santiago estero': 'Santiago del Estero'
+                        };
                         
-                        const youtubeSearchQuery = `${searchWords.join(' ')} Santiago del Estero`;
-                        console.log(`🔍 Buscando en YouTube: "${youtubeSearchQuery}"`);
+                        // Buscar términos compuestos en la consulta
+                        let youtubeSearchQuery = normalizedSearch;
+                        for (const [key, value] of Object.entries(compoundTerms)) {
+                            if (normalizedSearch.includes(key)) {
+                                youtubeSearchQuery = value;
+                                break;
+                            }
+                        }
+                        
+                        // Si no se encontró término compuesto, extraer palabras relevantes
+                        if (youtubeSearchQuery === normalizedSearch) {
+                            const searchWords = normalizedSearch
+                                .split(/\s+/)
+                                .filter(w => w.length > 3 && !commonWords.has(w))
+                                .slice(0, 5);
+                            youtubeSearchQuery = searchWords.join(' ');
+                        }
+                        
+                        // Detectar si es una búsqueda sobre Santiago del Estero o tema general
+                        const localKeywords = [
+                            'santiago', 'estero', 'termas', 'bombos', 'chacarera', 'folklore', 'folclore',
+                            'carnaval', 'dique', 'frontal', 'casino', 'catedral', 'plaza', 'libertad',
+                            'nodo', 'tecnologico', 'parque', 'santiagueño', 'santiagueno', 'copo',
+                            'banda', 'loreto', 'atamisqui', 'salinas', 'grandes'
+                        ];
+                        
+                        const isLocalSearch = localKeywords.some(keyword => 
+                            normalizedSearch.includes(keyword)
+                        );
+                        
+                        // Construir query final: agregar "Santiago del Estero" solo si es búsqueda local
+                        // y no está ya incluido en el término compuesto
+                        if (isLocalSearch && !youtubeSearchQuery.toLowerCase().includes('santiago del estero')) {
+                            youtubeSearchQuery = `${youtubeSearchQuery} Santiago del Estero`;
+                        }
+                        
+                        console.log(`🔍 Buscando en YouTube: "${youtubeSearchQuery}" (${isLocalSearch ? 'local' : 'general'})`);
                         
                         // Usar YouTube Data API v3 para buscar videos
                         const youtubeApiKey = process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY;
@@ -511,7 +619,7 @@ export async function POST(req: Request) {
                             console.warn('No YouTube API key available');
                         } else {
                             const youtubeResponse = await fetch(
-                                `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(youtubeSearchQuery)}&type=video&key=${youtubeApiKey}`,
+                                `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=${encodeURIComponent(youtubeSearchQuery)}&type=video&relevanceLanguage=es&key=${youtubeApiKey}`,
                                 { method: 'GET' }
                             );
                             
@@ -520,18 +628,25 @@ export async function POST(req: Request) {
                                 console.log('YouTube API response:', youtubeData);
                                 
                                 if (youtubeData.items && youtubeData.items.length > 0) {
-                                    const firstVideo = youtubeData.items[0];
-                                    const videoId = firstVideo.id.videoId;
-                                    const videoTitle = firstVideo.snippet.title;
-                                    const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                                    // Retornar múltiples videos para que el usuario elija
+                                    const youtubeVideos = youtubeData.items.map((item: any) => ({
+                                        id: item.id.videoId,
+                                        title: item.snippet.title,
+                                        url: `https://www.youtube.com/embed/${item.id.videoId}`,
+                                        thumbnail: item.snippet.thumbnails.medium.url,
+                                        channelTitle: item.snippet.channelTitle,
+                                        description: item.snippet.description,
+                                        isYouTube: true
+                                    }));
                                     
                                     relevantVideo = {
-                                        id: videoId,
-                                        title: videoTitle,
-                                        url: embedUrl,
-                                        isYouTube: true
+                                        id: 'youtube-list',
+                                        title: `Encontré ${youtubeVideos.length} videos sobre "${youtubeSearchQuery}"`,
+                                        url: '', // No URL única
+                                        isYouTubeList: true,
+                                        videos: youtubeVideos
                                     };
-                                    console.log(`📹 Video de YouTube encontrado: "${videoTitle}" (${videoId})`);
+                                    console.log(`📹 ${youtubeVideos.length} videos de YouTube encontrados`);
                                 }
                             } else {
                                 console.warn('YouTube API error:', youtubeResponse.status, await youtubeResponse.text());
