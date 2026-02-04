@@ -503,7 +503,7 @@ export async function POST(req: Request) {
             // Palabras comunes que no deben contar como coincidencias significativas
             const commonWords = new Set(['de', 'del', 'la', 'el', 'en', 'los', 'las', 'un', 'una', 'con', 'por', 'para', 'santiago', 'estero']);
             
-            let bestMatch: { video: typeof videos[0], score: number } | null = null;
+            let bestMatch: { video: { id: any; title: any; video_url: any }, score: number } | null = null;
             
             // Buscar coincidencias en títulos de videos locales
             if (videos && videos.length > 0) {
