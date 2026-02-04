@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { takePhoto } from '@/lib/photoService';
+import Header from '@/components/Header';
 
 interface UserProfile {
     id: string;
@@ -11,6 +12,32 @@ interface UserProfile {
     bio?: string;
     role: string;
     created_at: string;
+    // Nuevos campos demográficos
+    age?: number;
+    gender?: string;
+    country?: string;
+    city?: string;
+    email?: string;
+    phone?: string;
+    // Campos de experiencia turística
+    visit_purpose?: string; // turismo, negocios, educación, otro
+    travel_group?: string; // solo, pareja, familia, amigos, grupo
+    accommodation_type?: string; // hotel, hostel, airbnb, casa_familiar, camping
+    transport_mode?: string; // auto, bus, avión, tren, bicicleta, caminando
+    trip_duration?: number; // días de estadía
+    budget_range?: string; // económico, moderado, premium, lujo
+    // Intereses y preferencias
+    interests?: string[]; // naturaleza, cultura, gastronomía, aventura, relax, etc.
+    accessibility_needs?: string[];
+    dietary_restrictions?: string[];
+    // Experiencia en la provincia
+    visit_frequency?: string; // primera_vez, ocasional, frecuente, residente
+    favorite_experiences?: string;
+    recommended_places?: string;
+    would_return?: boolean;
+    overall_satisfaction?: number; // 1-5
+    improvement_suggestions?: string;
+    // Datos existentes
     preferences?: {
         favorite_categories: string[];
         language: string;
@@ -52,6 +79,27 @@ export default function ProfilePage() {
     const [formData, setFormData] = useState({
         name: '',
         bio: '',
+        age: undefined as number | undefined,
+        gender: '',
+        country: '',
+        city: '',
+        email: '',
+        phone: '',
+        visit_purpose: '',
+        travel_group: '',
+        accommodation_type: '',
+        transport_mode: '',
+        trip_duration: undefined as number | undefined,
+        budget_range: '',
+        interests: [] as string[],
+        accessibility_needs: [] as string[],
+        dietary_restrictions: [] as string[],
+        visit_frequency: '',
+        favorite_experiences: '',
+        recommended_places: '',
+        would_return: undefined as boolean | undefined,
+        overall_satisfaction: undefined as number | undefined,
+        improvement_suggestions: '',
         favorite_categories: [] as string[],
         language: 'es',
         notifications: true
@@ -182,6 +230,27 @@ export default function ProfilePage() {
         setFormData({
             name: profileData.name || '',
             bio: profileData.bio || '',
+            age: profileData.age,
+            gender: profileData.gender || '',
+            country: profileData.country || '',
+            city: profileData.city || '',
+            email: profileData.email || '',
+            phone: profileData.phone || '',
+            visit_purpose: profileData.visit_purpose || '',
+            travel_group: profileData.travel_group || '',
+            accommodation_type: profileData.accommodation_type || '',
+            transport_mode: profileData.transport_mode || '',
+            trip_duration: profileData.trip_duration,
+            budget_range: profileData.budget_range || '',
+            interests: profileData.interests || [],
+            accessibility_needs: profileData.accessibility_needs || [],
+            dietary_restrictions: profileData.dietary_restrictions || [],
+            visit_frequency: profileData.visit_frequency || '',
+            favorite_experiences: profileData.favorite_experiences || '',
+            recommended_places: profileData.recommended_places || '',
+            would_return: profileData.would_return,
+            overall_satisfaction: profileData.overall_satisfaction,
+            improvement_suggestions: profileData.improvement_suggestions || '',
             favorite_categories: profileData.preferences?.favorite_categories || [],
             language: profileData.preferences?.language || 'es',
             notifications: profileData.preferences?.notifications || true
@@ -252,6 +321,27 @@ export default function ProfilePage() {
                     name: formData.name,
                     bio: formData.bio,
                     avatar_url: avatarUrl,
+                    age: formData.age,
+                    gender: formData.gender,
+                    country: formData.country,
+                    city: formData.city,
+                    email: formData.email,
+                    phone: formData.phone,
+                    visit_purpose: formData.visit_purpose,
+                    travel_group: formData.travel_group,
+                    accommodation_type: formData.accommodation_type,
+                    transport_mode: formData.transport_mode,
+                    trip_duration: formData.trip_duration,
+                    budget_range: formData.budget_range,
+                    interests: formData.interests,
+                    accessibility_needs: formData.accessibility_needs,
+                    dietary_restrictions: formData.dietary_restrictions,
+                    visit_frequency: formData.visit_frequency,
+                    favorite_experiences: formData.favorite_experiences,
+                    recommended_places: formData.recommended_places,
+                    would_return: formData.would_return,
+                    overall_satisfaction: formData.overall_satisfaction,
+                    improvement_suggestions: formData.improvement_suggestions,
                     preferences: {
                         favorite_categories: formData.favorite_categories,
                         language: formData.language,
@@ -313,6 +403,7 @@ export default function ProfilePage() {
             fontWeight: 'bold',
             fontSize: '18px'
         }}>
+            <Header />
             <div style={{
                 width: '50px',
                 height: '50px',
@@ -330,9 +421,10 @@ export default function ProfilePage() {
         <div style={{ 
             minHeight: '100vh', 
             background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)', 
-            padding: '80px 20px 20px 20px', 
+            paddingTop: '80px',
             fontFamily: 'system-ui, -apple-system, sans-serif' 
         }}>
+            <Header />
             {/* Header Navigation */}
             <div style={{ maxWidth: '1200px', margin: '0 auto', marginBottom: '30px' }}>
                 <button 
@@ -621,6 +713,364 @@ export default function ProfilePage() {
                                         />
                                     </div>
 
+                                    {/* SECCIÓN: Información Personal */}
+                                    <div style={{
+                                        marginTop: '20px',
+                                        paddingTop: '20px',
+                                        borderTop: `2px solid #e2e8f0`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px' }}>
+                                            👤 Información Personal
+                                        </h3>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Edad</label>
+                                                <input 
+                                                    type="number"
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.age || ''} 
+                                                    onChange={e => setFormData({...formData, age: e.target.value ? parseInt(e.target.value) : undefined})} 
+                                                    placeholder="Tu edad" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Género</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.gender} 
+                                                    onChange={e => setFormData({...formData, gender: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="masculino">Masculino</option>
+                                                    <option value="femenino">Femenino</option>
+                                                    <option value="otro">Otro</option>
+                                                    <option value="prefiero_no_decir">Prefiero no decir</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>País</label>
+                                                <input 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.country} 
+                                                    onChange={e => setFormData({...formData, country: e.target.value})} 
+                                                    placeholder="Ej: Argentina" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Ciudad</label>
+                                                <input 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.city} 
+                                                    onChange={e => setFormData({...formData, city: e.target.value})} 
+                                                    placeholder="Ej: Buenos Aires" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Teléfono</label>
+                                                <input 
+                                                    type="tel"
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.phone} 
+                                                    onChange={e => setFormData({...formData, phone: e.target.value})} 
+                                                    placeholder="+54 9 11 xxxx-xxxx" 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* SECCIÓN: Información del Viaje */}
+                                    <div style={{
+                                        marginTop: '20px',
+                                        paddingTop: '20px',
+                                        borderTop: `2px solid #e2e8f0`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px' }}>
+                                            ✈️ Información del Viaje
+                                        </h3>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Propósito de la visita</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.visit_purpose} 
+                                                    onChange={e => setFormData({...formData, visit_purpose: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="turismo">Turismo</option>
+                                                    <option value="negocios">Negocios</option>
+                                                    <option value="educacion">Educación</option>
+                                                    <option value="visita_familiar">Visita familiar</option>
+                                                    <option value="trabajo">Trabajo</option>
+                                                    <option value="otro">Otro</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>¿Con quién viajas?</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.travel_group} 
+                                                    onChange={e => setFormData({...formData, travel_group: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="solo">Solo/a</option>
+                                                    <option value="pareja">En pareja</option>
+                                                    <option value="familia">En familia</option>
+                                                    <option value="amigos">Con amigos</option>
+                                                    <option value="grupo_turistico">Grupo turístico</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tipo de alojamiento</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.accommodation_type} 
+                                                    onChange={e => setFormData({...formData, accommodation_type: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="hotel">Hotel</option>
+                                                    <option value="hostel">Hostel</option>
+                                                    <option value="airbnb">Airbnb/Apart</option>
+                                                    <option value="casa_familiar">Casa de familiar</option>
+                                                    <option value="camping">Camping</option>
+                                                    <option value="otro">Otro</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Medio de transporte</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.transport_mode} 
+                                                    onChange={e => setFormData({...formData, transport_mode: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="auto">Auto propio</option>
+                                                    <option value="auto_alquilado">Auto alquilado</option>
+                                                    <option value="bus">Bus/Colectivo</option>
+                                                    <option value="avion">Avión</option>
+                                                    <option value="tren">Tren</option>
+                                                    <option value="bicicleta">Bicicleta</option>
+                                                    <option value="caminando">Caminando</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Duración del viaje (días)</label>
+                                                <input 
+                                                    type="number"
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.trip_duration || ''} 
+                                                    onChange={e => setFormData({...formData, trip_duration: e.target.value ? parseInt(e.target.value) : undefined})} 
+                                                    placeholder="Ej: 7" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Presupuesto</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.budget_range} 
+                                                    onChange={e => setFormData({...formData, budget_range: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="economico">Económico</option>
+                                                    <option value="moderado">Moderado</option>
+                                                    <option value="premium">Premium</option>
+                                                    <option value="lujo">Lujo</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* SECCIÓN: Intereses y Preferencias */}
+                                    <div style={{
+                                        marginTop: '20px',
+                                        paddingTop: '20px',
+                                        borderTop: `2px solid #e2e8f0`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px' }}>
+                                            💡 Intereses y Preferencias
+                                        </h3>
+                                        <div style={{ marginBottom: '20px' }}>
+                                            <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>Intereses principales (seleccionar varios)</label>
+                                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                {['naturaleza', 'cultura', 'gastronomía', 'aventura', 'relax', 'historia', 'fotografía', 'compras', 'vida_nocturna', 'deportes'].map(interest => (
+                                                    <button
+                                                        key={interest}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newInterests = formData.interests.includes(interest)
+                                                                ? formData.interests.filter(i => i !== interest)
+                                                                : [...formData.interests, interest];
+                                                            setFormData({...formData, interests: newInterests});
+                                                        }}
+                                                        style={{
+                                                            padding: '8px 16px',
+                                                            borderRadius: '20px',
+                                                            border: `2px solid ${formData.interests.includes(interest) ? COLOR_GOLD : '#e2e8f0'}`,
+                                                            background: formData.interests.includes(interest) ? COLOR_GOLD : 'white',
+                                                            color: formData.interests.includes(interest) ? COLOR_DARK : '#64748b',
+                                                            cursor: 'pointer',
+                                                            fontSize: '13px',
+                                                            fontWeight: '500'
+                                                        }}
+                                                    >
+                                                        {interest.charAt(0).toUpperCase() + interest.slice(1).replace('_', ' ')}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Necesidades de accesibilidad</label>
+                                                <input 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.accessibility_needs.join(', ')} 
+                                                    onChange={e => setFormData({...formData, accessibility_needs: e.target.value.split(',').map(s => s.trim())})} 
+                                                    placeholder="Ej: silla de ruedas, subtítulos" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Restricciones alimentarias</label>
+                                                <input 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.dietary_restrictions.join(', ')} 
+                                                    onChange={e => setFormData({...formData, dietary_restrictions: e.target.value.split(',').map(s => s.trim())})} 
+                                                    placeholder="Ej: vegetariano, celíaco" 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* SECCIÓN: Experiencia en la Provincia */}
+                                    <div style={{
+                                        marginTop: '20px',
+                                        paddingTop: '20px',
+                                        borderTop: `2px solid #e2e8f0`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px' }}>
+                                            ⭐ Tu Experiencia en Santiago del Estero
+                                        </h3>
+                                        <div style={{ display: 'grid', gap: '20px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Frecuencia de visita</label>
+                                                <select 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px' }}
+                                                    value={formData.visit_frequency} 
+                                                    onChange={e => setFormData({...formData, visit_frequency: e.target.value})}
+                                                >
+                                                    <option value="">Seleccionar</option>
+                                                    <option value="primera_vez">Primera vez</option>
+                                                    <option value="ocasional">Ocasional (2-3 veces)</option>
+                                                    <option value="frecuente">Frecuente (más de 3 veces)</option>
+                                                    <option value="residente">Residente</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>¿Cuáles fueron tus experiencias favoritas?</label>
+                                                <textarea 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px', minHeight: '100px', resize: 'vertical' }}
+                                                    value={formData.favorite_experiences} 
+                                                    onChange={e => setFormData({...formData, favorite_experiences: e.target.value})} 
+                                                    placeholder="Contanos qué fue lo que más disfrutaste de tu visita..." 
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.push('/storyrecorder')}
+                                                    style={{
+                                                        marginTop: '10px',
+                                                        padding: '10px 20px',
+                                                        background: `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)`,
+                                                        color: COLOR_DARK,
+                                                        border: 'none',
+                                                        borderRadius: '20px',
+                                                        cursor: 'pointer',
+                                                        fontSize: '14px',
+                                                        fontWeight: 'bold'
+                                                    }}
+                                                >
+                                                    🎙️ Grabar tu historia completa
+                                                </button>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>¿Qué lugares recomendarías?</label>
+                                                <textarea 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px', minHeight: '100px', resize: 'vertical' }}
+                                                    value={formData.recommended_places} 
+                                                    onChange={e => setFormData({...formData, recommended_places: e.target.value})} 
+                                                    placeholder="Lugares que otros turistas no deberían perderse..." 
+                                                />
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>¿Volverías a Santiago del Estero?</label>
+                                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData({...formData, would_return: true})}
+                                                            style={{
+                                                                padding: '10px 20px',
+                                                                borderRadius: '20px',
+                                                                border: `2px solid ${formData.would_return === true ? COLOR_GREEN : '#e2e8f0'}`,
+                                                                background: formData.would_return === true ? COLOR_GREEN : 'white',
+                                                                color: formData.would_return === true ? 'white' : '#64748b',
+                                                                cursor: 'pointer',
+                                                                fontSize: '14px',
+                                                                fontWeight: 'bold'
+                                                            }}
+                                                        >
+                                                            👍 Sí
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData({...formData, would_return: false})}
+                                                            style={{
+                                                                padding: '10px 20px',
+                                                                borderRadius: '20px',
+                                                                border: `2px solid ${formData.would_return === false ? '#ef4444' : '#e2e8f0'}`,
+                                                                background: formData.would_return === false ? '#ef4444' : 'white',
+                                                                color: formData.would_return === false ? 'white' : '#64748b',
+                                                                cursor: 'pointer',
+                                                                fontSize: '14px',
+                                                                fontWeight: 'bold'
+                                                            }}
+                                                        >
+                                                            👎 No
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Satisfacción general (1-5)</label>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        {[1, 2, 3, 4, 5].map(rating => (
+                                                            <button
+                                                                key={rating}
+                                                                type="button"
+                                                                onClick={() => setFormData({...formData, overall_satisfaction: rating})}
+                                                                style={{
+                                                                    padding: '10px',
+                                                                    borderRadius: '12px',
+                                                                    border: `2px solid ${formData.overall_satisfaction === rating ? COLOR_GOLD : '#e2e8f0'}`,
+                                                                    background: formData.overall_satisfaction === rating ? COLOR_GOLD : 'white',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '18px'
+                                                                }}
+                                                            >
+                                                                ⭐
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>¿Qué podríamos mejorar?</label>
+                                                <textarea 
+                                                    style={{ width: '100%', padding: '14px 18px', border: `2px solid #e2e8f0`, borderRadius: '12px', outline: 'none', fontSize: '16px', minHeight: '100px', resize: 'vertical' }}
+                                                    value={formData.improvement_suggestions} 
+                                                    onChange={e => setFormData({...formData, improvement_suggestions: e.target.value})} 
+                                                    placeholder="Tus sugerencias nos ayudan a mejorar la experiencia turística..." 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label style={{ 
                                             display: 'block',
@@ -685,6 +1135,346 @@ export default function ProfilePage() {
                             </form>
                         ) : (
                             <div style={{ display: 'grid', gap: '30px' }}>
+                                {/* Sección: Información Personal */}
+                                {(profile?.age || profile?.gender || profile?.country || profile?.city || profile?.phone) && (
+                                    <div style={{
+                                        background: '#f8fafc',
+                                        borderRadius: '16px',
+                                        padding: '24px',
+                                        border: `2px solid ${COLOR_GOLD}22`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                                            👤 Información Personal
+                                        </h3>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                            {profile?.age && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Edad</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>{profile.age} años</div>
+                                                </div>
+                                            )}
+                                            {profile?.gender && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Género</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.gender === 'masculino' && '👨 Masculino'}
+                                                        {profile.gender === 'femenino' && '👩 Femenino'}
+                                                        {profile.gender === 'otro' && '🧑 Otro'}
+                                                        {profile.gender === 'prefiero_no_decir' && '🚫 Prefiero no decir'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {profile?.country && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>País</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>🌍 {profile.country}</div>
+                                                </div>
+                                            )}
+                                            {profile?.city && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Ciudad</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>🏙️ {profile.city}</div>
+                                                </div>
+                                            )}
+                                            {profile?.phone && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Teléfono</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>📱 {profile.phone}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Sección: Información del Viaje */}
+                                {(profile?.visit_purpose || profile?.travel_group || profile?.accommodation_type || profile?.transport_mode || profile?.trip_duration || profile?.budget_range) && (
+                                    <div style={{
+                                        background: '#f0f9ff',
+                                        borderRadius: '16px',
+                                        padding: '24px',
+                                        border: `2px solid #3b82f622`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                                            ✈️ Información del Viaje
+                                        </h3>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                            {profile?.visit_purpose && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Propósito de la visita</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.visit_purpose === 'turismo' && '🏖️ Turismo'}
+                                                        {profile.visit_purpose === 'negocios' && '💼 Negocios'}
+                                                        {profile.visit_purpose === 'educacion' && '📚 Educación'}
+                                                        {profile.visit_purpose === 'visita_familiar' && '👪 Visita Familiar'}
+                                                        {profile.visit_purpose === 'trabajo' && '💻 Trabajo'}
+                                                        {profile.visit_purpose === 'otro' && '🔹 Otro'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {profile?.travel_group && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Viajo con</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.travel_group === 'solo' && '🚶 Solo/a'}
+                                                        {profile.travel_group === 'pareja' && '💑 Pareja'}
+                                                        {profile.travel_group === 'familia' && '👨‍👩‍👧‍👦 Familia'}
+                                                        {profile.travel_group === 'amigos' && '👥 Amigos'}
+                                                        {profile.travel_group === 'grupo_turistico' && '🚌 Grupo Turístico'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {profile?.accommodation_type && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Alojamiento</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.accommodation_type === 'hotel' && '🏨 Hotel'}
+                                                        {profile.accommodation_type === 'hostel' && '🏠 Hostel'}
+                                                        {profile.accommodation_type === 'airbnb' && '🏡 Airbnb'}
+                                                        {profile.accommodation_type === 'casa_familiar' && '👨‍👩‍👧 Casa Familiar'}
+                                                        {profile.accommodation_type === 'camping' && '⛺ Camping'}
+                                                        {profile.accommodation_type === 'otro' && '🏘️ Otro'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {profile?.transport_mode && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Transporte</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.transport_mode === 'auto_propio' && '🚗 Auto Propio'}
+                                                        {profile.transport_mode === 'auto_alquilado' && '🚙 Auto Alquilado'}
+                                                        {profile.transport_mode === 'bus' && '🚌 Bus'}
+                                                        {profile.transport_mode === 'avion' && '✈️ Avión'}
+                                                        {profile.transport_mode === 'tren' && '🚂 Tren'}
+                                                        {profile.transport_mode === 'bicicleta' && '🚴 Bicicleta'}
+                                                        {profile.transport_mode === 'caminando' && '🚶 Caminando'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {profile?.trip_duration && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Duración</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>⏱️ {profile.trip_duration} días</div>
+                                                </div>
+                                            )}
+                                            {profile?.budget_range && (
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', marginBottom: '4px' }}>Presupuesto</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.budget_range === 'economico' && '💰 Económico'}
+                                                        {profile.budget_range === 'moderado' && '💵 Moderado'}
+                                                        {profile.budget_range === 'premium' && '💎 Premium'}
+                                                        {profile.budget_range === 'lujo' && '👑 Lujo'}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Sección: Intereses y Preferencias */}
+                                {(profile?.interests?.length > 0 || profile?.accessibility_needs?.length > 0 || profile?.dietary_restrictions?.length > 0) && (
+                                    <div style={{
+                                        background: '#fefce8',
+                                        borderRadius: '16px',
+                                        padding: '24px',
+                                        border: `2px solid ${COLOR_GOLD}33`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                                            💡 Intereses y Preferencias
+                                        </h3>
+                                        
+                                        {profile?.interests && profile.interests.length > 0 && (
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Intereses</div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {profile.interests.map((interest, index) => (
+                                                        <div
+                                                            key={index}
+                                                            style={{
+                                                                background: COLOR_GOLD,
+                                                                color: COLOR_DARK,
+                                                                padding: '6px 12px',
+                                                                borderRadius: '16px',
+                                                                fontSize: '13px',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            {interest === 'naturaleza' && '🌿 Naturaleza'}
+                                                            {interest === 'cultura' && '🎭 Cultura'}
+                                                            {interest === 'gastronomia' && '🍽️ Gastronomía'}
+                                                            {interest === 'aventura' && '🏔️ Aventura'}
+                                                            {interest === 'relax' && '🧘 Relax'}
+                                                            {interest === 'historia' && '🏛️ Historia'}
+                                                            {interest === 'fotografia' && '📷 Fotografía'}
+                                                            {interest === 'compras' && '🛍️ Compras'}
+                                                            {interest === 'vida_nocturna' && '🎉 Vida Nocturna'}
+                                                            {interest === 'deportes' && '⚽ Deportes'}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {profile?.accessibility_needs && profile.accessibility_needs.length > 0 && (
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Necesidades de accesibilidad</div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {profile.accessibility_needs.map((need, index) => (
+                                                        <div
+                                                            key={index}
+                                                            style={{
+                                                                background: '#10B98133',
+                                                                color: '#065f46',
+                                                                padding: '6px 12px',
+                                                                borderRadius: '16px',
+                                                                fontSize: '13px',
+                                                                fontWeight: '600',
+                                                                border: '2px solid #10B98144'
+                                                            }}
+                                                        >
+                                                            ♿ {need}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {profile?.dietary_restrictions && profile.dietary_restrictions.length > 0 && (
+                                            <div>
+                                                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Restricciones alimentarias</div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {profile.dietary_restrictions.map((restriction, index) => (
+                                                        <div
+                                                            key={index}
+                                                            style={{
+                                                                background: '#f1f5f933',
+                                                                color: '#0f172a',
+                                                                padding: '6px 12px',
+                                                                borderRadius: '16px',
+                                                                fontSize: '13px',
+                                                                fontWeight: '600',
+                                                                border: '2px solid #cbd5e144'
+                                                            }}
+                                                        >
+                                                            🥗 {restriction}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Sección: Experiencia en Santiago del Estero */}
+                                {(profile?.visit_frequency || profile?.favorite_experiences || profile?.recommended_places || profile?.would_return !== undefined || profile?.overall_satisfaction || profile?.improvement_suggestions) && (
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                                        borderRadius: '16px',
+                                        padding: '24px',
+                                        border: `3px solid ${COLOR_GOLD}`
+                                    }}>
+                                        <h3 style={{ color: COLOR_BLUE, marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                                            ⭐ Experiencia en Santiago del Estero
+                                        </h3>
+                                        
+                                        <div style={{ display: 'grid', gap: '20px' }}>
+                                            {profile?.visit_frequency && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Frecuencia de visita</div>
+                                                    <div style={{ fontSize: '16px', color: COLOR_DARK, fontWeight: '500' }}>
+                                                        {profile.visit_frequency === 'primera_vez' && '🌟 Primera vez'}
+                                                        {profile.visit_frequency === 'ocasional' && '🔄 Ocasional'}
+                                                        {profile.visit_frequency === 'frecuente' && '✨ Frecuente'}
+                                                        {profile.visit_frequency === 'residente' && '🏠 Residente'}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {profile?.favorite_experiences && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Experiencias favoritas</div>
+                                                    <div style={{ 
+                                                        fontSize: '15px', 
+                                                        color: COLOR_DARK, 
+                                                        lineHeight: '1.6',
+                                                        background: 'white',
+                                                        padding: '12px 16px',
+                                                        borderRadius: '12px',
+                                                        fontStyle: 'italic'
+                                                    }}>
+                                                        "{profile.favorite_experiences}"
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {profile?.recommended_places && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Lugares recomendados</div>
+                                                    <div style={{ 
+                                                        fontSize: '15px', 
+                                                        color: COLOR_DARK, 
+                                                        lineHeight: '1.6',
+                                                        background: 'white',
+                                                        padding: '12px 16px',
+                                                        borderRadius: '12px',
+                                                        fontStyle: 'italic'
+                                                    }}>
+                                                        "{profile.recommended_places}"
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {profile?.would_return !== undefined && profile?.would_return !== null && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>¿Volvería a visitar?</div>
+                                                    <div style={{ 
+                                                        display: 'inline-block',
+                                                        padding: '8px 16px',
+                                                        borderRadius: '20px',
+                                                        background: profile.would_return ? COLOR_GREEN : '#ef4444',
+                                                        color: 'white',
+                                                        fontWeight: 'bold',
+                                                        fontSize: '14px'
+                                                    }}>
+                                                        {profile.would_return ? '✅ ¡Sí, definitivamente!' : '❌ No'}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {profile?.overall_satisfaction && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Satisfacción general</div>
+                                                    <div style={{ fontSize: '28px', letterSpacing: '4px' }}>
+                                                        {Array.from({ length: 5 }, (_, i) => (
+                                                            <span key={i} style={{ color: i < profile.overall_satisfaction ? COLOR_GOLD : '#cbd5e1' }}>
+                                                                ⭐
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {profile?.improvement_suggestions && (
+                                                <div>
+                                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600', marginBottom: '8px' }}>Sugerencias de mejora</div>
+                                                    <div style={{ 
+                                                        fontSize: '15px', 
+                                                        color: COLOR_DARK, 
+                                                        lineHeight: '1.6',
+                                                        background: 'white',
+                                                        padding: '12px 16px',
+                                                        borderRadius: '12px',
+                                                        fontStyle: 'italic'
+                                                    }}>
+                                                        💡 "{profile.improvement_suggestions}"
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Insignias y Categorías Favoritas */}
                                 <div>
                                     <h3 style={{ color: COLOR_BLUE, marginBottom: '15px', fontSize: '18px' }}>
                                         🏆 Insignias Obtenidas

@@ -176,16 +176,56 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   useEffect(() => {
     // Initialize mini map (client only)
     (async () => {
-      if (!mapContainerRef.current || !place.lat || !place.lng) return;
+      console.log('🗺️ Mini map init - place:', place.name, 'lat:', place.lat, 'lng:', place.lng);
+      if (!mapContainerRef.current || !place.lat || !place.lng) {
+        console.log('🗺️ Mini map skipped - missing container or coordinates');
+        return;
+      }
       try {
         const mapboxgl = (await import('mapbox-gl')).default;
         mapboxgl.accessToken = (process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '').trim();
-        if (!mapboxgl.accessToken) return;
-        if (mapRef.current) return;
-        const m = new mapboxgl.Map({ container: mapContainerRef.current, style: 'mapbox://styles/mapbox/streets-v12', center: [place.lng, place.lat], zoom: 14 });
-        new mapboxgl.Marker().setLngLat([place.lng, place.lat]).addTo(m);
+        if (!mapboxgl.accessToken) {
+          console.warn('🗺️ Mapbox token not found');
+          return;
+        }
+        if (mapRef.current) {
+          console.log('🗺️ Mini map already exists');
+          return;
+        }
+
+        console.log('🗺️ Creating mini map...');
+
+        // Crear mapa
+        const m = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [place.lng, place.lat],
+          zoom: 14
+        });
+
+        // Esperar a que el mapa se cargue antes de agregar el marcador
+        m.on('load', () => {
+          console.log('🗺️ Mini map loaded, adding marker...');
+          // Crear marcador con color personalizado
+          const markerElement = document.createElement('div');
+          markerElement.style.width = '30px';
+          markerElement.style.height = '30px';
+          markerElement.style.borderRadius = '50%';
+          markerElement.style.backgroundColor = '#1A3A6C';
+          markerElement.style.border = '3px solid white';
+          markerElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+
+          new mapboxgl.Marker({ element: markerElement })
+            .setLngLat([place.lng!, place.lat!])
+            .addTo(m);
+
+          console.log('🗺️ Mini map marker added successfully');
+        });
+
         mapRef.current = m as unknown;
-      } catch (err) { console.warn('Mini map could not be initialized', err); }
+      } catch (err) {
+        console.warn('🗺️ Mini map could not be initialized', err);
+      }
     })();
 
     return () => {
@@ -194,14 +234,38 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         mapRef.current = null;
       }
     };
-  }, [place.lat, place.lng]);
+  }, [place.lat, place.lng, place.name]);
 
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 6, maxWidth: 1000, margin: '0 auto' }}>
       
       <style dangerouslySetInnerHTML={{
         __html: `
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(30px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes scaleIn {
+            from {
+              opacity: 0;
+              transform: scale(0.9);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
           @keyframes slideInLeft {
             from {
               transform: translateX(-100%);
@@ -212,52 +276,114 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
               opacity: 1;
             }
           }
+          @keyframes slideDown {
+            from {
+              opacity: 0;
+              transform: translateY(-20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .hero-section {
+            animation: fadeIn 0.6s ease-out;
+          }
+          .back-button {
+            animation: slideDown 0.5s ease-out 0.1s both;
+          }
+          .description-section {
+            animation: fadeInUp 0.6s ease-out 0.2s both;
+          }
+          .sidebar {
+            animation: fadeInUp 0.6s ease-out 0.3s both;
+          }
+          .gallery-item {
+            animation: scaleIn 0.4s ease-out both;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+          }
+          .gallery-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+          }
+          .card-section {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+          }
+          .card-section:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.12);
+          }
+          .btn-hover {
+            transition: all 0.3s ease;
+          }
+          .btn-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+          }
           @media (max-width: 768px) {
             .place-detail-container {
-              padding: 16px 12px !important;
+              padding: 8px !important;
             }
             .hero-section {
-              height: 300px !important;
+              height: 220px !important;
+              border-radius: 12px !important;
             }
             .hero-title {
-              font-size: 1.8rem !important;
+              font-size: 1.5rem !important;
+            }
+            .hero-content {
+              left: 16px !important;
+              bottom: 16px !important;
             }
             .main-grid {
               grid-template-columns: 1fr !important;
-              gap: 12px !important;
+              gap: 10px !important;
+            }
+            .description-section {
+              padding: 12px !important;
+              font-size: 1rem !important;
+              line-height: 1.7 !important;
+            }
+            .description-title {
+              font-size: 1.3rem !important;
+              margin-bottom: 10px !important;
             }
             .sidebar {
               display: flex !important;
               flex-direction: column !important;
-              gap: 12px !important;
-              margin-top: 20px !important;
+              gap: 8px !important;
+              margin-top: 0 !important;
               width: 100% !important;
             }
+            .sidebar-card {
+              padding: 10px !important;
+            }
             .gallery-grid {
-              grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+              grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) !important;
+              gap: 6px !important;
             }
             .video-container {
-              min-width: 180px !important;
-              height: 100px !important;
+              min-width: 160px !important;
+              height: 90px !important;
             }
             .promotion-item {
               flex-direction: column !important;
               text-align: center;
+              padding: 10px !important;
             }
             .promotion-image {
               width: 100% !important;
-              height: 120px !important;
+              height: 100px !important;
             }
             .modal-content {
               width: 95% !important;
               height: 85% !important;
             }
-            .narrating-modal {
-              left: 16px !important;
-              bottom: 16px !important;
-              max-width: calc(100vw - 32px) !important;
-              padding: 16px !important;
+            .back-button {
+              padding: 8px 12px !important;
+              font-size: 0.9rem !important;
             }
+          }
           @media (min-width: 769px) {
             .sidebar {
               max-width: 300px;
@@ -267,17 +393,48 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }} className="place-detail-container">
         {/* Hero */}
-        <div style={{ position: 'relative', height: 520, borderRadius: 16, overflow: 'hidden', boxShadow: '0 25px 60px rgba(0,0,0,0.15)' }} className="hero-section">
+        <div style={{ position: 'relative', height: 380, borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }} className="hero-section">
           <Image src={place.image_url || 'https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg'} alt={place.name} fill style={{ objectFit: 'cover' }} />
-          <div style={{ position: 'absolute', left: 24, bottom: 24, color: 'white', textShadow: '0 6px 28px rgba(0,0,0,0.6)' }}>
-            <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900 }} className="hero-title">{place.name}</h1>
-            <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              {place.category && <span style={{ background: 'rgba(255,255,255,0.9)', color: '#1A3A6C', padding: '6px 10px', borderRadius: 10, fontWeight: 700 }}>{place.category}</span>}
-              <button onClick={handleShare} style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.45)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Compartir</button>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)' }} />
+          
+          {/* Botón Volver en el Hero */}
+          <button
+            onClick={() => window.history.back()}
+            style={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(10px)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: 20,
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              zIndex: 2,
+            }}
+            className="btn-hover"
+          >
+            <span style={{ fontSize: '1.1rem' }}>←</span>
+            <span>Volver</span>
+          </button>
+          
+          <div style={{ position: 'absolute', left: 24, bottom: 20, color: 'white', textShadow: '0 4px 20px rgba(0,0,0,0.8)', zIndex: 1 }} className="hero-content">
+            <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.5px' }} className="hero-title">{place.name}</h1>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {place.category && <span style={{ background: 'rgba(255,255,255,0.95)', color: '#1A3A6C', padding: '6px 12px', borderRadius: 20, fontWeight: 700, fontSize: '0.85rem', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>{place.category}</span>}
+              <button onClick={handleShare} className="btn-hover" style={{ padding: '8px 14px', background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>Compartir</button>
               {place.lat && place.lng && (
                 <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`} target="_blank" rel="noreferrer">
-                  <button style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.45)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    🗺️ Google Maps
+                  <button className="btn-hover" style={{ padding: '8px 14px', background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
+                    <span>🗺️</span>
+                    <span>Google Maps</span>
                   </button>
                 </a>
               )}
@@ -287,17 +444,17 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
         {/* Main Info / Side panel */}
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }} className="main-grid">
-          <div style={{ background: 'white', padding: 18, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
-            <h2 style={{ marginTop: 0, color: '#1A3A6C' }}>Descripción</h2>
+          <div style={{ background: 'white', padding: 20, borderRadius: 14, boxShadow: '0 8px 25px rgba(0,0,0,0.08)' }} className="description-section card-section">
+            <h2 style={{ marginTop: 0, color: '#1A3A6C' }} className="description-title">Descripción</h2>
             <p style={{ color: '#333', lineHeight: 1.7 }}>{place.description || 'No hay descripción disponible.'}</p>
 
             {/* Gallery Thumbnails */}
             {place.gallery_urls && place.gallery_urls.length > 0 && (
               <section style={{ marginTop: 18 }}>
-                <h3 style={{ margin: 0, marginBottom: 8 }}>Galería</h3>
+                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>Galería</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }} className="gallery-grid">
                   {place.gallery_urls.map((u, i) => (
-                    <div key={i} onClick={() => openGallery(i)} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', height: 100, position: 'relative' }}>
+                    <div key={i} onClick={() => openGallery(i)} style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', height: 100, position: 'relative', animationDelay: `${i * 0.05}s` }} className="gallery-item">
                       <Image src={u} alt={`${place.name} foto ${i + 1}`} fill style={{ objectFit: 'cover' }} />
                     </div>
                   ))}
@@ -307,8 +464,8 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
             {/* Videos */}
             {place.video_urls && place.video_urls.length > 0 && (
-              <section style={{ marginTop: 18 }}>
-                <h3 style={{ margin: 0, marginBottom: 8 }}>Videos</h3>
+              <section style={{ marginTop: 20 }}>
+                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>Videos</h3>
                 <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8 }}>
                   {place.video_urls.map((v, i) => (
                     <div key={i} style={{ minWidth: 220, height: 130, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative' }} className="video-container" onClick={() => openVideo(v)}>
@@ -360,7 +517,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
           </div>
 
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="sidebar">
-            <div style={{ background: 'white', padding: 16, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
+            <div style={{ background: 'white', padding: 16, borderRadius: 14, boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="sidebar-card card-section">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 12, color: '#666' }}>{place.isBusiness ? 'Negocio' : 'Atractivo'}</div>
                 <div style={{ fontSize: 12, color: '#666' }}>{place.category}</div>
@@ -370,7 +527,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
               {place.isBusiness && (
                 <div style={{ marginTop: 12 }}>
-                  <button style={{ width: '100%', padding: '12px 14px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800 }}>Contactar/Reservar</button>
+                  <button className="btn-hover" style={{ width: '100%', padding: '12px 14px', background: 'linear-gradient(135deg, #1A3A6C 0%, #2C5AA0 100%)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(26, 58, 108, 0.25)' }}>Contactar/Reservar</button>
                 </div>
               )}
 
@@ -383,7 +540,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             </div>
 
             {/* Quick Highlights */}
-            <div style={{ background: 'white', padding: 16, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
+            <div style={{ background: 'white', padding: 16, borderRadius: 14, boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="sidebar-card card-section">
               <div style={{ fontWeight: 800, marginBottom: 8 }}>Aspectos Destacados</div>
               <ul style={{ paddingLeft: 18, color: '#444' }}>
                 <li>Recomendado para turistas</li>

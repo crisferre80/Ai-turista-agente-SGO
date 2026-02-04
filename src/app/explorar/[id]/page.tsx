@@ -112,19 +112,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   // Dynamic load chat client component safely
   const ChatModule = await import('@/components/ChatInterface');
   const ChatComp = ChatModule.default as React.ComponentType<ChatInterfaceProps>;
+  // Import Header
+  const HeaderModule = await import('@/components/Header');
+  const Header = HeaderModule.default as React.ComponentType;
+  
   return (
     <>
-      <header style={{ background: 'white', padding: '24px 20px', borderBottom: '1px solid #eee', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60000 }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/explorar" style={{ textDecoration: 'none', background: '#F1C40F', color: '#1A3A6C', padding: '10px 14px', borderRadius: 999, fontWeight: 800 }}>← Volver</Link>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#1A3A6C' }}>{place.name}</h1>
-            <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{place.category || (place.isBusiness ? 'Negocio' : 'Atractivo')}</div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
-      <main style={{ padding: '28px 20px', paddingTop: '100px' }}>
+      <main style={{ padding: '28px 20px', paddingTop: '90px' }}>
         <PlaceDetailClient place={place} promotions={promotions} />
       </main>
 

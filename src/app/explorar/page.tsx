@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
 import GalleryModal from '@/components/GalleryModal';
-import UserAvatar from '@/components/UserAvatar';
+import Header from '@/components/Header';
 import UserReviewModal from '@/components/UserReviewModal';
 import UserReviewsGallery from '@/components/UserReviewsGallery';
 
@@ -100,8 +100,10 @@ export default function ExplorePage() {
 
             if (attrsRes.error) console.warn('Attractions fetch error', attrsRes.error);
             if (bizRes.error) {
-                console.warn('Businesses fetch error', bizRes.error);
-                console.log('⚠️ Si ves error 400, ejecuta add_missing_columns_only.sql en Supabase');
+                console.error('Businesses fetch error', bizRes.error);
+                console.error('⚠️ ERROR: Falta agregar columnas a business_profiles');
+                console.error('📝 SOLUCIÓN: Ejecuta add_missing_columns_only.sql en Supabase SQL Editor');
+                console.error('📄 O ejecuta: add_coordinates_to_business_profiles.sql');
             }
 
             const attrs = attrsRes.data;
@@ -387,12 +389,19 @@ export default function ExplorePage() {
             padding: '90px 16px 16px 16px',
             fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
-            {/* Header - Rediseño Profesional */}
-            <header style={{
+            {/* Header compartido */}
+            <Header />
+            
+            {/* Espacio para el header fijo */}
+            <div style={{ height: '70px' }} />
+
+            {/* Search and Filters */}
+            <div style={{
                 background: COLOR_BACKGROUND,
                 padding: '24px',
                 borderRadius: '16px',
                 marginBottom: '24px',
+                marginTop: '24px',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                 border: '1px solid #e2e8f0'
             }}>
@@ -400,44 +409,16 @@ export default function ExplorePage() {
                     maxWidth: '1200px',
                     margin: '0 auto'
                 }}>
-                    {/* Header Top */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: '20px',
-                        flexWrap: 'wrap',
-                        gap: '12px'
+                    <h1 style={{
+                        margin: '0 0 20px 0',
+                        fontSize: 'clamp(1.5rem, 4vw, 2.25rem)',
+                        fontWeight: '700',
+                        color: COLOR_TEXT,
+                        letterSpacing: '-0.025em',
+                        textAlign: 'center'
                     }}>
-                        <Link href="/" style={{
-                            textDecoration: 'none',
-                            background: COLOR_ACCENT,
-                            color: COLOR_TEXT,
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            fontWeight: '500',
-                            fontSize: '0.875rem',
-                            transition: 'all 0.2s ease',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            border: '1px solid #e2e8f0'
-                        }}>
-                            ← Volver
-                        </Link>
-
-                        <h1 style={{
-                            margin: 0,
-                            fontSize: 'clamp(1.5rem, 4vw, 2.25rem)',
-                            fontWeight: '700',
-                            color: COLOR_TEXT,
-                            letterSpacing: '-0.025em'
-                        }}>
-                            Explorar Santiago
-                        </h1>
-
-                        <UserAvatar size={32} showName={true} />
-                    </div>
+                        Explorar Santiago
+                    </h1>
 
                     {/* Search and Filters */}
                     <div style={{
@@ -584,7 +565,7 @@ export default function ExplorePage() {
                         </div>
                     </div>
                 </div>
-            </header>
+            </div>
 
             {/* Quick Categories */}
             <div style={{

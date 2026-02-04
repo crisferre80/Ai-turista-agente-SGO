@@ -407,9 +407,17 @@ export async function POST(req: Request) {
         let placeDescription = null;
         let isRouteOnly = false; // Flag para indicar que solo se debe mostrar ruta
         
+        // Detectar si el usuario pregunta explícitamente por videos
+        const userMessage = lastMessage?.content?.toLowerCase() || '';
+        const isVideoRequest = /\b(video|videos|ver video|mostrame video|muestra video|quiero ver)\b/.test(userMessage);
+        
         // Debug: Log what type of query was detected
         if (isInfoQuery) {
             console.log('ℹ️  INFO query detected:', lastMessage.content);
+        }
+        
+        if (isVideoRequest) {
+            console.log('🎥 VIDEO request detected, will skip PlaceDetail navigation');
         }
         
         // Si es consulta de ruta, marcar como tal pero SÍ extraer placeName para trazar ruta
@@ -443,8 +451,8 @@ export async function POST(req: Request) {
                     }
                 }
             }
-        } else if (reply) {
-            // Solo buscar placeId si NO es consulta de ruta
+        } else if (reply && !isVideoRequest) {
+            // Solo buscar placeId si NO es consulta de ruta Y NO es solicitud de video
             // Check attractions first
             for (const attraction of (attractions || [])) {
                 const name = attraction.name as string;

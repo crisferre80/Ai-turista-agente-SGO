@@ -36,7 +36,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [showHistory, setShowHistory] = useState(false); // Toggle for full chat history
-    const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu toggle
     const [audioBlocked, setAudioBlocked] = useState(false); // Handle autoplay block
     const [displayedText, setDisplayedText] = useState(''); // Typewriter effect text
     const [isIdle, setIsIdle] = useState(false); // For auto-hide
@@ -45,7 +44,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
     const [promotionalMessages, setPromotionalMessages] = useState<string[]>([]); // Promotional messages from DB
     const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video
-    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: any[] } | null>(null); // Video actual o lista de videos
+    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
     const [showVideoList, setShowVideoList] = useState(false); // Mostrar lista de videos de YouTube
 
     // External triggers effects will be registered after callbacks are defined
@@ -57,51 +56,12 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const micHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to auto-hide mic legend on touch
 
     const [engagementPrompts, setEngagementPrompts] = useState<string[]>([]);
-    const [userProfile, setUserProfile] = useState<{ name: string | null; preferences: string | null } | null>(null);
 
     useEffect(() => {
-        fetchUserProfile();
+        loadGuestPrompts();
         fetchCloudPhrases();
         fetchPromotionalMessages();
     }, []);
-
-    const fetchUserProfile = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('name, preferences')
-                    .eq('id', user.id)
-                    .single();
-                
-                if (profile) {
-                    setUserProfile(profile);
-                    console.log('👤 Usuario autenticado en ChatInterface:', profile.name);
-                    
-                    // Frases para usuarios registrados (personalizadas)
-                    const registeredPrompts = [
-                        "¿Hay algo en que pueda ayudarte?",
-                        "¿Te gustaría conocer algún lugar histórico?",
-                        "¿Sabías que Santiago es la Madre de Ciudades?",
-                        "Si buscas comida rica, puedo recomendarte lugares.",
-                        "¿Querés saber sobre eventos culturales?",
-                        "¿Te interesa conocer lugares nocturnos?"
-                    ];
-                    setEngagementPrompts(registeredPrompts);
-                } else {
-                    // Usuario no registrado o sin perfil
-                    loadGuestPrompts();
-                }
-            } else {
-                // No hay usuario autenticado
-                loadGuestPrompts();
-            }
-        } catch (error) {
-            console.error('Error fetching user profile:', error);
-            loadGuestPrompts();
-        }
-    };
 
     const loadGuestPrompts = () => {
         // Frases para visitantes no registrados (incluyen preguntas personales)
@@ -1193,7 +1153,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     background: 'rgba(0, 0, 0, 0.8)',
                     backdropFilter: 'blur(10px)',
                     animation: 'fadeIn 0.3s ease-out',
-                    padding: '20px'
+                    padding: window.innerWidth < 768 ? '10px' : '20px'
                 }}
                 onClick={() => {
                     setShowVideoModal(false);
@@ -1203,15 +1163,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 >
                     <div style={{
                         background: 'white',
-                        borderRadius: 20,
-                        padding: '30px',
+                        borderRadius: window.innerWidth < 768 ? 12 : 20,
+                        padding: window.innerWidth < 768 ? '15px' : '30px',
                         boxShadow: '0 25px 70px rgba(0,0,0,0.4)',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 20,
-                        maxWidth: '90%',
-                        maxHeight: '90%',
-                        width: showVideoList ? '900px' : '800px',
+                        gap: window.innerWidth < 768 ? 12 : 20,
+                        maxWidth: window.innerWidth < 768 ? '98%' : '90%',
+                        maxHeight: window.innerWidth < 768 ? '95%' : '90%',
+                        width: window.innerWidth < 768 ? '100%' : (showVideoList ? '900px' : '800px'),
                         animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
                         position: 'relative',
                         overflowY: showVideoList ? 'auto' : 'visible'
@@ -1226,15 +1186,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             }}
                             style={{
                                 position: 'absolute',
-                                top: 15,
-                                right: 15,
+                                top: window.innerWidth < 768 ? 8 : 15,
+                                right: window.innerWidth < 768 ? 8 : 15,
                                 background: COLOR_RED,
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '50%',
-                                width: 40,
-                                height: 40,
-                                fontSize: '20px',
+                                width: window.innerWidth < 768 ? 35 : 40,
+                                height: window.innerWidth < 768 ? 35 : 40,
+                                fontSize: window.innerWidth < 768 ? '18px' : '20px',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1257,10 +1217,10 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         </button>
 
                         {/* Título */}
-                        <div style={{ paddingRight: '50px' }}>
+                        <div style={{ paddingRight: window.innerWidth < 768 ? '40px' : '50px' }}>
                             <h3 style={{
                                 margin: 0,
-                                fontSize: '1.5rem',
+                                fontSize: window.innerWidth < 768 ? '1.1rem' : '1.5rem',
                                 fontWeight: 900,
                                 color: COLOR_BLUE,
                                 marginBottom: 8
@@ -1269,7 +1229,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             </h3>
                             <p style={{
                                 margin: 0,
-                                fontSize: '0.95rem',
+                                fontSize: window.innerWidth < 768 ? '0.85rem' : '0.95rem',
                                 color: '#64748b',
                                 fontWeight: 500
                             }}>
@@ -1282,12 +1242,12 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                             <div style={{
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: 15,
-                                maxHeight: '500px',
+                                gap: window.innerWidth < 768 ? 10 : 15,
+                                maxHeight: window.innerWidth < 768 ? '60vh' : '500px',
                                 overflowY: 'auto',
                                 paddingRight: '10px'
                             }}>
-                                {currentVideo.videos.map((video: any, index: number) => (
+                                {currentVideo.videos.map((video: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }) => (
                                     <div
                                         key={video.id}
                                         onClick={() => {
@@ -1296,8 +1256,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                         }}
                                         style={{
                                             display: 'flex',
-                                            gap: 15,
-                                            padding: 15,
+                                            flexDirection: window.innerWidth < 768 ? 'column' : 'row',
+                                            gap: window.innerWidth < 768 ? 10 : 15,
+                                            padding: window.innerWidth < 768 ? 12 : 15,
                                             background: '#f8fafc',
                                             borderRadius: 12,
                                             cursor: 'pointer',
@@ -1315,12 +1276,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                             e.currentTarget.style.transform = 'scale(1)';
                                         }}
                                     >
-                                        <img
+                                        <Image
                                             src={video.thumbnail}
                                             alt={video.title}
+                                            width={window.innerWidth < 768 ? 320 : 160}
+                                            height={window.innerWidth < 768 ? 180 : 90}
                                             style={{
-                                                width: 160,
-                                                height: 90,
+                                                width: window.innerWidth < 768 ? '100%' : 160,
+                                                height: window.innerWidth < 768 ? 'auto' : 90,
+                                                aspectRatio: window.innerWidth < 768 ? '16/9' : 'auto',
                                                 objectFit: 'cover',
                                                 borderRadius: 8,
                                                 flexShrink: 0
@@ -1329,17 +1293,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                         <div style={{ flex: 1 }}>
                                             <h4 style={{
                                                 margin: 0,
-                                                fontSize: '1rem',
+                                                fontSize: window.innerWidth < 768 ? '0.95rem' : '1rem',
                                                 fontWeight: 700,
                                                 color: COLOR_BLUE,
                                                 marginBottom: 6,
-                                                lineHeight: 1.3
+                                                lineHeight: 1.3,
+                                                wordBreak: 'break-word',
+                                                overflowWrap: 'break-word'
                                             }}>
                                                 {video.title}
                                             </h4>
                                             <p style={{
                                                 margin: 0,
-                                                fontSize: '0.85rem',
+                                                fontSize: window.innerWidth < 768 ? '0.8rem' : '0.85rem',
                                                 color: '#64748b',
                                                 marginBottom: 4
                                             }}>
@@ -1347,13 +1313,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                             </p>
                                             <p style={{
                                                 margin: 0,
-                                                fontSize: '0.8rem',
+                                                fontSize: window.innerWidth < 768 ? '0.75rem' : '0.8rem',
                                                 color: '#94a3b8',
                                                 lineHeight: 1.4,
                                                 display: '-webkit-box',
                                                 WebkitLineClamp: 2,
                                                 WebkitBoxOrient: 'vertical',
-                                                overflow: 'hidden'
+                                                overflow: 'hidden',
+                                                wordBreak: 'break-word',
+                                                overflowWrap: 'break-word'
                                             }}>
                                                 {video.description}
                                             </p>
@@ -1372,7 +1340,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                 boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
                             }}>
                                 <iframe
-                                    src={`${currentVideo.url.replace('watch?v=', 'embed/')}${currentVideo.url.includes('?') ? '&' : '?'}mute=1`}
+                                    src={`${currentVideo.url.replace('watch?v=', 'embed/')}${currentVideo.url.includes('?') ? '&' : '?'}autoplay=1&mute=0&controls=1`}
                                     style={{
                                         position: 'absolute',
                                         top: 0,
@@ -1391,7 +1359,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         {/* Info adicional */}
                         <p style={{
                             margin: 0,
-                            fontSize: '0.85rem',
+                            fontSize: window.innerWidth < 768 ? '0.8rem' : '0.85rem',
                             color: '#94a3b8',
                             textAlign: 'center',
                             fontStyle: 'italic'
@@ -1407,7 +1375,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 position: 'fixed',
                 bottom: isModalOpen ? '-120px' : '20px',
                 left: '20px',
-                zIndex: 40000,
+                zIndex: isSpeaking || isThinking || audioBlocked || displayedText || isHovering || showBubbleManual ? 40000 : 100,
                 pointerEvents: 'none',
                 display: 'flex',
                 flexDirection: 'column',
@@ -1502,225 +1470,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 </div>
             </div>
 
-            {/* NEW TOP HEADER WITH HAMBURGER MENU */}
-            <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '60px',
-                background: 'rgba(255,255,255,0.9)',
-                backdropFilter: 'blur(20px)',
-                borderBottom: `1px solid ${COLOR_BLUE}11`,
-                zIndex: 50000,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0 20px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        background: 'white',
-                        borderRadius: '50%',
-                        border: `2px solid ${COLOR_BLUE}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                    }}>
-                        <Image
-                            src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
-                            alt="Santi Logo"
-                            width={40}
-                            height={40}
-                            unoptimized
-                            style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'contain',
-                                transform: 'scale(1.2) translateY(2px)'
-                            }}
-                        />
-                    </div>
-                    <h1 style={{
-                        fontSize: '1.2rem',
-                        fontWeight: '900',
-                        color: COLOR_BLUE,
-                        margin: 0,
-                        letterSpacing: '-0.5px'
-                    }}> IA Santi Guía </h1>
-                </div>
-            </div>
-
-            {/* NEW TOP HEADER WITH HAMBURGER MENU */}
-            <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '60px',
-                background: 'rgba(255,255,255,0.9)',
-                backdropFilter: 'blur(20px)',
-                borderBottom: `1px solid ${COLOR_BLUE}11`,
-                zIndex: 50000,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0 20px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        background: 'white',
-                        borderRadius: '50%',
-                        border: `2px solid ${COLOR_BLUE}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                    }}>
-                        <Image
-                            src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
-                            alt="Santi Logo"
-                            width={40}
-                            height={40}
-                            unoptimized
-                            style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'contain',
-                                transform: 'scale(1.2) translateY(2px)'
-                            }}
-                        />
-                    </div>
-                    <h1 style={{
-                        fontSize: '1.2rem',
-                        fontWeight: '900',
-                        color: COLOR_BLUE,
-                        margin: 0,
-                        letterSpacing: '-0.5px'
-                    }}> IA Santi Guía </h1>
-                </div>
-
-                <div style={{ position: 'relative' }}>
-                    <button
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            fontSize: '1.5rem',
-                            cursor: 'pointer',
-                            color: COLOR_BLUE,
-                            padding: '5px'
-                        }}
-                    >
-                        {isMenuOpen ? '✕' : '☰'}
-                    </button>
-
-                    {isMenuOpen && (
-                        <div style={{
-                            position: 'absolute',
-                            top: '50px',
-                            right: 0,
-                            background: 'white',
-                            borderRadius: '15px',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
-                            padding: '10px',
-                            minWidth: '180px',
-                            zIndex: 50001,
-                            border: `1px solid ${COLOR_BLUE}11`,
-                            animation: 'popIn 0.2s ease-out'
-                        }}>
-                            <button
-                                onClick={() => { setShowHistory(!showHistory); setIsMenuOpen(false); }}
-                                style={{
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    padding: '12px 15px',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    color: COLOR_BLUE,
-                                    fontWeight: 'bold',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px'
-                                }}
-                            >
-                                <span>{showHistory ? '📖' : '📘'}</span> {showHistory ? 'Cerrar Chat' : 'Ver Historial'}
-                            </button>
-                            <button
-                                onClick={() => window.location.href = '/login'}
-                                style={{
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    padding: '12px 15px',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    color: COLOR_BLUE,
-                                    fontWeight: 'bold',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px'
-                                }}
-                            >
-                                <span>🏢</span> Mi Negocio
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* OPTIONAL HISTORY VIEW (Toggable Floating Panel) */}
-            {showHistory && (
-                <div style={{
-                    position: 'fixed',
-                    top: '70px', // Below the NEW header
-                    right: '20px',
-                    width: 'min(90%, 400px)',
-                    maxHeight: '70vh',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '15px',
-                    zIndex: 29999,
-                    background: 'rgba(255, 255, 255, 0.98)',
-                    backdropFilter: 'blur(25px)',
-                    border: `1px solid ${COLOR_BLUE}11`,
-                    borderRadius: '24px',
-                    boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
-                    padding: '20px',
-                    overflowY: 'auto',
-                    animation: 'popIn 0.3s ease-out'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: `1px solid ${COLOR_BLUE}08`, paddingBottom: '10px' }}>
-                        <span style={{ fontWeight: 'bold', color: COLOR_BLUE }}>Historial de Chat</span>
-                        <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
-                    </div>
-                    {messages.map((m, i) => (
-                        <div key={i} className={`message-container ${m.role}`}>
-                            <div className={`bubble ${m.role === 'assistant' ? 'thought-bubble-list' : 'speech-bubble'}`}>
-                                {m.content}
-                            </div>
-                        </div>
-                    ))}
-                    {isThinking && (
-                        <div className="message-container assistant">
-                            <div className="bubble thought-bubble-list thinking">...</div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-            )}
+           
 
             {/* INPUT AREA (Floating at bottom-right of footer) */}
             <div style={{

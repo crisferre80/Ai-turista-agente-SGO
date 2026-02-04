@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
-import UserAvatar from '@/components/UserAvatar';
+import Header from '@/components/Header';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
 import { santiSpeak, santiNarrate, stopSantiNarration } from '@/lib/speech';
@@ -173,150 +173,13 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
   </>
 );
 
-// Header ESTILO REFERENCIA.PNG - oscuro limpio
-const HeaderBar: React.FC = () => {
-  const [pwaAvailable, setPwaAvailable] = useState(false);
-  const [pwaInstalled, setPwaInstalled] = useState(false);
-  const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    type PwaDetail = { available?: boolean; installed?: boolean; showIosHint?: boolean };
-    type SantIAPwaPromptResult = { outcome: 'accepted' | 'dismissed'; platform?: string };
-    type SantIAPwaApi = { isAvailable?: () => boolean; isInstalled?: () => boolean; prompt?: () => Promise<SantIAPwaPromptResult | null>; closeIosHint?: () => void };
-
-    const win = window as unknown as { __santIA_pwa?: SantIAPwaApi };
-    const api = win.__santIA_pwa;
-    if (api) {
-      // defer to avoid synchronous setState inside effect
-      setTimeout(() => {
-        setPwaAvailable(!!api.isAvailable?.());
-        setPwaInstalled(!!api.isInstalled?.());
-      }, 0);
-    }
-
-    const handler = (e: Event) => {
-      const custom = e as CustomEvent<PwaDetail>;
-      const detail = custom?.detail || {};
-      setTimeout(() => {
-        setPwaAvailable(!!detail.available);
-        setPwaInstalled(!!detail.installed);
-      }, 0);
-    };
-
-    window.addEventListener('santIA-pwa', handler as EventListener);
-
-    // Check user authentication
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    };
-    checkUser();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
-    });
-
-    return () => {
-      window.removeEventListener('santIA-pwa', handler as EventListener);
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const handleInstallClick = async () => {
-    type SantIAPwaPromptResult = { outcome: 'accepted' | 'dismissed'; platform?: string };
-    const win = window as unknown as { __santIA_pwa?: { prompt?: () => Promise<SantIAPwaPromptResult | null> } };
-    const api = win.__santIA_pwa;
-    if (api && api.prompt) {
-      await api.prompt();
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 70,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 40px',
-      background: '#0e1f1d',
-      borderBottom: `1px solid ${COLOR_GOLD}33`,
-      zIndex: 5000,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
-        <div style={{
-          width: 42,
-          height: 42,
-          borderRadius: 10,
-          overflow: 'hidden',
-          display: 'grid',
-          placeItems: 'center',
-          boxShadow: `0 4px 12px ${COLOR_GOLD}44`,
-          border: `2px solid ${COLOR_WHITE}`
-        }}>
-          <Image
-            src="/santi-avatar.png"
-            alt="Santi"
-            width={42}
-            height={42}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.05) translateY(1px)' }}
-          />
-        </div>
-        <div style={{ 
-          color: COLOR_WHITE, 
-          fontWeight: 900, 
-          fontSize: '1.1rem',
-          letterSpacing: 0.5 
-        }}>
-          Santi IA
-        </div>
-      </div>
-      <nav style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Link href="/explorar" style={{ 
-          color: COLOR_WHITE, 
-          textDecoration: 'none', 
-          fontWeight: 600,
-          transition: 'color 0.2s'
-        }}>
-          Explorar
-        </Link>
-        {user ? (
-          <UserAvatar size={32} showName={false} />
-        ) : (
-          <Link href="/login" style={{ 
-            color: '#0e1f1d', 
-            background: COLOR_GOLD, 
-            padding: '10px 20px', 
-            borderRadius: 8, 
-            fontWeight: 800, 
-            textDecoration: 'none',
-            boxShadow: `0 4px 15px ${COLOR_GOLD}44`,
-            transition: 'transform 0.2s'
-          }}>
-            Acreditación
-          </Link>
-        )}
-        {pwaAvailable && !pwaInstalled && (
-          <button onClick={handleInstallClick} style={{ background: '#fff', color: '#0e1f1d', padding: '8px 12px', borderRadius: 8, fontWeight: 800 }}>Instalar</button>
-        )}
-      </nav>
-    </div>
-  );
-};
-
-// Tarjeta destacada con animaciones modernas
 const FeaturedCard = ({ title, img }: { title: string; img?: string }) => (
   <div className="featured-card" style={{
     position: 'relative',
     borderRadius: 24,
     overflow: 'hidden',
-    background: '#0b1220',
-    border: `1px solid ${COLOR_WHITE}14`,
+    cursor: 'pointer',
+    border: `2px solid ${COLOR_WHITE}22`,
     boxShadow: '0 15px 40px rgba(0,0,0,0.35)'
   }}>
     <div style={{ position: 'relative', width: '100%', paddingTop: '62%' }}>
@@ -614,7 +477,7 @@ export default function Home() {
       position: 'relative',
       overflowX: 'hidden'
     }}>
-      <HeaderBar />
+      <Header />
       
       {/* CONTENT WRAPPER */}
       <div style={{ 
