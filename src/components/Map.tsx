@@ -212,7 +212,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                                 const marker = markersRef.current[nextWaypoint.markerIndex];
                                 if (marker) {
                                     const popup = marker.getPopup();
-                                    if (popup) popup.addTo(map.current);
+                                    if (popup && map.current) popup.addTo(map.current);
                                 }
                                 isOrbiting = true;
                                 orbitStartTime = Date.now();
@@ -241,7 +241,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                                 const marker = markersRef.current[waypoint.markerIndex];
                                 if (marker) {
                                     const popup = marker.getPopup();
-                                    if (popup) popup.addTo(map.current);
+                                    if (popup && map.current) popup.addTo(map.current);
                                 }
                                 isOrbiting = true;
                                 orbitStartTime = Date.now();
