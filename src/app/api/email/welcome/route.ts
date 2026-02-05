@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendTemplateEmail } from '@/lib/gmail';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -27,26 +28,15 @@ export async function POST(request: Request) {
     const personalizedHtml = (welcomeTpl.html || '').replace(/{{\s*name\s*}}/gi, name || '');
     const personalizedSubject = (welcomeTpl.subject || '').replace(/{{\s*name\s*}}/gi, name || '');
 
-    // Send via OneSignal Email API
-    const apiKey = process.env.ONESIGNAL_REST_KEY;
-    const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
-    if (!apiKey || !appId) throw new Error('OneSignal not configured');
+    // Send via Gmail API
+    const result = await sendTemplateEmail(
+      email,
+      personalizedSubject || 'Bienvenido',
+      personalizedHtml || personalizedSubject
+    );
 
-    const payload = {
-      app_id: appId,
-      email_subject: personalizedSubject || 'Bienvenido',
-      email_body: personalizedHtml || personalizedSubject,
-      email_to: [String(email)],
-    } as unknown;
-
-    const url = 'https://api.onesignal.com/notifications?c=email';
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Key ${apiKey}` }, body: JSON.stringify(payload) });
-    const text = await res.text();
-    let json: unknown = text;
-    try { json = text ? JSON.parse(text) : text; } catch { /* ignore */ }
-
-    if (!res.ok) {
-      return NextResponse.json({ error: `OneSignal error ${res.status}: ${typeof json === 'string' ? json : JSON.stringify(json)}` }, { status: 500 });
+    if (!result.success) {
+      return NextResponse.json({ error: `Gmail error: ${result.error}` }, { status: 500 });
     }
 
     // Upsert contact into email_contacts table for tracking
@@ -57,7 +47,7 @@ export async function POST(request: Request) {
       }
     } catch { /* don't block on db error */ }
 
-    return NextResponse.json({ ok: true, result: json });
+    return NextResponse.json({ ok: true, messageId: result.messageId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

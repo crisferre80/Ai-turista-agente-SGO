@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendTemplateEmail } from '@/lib/gmail';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -11,35 +12,33 @@ const getAdmin = () => {
 type TemplateRecord = { id?: string; name?: string; subject?: string; html?: string; [key: string]: unknown };
 type CampaignRecord = { id?: string; name?: string; template_id?: string; status?: string; external_id?: string | null; [key: string]: unknown };
 
-async function sendViaOneSignal(template: TemplateRecord): Promise<Record<string, unknown>> {
-  const apiKey = process.env.ONESIGNAL_REST_KEY || process.env.NEXT_PUBLIC_ONESIGNAL_REST_KEY;
-  const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
-  if (!apiKey || !appId) throw new Error('OneSignal API key or App ID not configured');
+async function sendViaGmail(template: TemplateRecord, recipients: string[]): Promise<{ success: boolean; messageId?: string; error?: string; sentCount: number }> {
+  let sentCount = 0;
+  let lastMessageId: string | undefined;
+  let lastError: string | undefined;
 
-  const payload = {
-    app_id: appId,
-    email_subject: template.subject || template.name || 'No subject',
-    email_body: template.html || template.subject || '<p></p>',
-    contents: { en: template.subject || template.name || '' },
-    included_segments: ['Subscribed Users']
+  for (const email of recipients) {
+    const result = await sendTemplateEmail(
+      email,
+      template.subject || template.name || 'No subject',
+      template.html || '<p></p>'
+    );
+
+    if (result.success) {
+      sentCount++;
+      lastMessageId = result.messageId;
+    } else {
+      lastError = result.error;
+      console.error(`Failed to send email to ${email}:`, result.error);
+    }
+  }
+
+  return {
+    success: sentCount > 0,
+    messageId: lastMessageId,
+    error: sentCount === 0 ? lastError : undefined,
+    sentCount
   };
-
-  try { console.debug('OneSignal send (email, campaigns): app_id present=', !!appId, 'payloadKeys=', Object.keys(payload)); } catch {}
-
-  const url = 'https://api.onesignal.com/notifications?c=email';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json;charset=utf-8',
-      'Accept': 'application/json',
-      'Authorization': `Key ${apiKey}`
-    },
-    body: JSON.stringify(payload)
-  });
-
-  const json = await res.json();
-  if (!res.ok) throw new Error(JSON.stringify(json));
-  return json;
 }
 
 export async function GET() {
@@ -71,12 +70,25 @@ export async function POST(request: Request) {
     if (insErr) throw insErr;
     const insertedRec = inserted as CampaignRecord;
 
-    let sendResult: Record<string, unknown> | null = null;
+    let sendResult: { success: boolean; sentCount?: number; messageId?: string; error?: string } | null = null;
     if (sendNow) {
       try {
-        const r = await sendViaOneSignal(tpl);
+        // Get subscribed contacts
+        const { data: contacts } = await admin.from('email_contacts').select('email').eq('subscribed', true);
+        const recipients = contacts?.map(c => c.email) || [];
+        
+        if (recipients.length === 0) {
+          throw new Error('No subscribers found');
+        }
+
+        const r = await sendViaGmail(tplRec, recipients);
         sendResult = r;
-        await admin.from('email_campaigns').update({ status: 'sent', external_id: (r as Record<string, unknown>).id ?? null }).eq('id', insertedRec.id);
+        
+        if (r.success) {
+          await admin.from('email_campaigns').update({ status: 'sent', external_id: r.messageId ?? null }).eq('id', insertedRec.id);
+        } else {
+          throw new Error(r.error || 'Failed to send emails');
+        }
       } catch (sendErr: unknown) {
         await admin.from('email_campaigns').update({ status: 'failed' }).eq('id', insertedRec.id);
         const sMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);

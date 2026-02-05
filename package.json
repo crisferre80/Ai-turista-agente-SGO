@@ -21,6 +21,8 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
     "cheerio": "^1.1.2",
+    "dotenv": "^17.2.3",
+    "googleapis": "^171.2.0",
     "mapbox-gl": "^3.17.0",
     "mercadopago": "^2.12.0",
     "next": "16.1.1",

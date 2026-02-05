@@ -110,7 +110,7 @@ export default function EmailManager() {
   return (
     <div style={{ marginTop: 18 }}>
       <h3 style={{ marginTop: 0 }}>📧 Email Manager</h3>
-      <p style={{ color: '#6b7280' }}>Administra plantillas y campañas (integración con OneSignal).</p>
+      <p style={{ color: '#6b7280' }}>Administra plantillas y campañas de email con Gmail API.</p>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button onClick={() => setOpenCampaignId('new')} style={{ padding: '8px 12px', borderRadius: 8 }}>Nueva campaña</button>

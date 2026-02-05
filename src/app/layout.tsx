@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PwaInstall from '@/components/PwaInstall';
-import OneSignalConsent from '@/components/OneSignalConsent';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,7 +37,6 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
-        <OneSignalConsent />
         <PwaInstall />
       </body>
     </html>

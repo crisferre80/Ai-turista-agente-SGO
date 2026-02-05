@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendTemplateEmail } from '@/lib/gmail';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -11,44 +12,33 @@ const getAdmin = () => {
 type TemplateRecord = { id?: string; name?: string; subject?: string; html?: string; [key: string]: unknown };
 type CampaignRecord = { id?: string; name?: string; template_id?: string; status?: string; external_id?: string | null; [key: string]: unknown };
 
-async function sendViaOneSignal(template: TemplateRecord): Promise<Record<string, unknown>> {
-  const apiKey = process.env.ONESIGNAL_REST_KEY || process.env.NEXT_PUBLIC_ONESIGNAL_REST_KEY;
-  const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP_ID;
-  if (!apiKey || !appId) throw new Error('OneSignal API key or App ID not configured');
+async function sendViaGmail(template: TemplateRecord, recipients: string[]): Promise<{ success: boolean; messageId?: string; error?: string; sentCount: number }> {
+  let sentCount = 0;
+  let lastMessageId: string | undefined;
+  let lastError: string | undefined;
 
-  // Build payload according to OneSignal Email API requirements (POST /notifications?c=email)
-  const payload = {
-    app_id: appId,
-    email_subject: template.subject || template.name || 'No subject',
-    email_body: template.html || template.subject || '<p></p>',
-    // Keep contents for backward compatibility, but main fields are email_subject/email_body
-    contents: { en: template.subject || template.name || '' },
-    // Targeting: by default send to subscribed users; you can override with email_to or include_aliases
-    included_segments: ['Subscribed Users']
+  for (const email of recipients) {
+    const result = await sendTemplateEmail(
+      email,
+      template.subject || template.name || 'No subject',
+      template.html || '<p></p>'
+    );
+
+    if (result.success) {
+      sentCount++;
+      lastMessageId = result.messageId;
+    } else {
+      lastError = result.error;
+      console.error(`Failed to send email to ${email}:`, result.error);
+    }
+  }
+
+  return {
+    success: sentCount > 0,
+    messageId: lastMessageId,
+    error: sentCount === 0 ? lastError : undefined,
+    sentCount
   };
-
-  // Diagnostic: log non-sensitive payload info to help debug parsing errors
-  try {
-    console.debug('OneSignal send (email): app_id present=', !!appId, 'payloadKeys=', Object.keys(payload));
-  } catch { /* ignore logging errors */ }
-
-  // Use the documented API host + query param for email
-  const url = 'https://api.onesignal.com/notifications?c=email';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Key ${apiKey}`
-    },
-    body: JSON.stringify(payload)
-  });
-
-  const text = await res.text();
-  let json: unknown = text;
-  try { json = text ? JSON.parse(text) : text; } catch { /* not JSON */ }
-  if (!res.ok) throw new Error(`OneSignal API error ${res.status}: ${typeof json === 'string' ? json : JSON.stringify(json)}`);
-  return json as Record<string, unknown>;
 }
 
 export async function POST(request: Request) {
@@ -68,16 +58,32 @@ export async function POST(request: Request) {
     const tplRec = tpl as TemplateRecord | null;
     if (!tplRec) throw new Error('Template not found');
 
-    let r: Record<string, unknown> | null = null;
+    // Get subscribed contacts
+    const { data: contacts } = await admin.from('email_contacts').select('email').eq('subscribed', true);
+    const recipients = contacts?.map(c => c.email) || [];
+
+    if (recipients.length === 0) {
+      return NextResponse.json({ error: 'No subscribers found' }, { status: 400 });
+    }
+
     try {
-      r = await sendViaOneSignal(tplRec);
-      await admin.from('email_campaigns').update({ status: 'sent', external_id: (r as Record<string, unknown>).id ?? null }).eq('id', campaignRec.id);
-      return NextResponse.json({ ok: true, result: r });
+      const result = await sendViaGmail(tplRec, recipients);
+      
+      if (result.success) {
+        await admin.from('email_campaigns').update({ 
+          status: 'sent', 
+          external_id: result.messageId || null 
+        }).eq('id', campaignRec.id);
+        
+        return NextResponse.json({ ok: true, sentCount: result.sentCount, messageId: result.messageId });
+      } else {
+        throw new Error(result.error || 'Failed to send emails');
+      }
     } catch (sendErr: unknown) {
       const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-      console.error('Failed to send campaign via OneSignal:', msg);
+      console.error('Failed to send campaign via Gmail:', msg);
       await admin.from('email_campaigns').update({ status: 'failed' }).eq('id', campaignRec.id);
-      return NextResponse.json({ error: 'OneSignal send failed: ' + msg }, { status: 500 });
+      return NextResponse.json({ error: 'Gmail send failed: ' + msg }, { status: 500 });
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
