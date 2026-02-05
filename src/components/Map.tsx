@@ -206,11 +206,13 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                             setTimeout(() => {
                                 // Cerrar popups anteriores al llegar
                                 markersRef.current.forEach(marker => {
-                                    if (marker.getPopup()) marker.getPopup().remove();
+                                    const popup = marker.getPopup();
+                                    if (popup) popup.remove();
                                 });
                                 const marker = markersRef.current[nextWaypoint.markerIndex];
-                                if (marker && marker.getPopup()) {
-                                    marker.getPopup().addTo(map.current);
+                                if (marker) {
+                                    const popup = marker.getPopup();
+                                    if (popup) popup.addTo(map.current);
                                 }
                                 isOrbiting = true;
                                 orbitStartTime = Date.now();
@@ -233,11 +235,13 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                             
                             setTimeout(() => {
                                 markersRef.current.forEach(marker => {
-                                    if (marker.getPopup()) marker.getPopup().remove();
+                                    const popup = marker.getPopup();
+                                    if (popup) popup.remove();
                                 });
                                 const marker = markersRef.current[waypoint.markerIndex];
-                                if (marker && marker.getPopup()) {
-                                    marker.getPopup().addTo(map.current);
+                                if (marker) {
+                                    const popup = marker.getPopup();
+                                    if (popup) popup.addTo(map.current);
                                 }
                                 isOrbiting = true;
                                 orbitStartTime = Date.now();
