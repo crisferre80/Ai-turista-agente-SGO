@@ -140,52 +140,132 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                 } catch {}
 
-                // Animación 3D suave y constante
+                // Animación de dron: tour por marcadores con órbita
                 let animationId: number | null = null;
                 let inactivityTimer: NodeJS.Timeout | null = null;
                 let isAnimating = false;
                 let startTime = Date.now();
-                const animationDuration = 60000; // 60 segundos por ciclo completo
-                const inactivityDelay = 5000; // 5 segundos de inactividad antes de reanudar
+                let pausedElapsed = 0;
+                const tourDuration = 10000; // 10 segundos por marcador
+                const orbitDuration = 8000; // 8 segundos de órbita
+                const inactivityDelay = 10000;
                 
-                const animate3D = () => {
-                    if (!map.current || !isAnimating) return;
+                // Crear waypoints de attractions
+                const waypoints = attractions.map(attr => ({
+                    center: attr.coords as [number, number],
+                    zoom: 16,
+                    name: attr.name,
+                    markerIndex: attractions.indexOf(attr)
+                }));
+                
+                let currentWaypointIndex = 0;
+                let isTransitioning = false;
+                let isOrbiting = false;
+                let orbitStartTime = 0;
+                
+                const animateTour = () => {
+                    if (!map.current || !isAnimating || waypoints.length === 0) return;
                     
-                    const elapsed = Date.now() - startTime;
-                    const progress = (elapsed % animationDuration) / animationDuration;
+                    const currentTime = Date.now();
                     
-                    // Rotación suave de 0 a 360 grados
-                    const bearing = progress * 360;
+                    if (isTransitioning) {
+                        // Esperando a llegar al waypoint
+                        animationId = requestAnimationFrame(animateTour);
+                        return;
+                    }
                     
-                    // Pitch oscilante entre 5 y 35 grados (usa seno para movimiento suave)
-                    const pitch = 20 + Math.sin(progress * Math.PI * 2) * 15;
+                    if (isOrbiting) {
+                        // Órbita circular alrededor del marcador
+                        const orbitElapsed = currentTime - orbitStartTime;
+                        const bearing = (orbitElapsed * 0.010) % 360; // Velocidad de rotación muy suave
+                        
+                        // Pitch incremental de 60º a 80º durante la órbita
+                        const pitchProgress = Math.min(orbitElapsed / orbitDuration, 1);
+                        const pitch = 60 + (pitchProgress * 20); // De 60 a 80 grados
+                        
+                        map.current.setBearing(bearing);
+                        map.current.setPitch(pitch);
+                        
+                        // Terminar órbita después de orbitDuration
+                        if (orbitElapsed >= orbitDuration) {
+                            isOrbiting = false;
+                            // No cerrar popup aquí, mantenerlo hasta el siguiente vuelo
+                            currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.length;
+                            // Iniciar vuelo inmediato al siguiente
+                            const nextWaypoint = waypoints[currentWaypointIndex];
+                            isTransitioning = true;
+                            
+                            map.current.flyTo({
+                                center: nextWaypoint.center,
+                                zoom: nextWaypoint.zoom,
+                                pitch: 45,
+                                bearing: 0,
+                                duration: 3000
+                            });
+                            
+                            setTimeout(() => {
+                                // Cerrar popups anteriores al llegar
+                                markersRef.current.forEach(marker => {
+                                    if (marker.getPopup()) marker.getPopup().remove();
+                                });
+                                const marker = markersRef.current[nextWaypoint.markerIndex];
+                                if (marker && marker.getPopup()) {
+                                    marker.getPopup().addTo(map.current);
+                                }
+                                isOrbiting = true;
+                                orbitStartTime = Date.now();
+                                isTransitioning = false;
+                            }, 3000);
+                        }
+                    } else {
+                        // Si no está orbitando ni transitando, iniciar órbita en el marcador actual
+                        if (!isTransitioning && waypoints.length > 0) {
+                            const waypoint = waypoints[currentWaypointIndex];
+                            isTransitioning = true;
+                            
+                            map.current.flyTo({
+                                center: waypoint.center,
+                                zoom: waypoint.zoom,
+                                pitch: 45,
+                                bearing: 0,
+                                duration: 3000
+                            });
+                            
+                            setTimeout(() => {
+                                markersRef.current.forEach(marker => {
+                                    if (marker.getPopup()) marker.getPopup().remove();
+                                });
+                                const marker = markersRef.current[waypoint.markerIndex];
+                                if (marker && marker.getPopup()) {
+                                    marker.getPopup().addTo(map.current);
+                                }
+                                isOrbiting = true;
+                                orbitStartTime = Date.now();
+                                isTransitioning = false;
+                            }, 3000);
+                        }
+                    }
                     
-                    // Zoom sutil que oscila
-                    const zoomOffset = Math.sin(progress * Math.PI * 4) * 0.3;
-                    
-                    map.current.setBearing(bearing);
-                    map.current.setPitch(pitch);
-                    map.current.setZoom(zoom + zoomOffset);
-                    
-                    animationId = requestAnimationFrame(animate3D);
+                    animationId = requestAnimationFrame(animateTour);
                 };
                 
                 const startAnimation = () => {
                     if (isAnimating) return;
                     isAnimating = true;
-                    startTime = Date.now(); // Reset timer para animación suave
-                    console.log('🎬 Iniciando animación del mapa');
-                    animate3D();
+                    console.log('🎬 Iniciando tour de dron con órbitas');
+                    animateTour();
                 };
                 
                 const stopAnimation = () => {
                     if (!isAnimating) return;
                     isAnimating = false;
+                    pausedElapsed += Date.now() - startTime;
+                    isOrbiting = false;
                     if (animationId !== null) {
                         cancelAnimationFrame(animationId);
                         animationId = null;
                     }
-                    console.log('⏸️ Animación del mapa detenida');
+                    console.log('⏸️ Tour de dron detenido');
                 };
                 
                 const resetInactivityTimer = () => {
@@ -203,19 +283,17 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }, inactivityDelay);
                 };
                 
-                // Detectar interacciones del usuario
+                // Detectar interacciones del usuario que detienen la animación temporalmente
                 const interactionEvents = [
-                    'mousedown', 'touchstart',  // Inicio de interacción
-                    'wheel',                     // Zoom con rueda
-                    'dragstart', 'drag',        // Arrastre
-                    'zoomstart', 'zoom'         // Zoom
+                    'click', 'touchstart',  // Interacción principal
+                    'wheel'                 // Zoom con rueda (manual)
                 ];
                 
                 interactionEvents.forEach(event => {
                     m.on(event as any, resetInactivityTimer);
                 });
                 
-                // Iniciar animación después de 2 segundos
+                // Iniciar animación automáticamente después de 2 segundos
                 setTimeout(() => {
                     if (map.current) {
                         startAnimation();

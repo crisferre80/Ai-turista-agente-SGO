@@ -476,8 +476,10 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             }
             // Si hay placeId y NO es isRouteOnly, isThinking se apagará con narration:start
 
-            // Speak the response
-            playAudioResponse(botReply);
+            // Speak the response (except for route queries, which are narrated by the map)
+            if (!isRouteOnly) {
+                playAudioResponse(botReply);
+            }
             
             // Solo navegar a detail page si hay placeId Y NO es consulta de ruta
             if (placeId && !isRouteOnly && typeof window !== 'undefined') {
