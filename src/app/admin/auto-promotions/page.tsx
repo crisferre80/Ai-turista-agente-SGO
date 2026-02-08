@@ -572,10 +572,10 @@ function AutoPromotionForm({
             >
               Guardar Promoción
             </button>
-            {editing && (
+            {promotion && (
               <button
                 type="button"
-                onClick={() => testEmail(editing)}
+                onClick={() => testEmail(formData)}
                 style={{ 
                   padding: '12px 24px', 
                   background: '#28a745', 
