@@ -374,6 +374,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             }
 
             // Narrar instrucciones de ruta - esta es la ÚNICA narración que debe ocurrir
+            console.log('🗺️ Map: Narrating route details for', destName);
             onNarrateRef.current?.(`¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`, { source: 'map-route', force: true });
 
             const geojson: GeoJSON.Feature<GeoJSON.LineString> = {

@@ -124,6 +124,26 @@ export default function AutoPromotionsPage() {
     }
   };
 
+  const testEmail = async (promotion: AutoPromotion) => {
+    const testEmail = prompt('Ingresa el email de prueba:');
+    if (!testEmail) return;
+
+    try {
+      const res = await fetch('/api/admin/auto-promotions/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promotion, testEmail })
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      
+      alert('Email de prueba enviado correctamente');
+    } catch (e) {
+      console.error(e);
+      alert(`Error enviando email de prueba: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+    }
+  };
+
   const getFrequencyText = (promotion: AutoPromotion) => {
     switch (promotion.frequency_type) {
       case 'hourly':
@@ -552,6 +572,23 @@ function AutoPromotionForm({
             >
               Guardar Promoción
             </button>
+            {editing && (
+              <button
+                type="button"
+                onClick={() => testEmail(editing)}
+                style={{ 
+                  padding: '12px 24px', 
+                  background: '#28a745', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Enviar Email de Prueba
+              </button>
+            )}
           </div>
         </form>
       </div>

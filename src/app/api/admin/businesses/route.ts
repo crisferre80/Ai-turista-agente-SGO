@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function GET() {
-  try {
-    // Lista de negocios predeterminados para el sistema de promociones
-    const businesses = [
-      { id: '1', name: 'Restaurante El Buen Sabor', category: 'Gastronomía' },
-      { id: '2', name: 'Hotel Plaza Santiago', category: 'Hospedaje' },
-      { id: '3', name: 'Café Central', category: 'Cafetería' },
-      { id: '4', name: 'Parrilla La Tradición', category: 'Parrilla' },
-      { id: '5', name: 'Hotel Colonial', category: 'Hospedaje' },
-      { id: '6', name: 'Museo de Arte Popular', category: 'Cultura' },
-      { id: '7', name: 'Complejo Termal', category: 'Turismo' },
-      { id: '8', name: 'Centro Comercial', category: 'Compras' },
-      { id: '9', name: 'Agencia de Turismo', category: 'Servicios' },
-      { id: '10', name: 'Casa de Empanadas', category: 'Gastronomía' }
-    ];
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
-    return NextResponse.json({ businesses });
+  try {
+    const { data: businesses, error } = await supabase
+      .from('business_profiles')
+      .select('id, name, category')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching businesses:', error);
+      return NextResponse.json({ error: 'Error al cargar negocios' }, { status: 500 });
+    }
+
+    return NextResponse.json({ businesses: businesses || [] });
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });

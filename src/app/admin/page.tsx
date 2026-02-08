@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
+import EmailManagement from '@/components/EmailManagement';
 import { takePhoto } from '@/lib/photoService';
 import EmailManager from '@/email/EmailManager';
 
@@ -439,10 +440,10 @@ export default function AdminDashboard() {
 
             let error;
             if (newBusiness.id) {
-                const { error: updErr } = await supabase.from('businesses').update(bizData).eq('id', newBusiness.id);
+                const { error: updErr } = await supabase.from('business_profiles').update(bizData).eq('id', newBusiness.id);
                 error = updErr;
             } else {
-                const { error: insErr } = await supabase.from('businesses').insert([bizData]);
+                const { error: insErr } = await supabase.from('business_profiles').insert([bizData]);
                 error = insErr;
             }
 
@@ -1374,7 +1375,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
                                         <button onClick={() => setNewBusiness({ id: b.id || '', name: b.name, category: b.category, contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 })} style={btnAction}>✏️</button>
-                                        <button onClick={async () => { if (confirm('Borrar?')) { await supabase.from('businesses').delete().eq('id', b.id); fetchData(); } }} style={btnAction}>🗑️</button>
+                                        <button onClick={async () => { if (confirm('Borrar?')) { await supabase.from('business_profiles').delete().eq('id', b.id); fetchData(); } }} style={btnAction}>🗑️</button>
                                     </div>
                                 </div>
                             ))}
@@ -1405,8 +1406,145 @@ export default function AdminDashboard() {
                 {/* Tab: EMAILS */}
                 {activeTab === 'emails' && (
                     <div style={cardStyle}>
-                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>📧 Gestión de Emails</h3>
-                        <EmailManager />
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>
+                            📧 Sistema de Notificaciones por Email
+                        </h3>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px', marginBottom: '30px' }}>
+                            <div 
+                                style={{ 
+                                    background: 'white',
+                                    padding: '30px',
+                                    borderRadius: '20px',
+                                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+                                    border: `3px solid ${COLOR_GOLD}`,
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    transition: 'transform 0.3s, box-shadow 0.3s',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                                onClick={() => router.push('/admin/email-templates')}
+                                onMouseEnter={e => {
+                                    e.currentTarget.style.transform = 'translateY(-5px)';
+                                    e.currentTarget.style.boxShadow = `0 15px 50px rgba(0,0,0,0.15)`;
+                                }}
+                                onMouseLeave={e => {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 10px 40px rgba(0,0,0,0.1)';
+                                }}
+                            >
+                                <div style={{ fontSize: '48px', marginBottom: '15px' }}>📝</div>
+                                <h4 style={{ color: COLOR_BLUE, marginBottom: '15px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                    Plantillas de Email
+                                </h4>
+                                <p style={{ color: '#64748b', margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+                                    Crear, editar y gestionar plantillas con vista previa en tiempo real
+                                </p>
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: '15px',
+                                    right: '15px',
+                                    width: '30px',
+                                    height: '30px',
+                                    borderRadius: '50%',
+                                    background: COLOR_GOLD,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '16px'
+                                }}>→</div>
+                            </div>
+                            
+                            <div 
+                                style={{ 
+                                    background: 'white',
+                                    padding: '30px',
+                                    borderRadius: '20px',
+                                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+                                    border: `3px solid ${COLOR_BLUE}44`,
+                                    cursor: 'pointer',
+                                    textAlign: 'center',
+                                    transition: 'transform 0.3s, box-shadow 0.3s',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                                onClick={() => router.push('/admin/email')}
+                                onMouseEnter={e => {
+                                    e.currentTarget.style.transform = 'translateY(-5px)';
+                                    e.currentTarget.style.boxShadow = `0 15px 50px rgba(0,0,0,0.15)`;
+                                }}
+                                onMouseLeave={e => {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 10px 40px rgba(0,0,0,0.1)';
+                                }}
+                            >
+                                <div style={{ fontSize: '48px', marginBottom: '15px' }}>📧</div>
+                                <h4 style={{ color: COLOR_BLUE, marginBottom: '15px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                    Gestión de Emails
+                                </h4>
+                                <p style={{ color: '#64748b', margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+                                    Enviar emails masivos y gestionar listas de contactos
+                                </p>
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: '15px',
+                                    right: '15px',
+                                    width: '30px',
+                                    height: '30px',
+                                    borderRadius: '50%',
+                                    background: COLOR_BLUE,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '16px',
+                                    color: 'white'
+                                }}>→</div>
+                            </div>
+                            
+                            <div 
+                                style={{ 
+                                    background: 'linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%)',
+                                    padding: '30px',
+                                    borderRadius: '20px',
+                                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+                                    border: `3px solid #818cf8`,
+                                    textAlign: 'center',
+                                    gridColumn: 'span 2',
+                                    position: 'relative'
+                                }}
+                            >
+                                <div style={{ fontSize: '48px', marginBottom: '15px' }}>⚡</div>
+                                <h4 style={{ color: '#4338ca', marginBottom: '15px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                    Notificaciones Automáticas Activas
+                                </h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginTop: '20px' }}>
+                                    <div style={{ background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ fontSize: '24px', marginBottom: '5px' }}>👋</div>
+                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>BIENVENIDA</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b' }}>Nuevos usuarios</div>
+                                    </div>
+                                    <div style={{ background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ fontSize: '24px', marginBottom: '5px' }}>🏪</div>
+                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>REGISTRO</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b' }}>Nuevos negocios</div>
+                                    </div>
+                                    <div style={{ background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ fontSize: '24px', marginBottom: '5px' }}>💳</div>
+                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>PAGOS</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b' }}>Confirmaciones</div>
+                                    </div>
+                                    <div style={{ background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ fontSize: '24px', marginBottom: '5px' }}>✅</div>
+                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>APROBACIÓN</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b' }}>Negocios aprobados</div>
+                                    </div>
+                                </div>
+                                <p style={{ color: '#64748b', margin: '20px 0 0 0', fontSize: '13px', fontStyle: 'italic' }}>
+                                    Emails enviados automáticamente cuando ocurren estos eventos en la plataforma
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 )}
 

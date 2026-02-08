@@ -426,8 +426,8 @@ export async function POST(req: Request) {
             console.log('🗺️  ROUTE query detected:', lastMessage.content);
             console.log('Route query detected, extracting placeName but not setting placeId');
             
-            // Buscar el nombre del lugar en la respuesta de la IA
-            if (reply) {
+        // Buscar el nombre del lugar en la respuesta de la IA (para rutas y lugares mencionados)
+        if (reply) {
                 // Check attractions first
                 for (const attraction of (attractions || [])) {
                     const name = attraction.name as string;
@@ -451,7 +451,8 @@ export async function POST(req: Request) {
                     }
                 }
             }
-        } else if (reply && !isVideoRequest) {
+        }
+        else if (reply && !isVideoRequest) {
             // Solo buscar placeId si NO es consulta de ruta Y NO es solicitud de video
             // Check attractions first
             for (const attraction of (attractions || [])) {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendTemplateEmail } from '@/lib/gmail';
+import { sendTemplateEmail } from '@/lib/email';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -12,7 +12,7 @@ const getAdmin = () => {
 type TemplateRecord = { id?: string; name?: string; subject?: string; html?: string; [key: string]: unknown };
 type CampaignRecord = { id?: string; name?: string; template_id?: string; status?: string; external_id?: string | null; [key: string]: unknown };
 
-async function sendViaGmail(template: TemplateRecord, recipients: string[]): Promise<{ success: boolean; messageId?: string; error?: string; sentCount: number }> {
+async function sendViaMailjet(template: TemplateRecord, recipients: string[]): Promise<{ success: boolean; messageId?: string; error?: string; sentCount: number }> {
   let sentCount = 0;
   let lastMessageId: string | undefined;
   let lastError: string | undefined;
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await sendViaGmail(tplRec, recipients);
+      const result = await sendViaMailjet(tplRec, recipients);
       
       if (result.success) {
         await admin.from('email_campaigns').update({ 

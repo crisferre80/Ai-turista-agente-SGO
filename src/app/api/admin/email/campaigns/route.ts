@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendTemplateEmail } from '@/lib/gmail';
+import { sendTemplateEmail } from '@/lib/email';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
+import { sendBusinessRegistrationNotification } from '@/lib/email-notifications';
 
 interface BusinessPlan {
   id: string;
@@ -194,6 +195,20 @@ export default function BusinessRegisterPage() {
         .single();
 
       if (businessError) throw businessError;
+
+      // Enviar notificación al admin sobre el nuevo registro
+      try {
+        await sendBusinessRegistrationNotification({
+          name: businessData.name,
+          email: businessData.email,
+          category: businessData.category,
+          phone: businessData.phone
+        });
+        console.log('📧 Notificación de registro de negocio enviada al admin');
+      } catch (emailError) {
+        console.error('❌ Error al enviar notificación al admin:', emailError);
+        // No fallar el proceso por error en email
+      }
 
       // After sign-up, require email confirmation: set awaiting state and notify user (do not auto-redirect)
       setAwaitingConfirmation(true);

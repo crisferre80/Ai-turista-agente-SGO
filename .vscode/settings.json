@@ -1,0 +1,12 @@
+{
+  "supabase.projectRef": "gcoptrxyfjmekdtxuqns",
+  "supabase.projectUrl": "https://gcoptrxyfjmekdtxuqns.supabase.co",
+  "supabase.anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdjb3B0cnh5ZmptZWtkdHh1cW5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTY5NzYsImV4cCI6MjA4Mzk5Mjk3Nn0.F_u9criJLpB1AtspssguoEOPTajEMppvgzHQxZIgBrY",
+  "supabase.accessToken": "sbp_3198a2938f2f0ef62a521d9a4f926ccdb4e97639",
+  "supabase.enableAutocompletion": true,
+  "supabase.enableInlineDocumentation": true,
+  "supabase.workspaceFolder": "${workspaceFolder}",
+  "supabase.configPath": "${workspaceFolder}/supabase/config.toml",
+  "supabase.useLinkedProject": true,
+  "supabase.connectionMode": "remote"
+}

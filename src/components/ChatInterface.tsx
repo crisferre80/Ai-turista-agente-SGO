@@ -476,9 +476,14 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             }
             // Si hay placeId y NO es isRouteOnly, isThinking se apagará con narration:start
 
+            console.log('🎵 ChatInterface: Checking isRouteOnly flag:', isRouteOnly, 'botReply preview:', botReply.substring(0, 50));
+            
             // Speak the response (except for route queries, which are narrated by the map)
             if (!isRouteOnly) {
+                console.log('🎵 ChatInterface: Playing audio response (not route query)');
                 playAudioResponse(botReply);
+            } else {
+                console.log('🎵 ChatInterface: Skipping audio response (route query detected)');
             }
             
             // Solo navegar a detail page si hay placeId Y NO es consulta de ruta
@@ -1694,7 +1699,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 </div>
             )}
 
-            <style jsx>{`
+            <style dangerouslySetInnerHTML={{__html: `
                 @keyframes floatSanti {
                     0% { transform: translateY(0); }
                     50% { transform: translateY(-15px); }
@@ -1867,7 +1872,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         filter: drop-shadow(0 0 50px rgba(241, 196, 15, 1)) drop-shadow(0 0 80px rgba(241, 196, 15, 0.6));
                     }
                 }
-            `}</style>
+            `}} />
         </div>
     );
 };

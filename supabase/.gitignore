@@ -1,0 +1,15 @@
+# Local development
+.branches
+.temp
+.env.local
+.env.*.local
+
+# Local Supabase CLI files
+.supabase/
+
+# Logs
+logs
+*.log
+
+# Docker
+Dockerfile.dev

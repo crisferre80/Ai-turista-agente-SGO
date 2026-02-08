@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { sendWelcomeEmail } from '@/lib/email-notifications';
 
 export default function AuthCallback() {
     const router = useRouter();
@@ -48,6 +49,16 @@ export default function AuthCallback() {
                             console.error('❌ Error al crear perfil:', insertError);
                         } else {
                             console.log('✅ Perfil de turista creado exitosamente');
+                            
+                            // Enviar email de bienvenida
+                            try {
+                                const userName = userEmail?.split('@')[0] || 'Turista';
+                                await sendWelcomeEmail(userEmail!, userName);
+                                console.log('📧 Email de bienvenida enviado');
+                            } catch (emailError) {
+                                console.error('❌ Error al enviar email de bienvenida:', emailError);
+                                // No fallar el proceso por error en email
+                            }
                         }
                     } else {
                         console.log('✅ Perfil ya existente:', existingProfile);

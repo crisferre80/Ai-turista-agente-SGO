@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendTemplateEmail } from '@/lib/gmail';
+import { sendTemplateEmail } from '@/lib/email';
 
 const getAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const personalizedHtml = (welcomeTpl.html || '').replace(/{{\s*name\s*}}/gi, name || '');
     const personalizedSubject = (welcomeTpl.subject || '').replace(/{{\s*name\s*}}/gi, name || '');
 
-    // Send via Gmail API
+    // Send via Mailjet
     const result = await sendTemplateEmail(
       email,
       personalizedSubject || 'Bienvenido',
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     );
 
     if (!result.success) {
-      return NextResponse.json({ error: `Gmail error: ${result.error}` }, { status: 500 });
+      return NextResponse.json({ error: `Mailjet error: ${result.error}` }, { status: 500 });
     }
 
     // Upsert contact into email_contacts table for tracking

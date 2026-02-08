@@ -194,7 +194,7 @@ export default function BusinessProfilePage() {
       const newGalleryImages = [...(business.gallery_images || []), ...uploadedUrls];
 
       const { error } = await supabase
-        .from('businesses')
+        .from('business_profiles')
         .update({ gallery_images: newGalleryImages })
         .eq('id', business.id);
 

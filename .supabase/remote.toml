@@ -1,0 +1,18 @@
+# Configuration for remote Supabase project
+# This file connects your local development with the remote Supabase instance
+
+[project]
+name = "tourist-assistant"
+id = "gcoptrxyfjmekdtxuqns"
+url = "https://gcoptrxyfjmekdtxuqns.supabase.co"
+anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdjb3B0cnh5ZmptZWtkdHh1cW5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTY5NzYsImV4cCI6MjA4Mzk5Mjk3Nn0.F_u9criJLpB1AtspssguoEOPTajEMppvgzHQxZIgBrY"
+
+[database]
+host = "db.gcoptrxyfjmekdtxuqns.supabase.co"
+port = 5432
+name = "postgres"
+user = "postgres"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
