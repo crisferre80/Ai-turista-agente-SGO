@@ -308,6 +308,7 @@ export default function AutoPromotionsPage() {
         businesses={businesses}
         onSave={saveAutoPromotion} 
         onCancel={() => { setShowForm(false); setEditing(null); }} 
+        onTestEmail={testEmail}
       />}
     </div>
   );
@@ -317,12 +318,14 @@ function AutoPromotionForm({
   promotion, 
   businesses, 
   onSave, 
-  onCancel 
+  onCancel,
+  onTestEmail 
 }: { 
   promotion: AutoPromotion | null; 
   businesses: Business[];
   onSave: (p: AutoPromotion) => void; 
   onCancel: () => void; 
+  onTestEmail: (promotion: AutoPromotion) => void;
 }) {
   const [formData, setFormData] = useState<AutoPromotion>({
     business_id: '',
@@ -575,7 +578,7 @@ function AutoPromotionForm({
             {promotion && (
               <button
                 type="button"
-                onClick={() => testEmail(promotion)}
+                onClick={() => onTestEmail(formData)}
                 style={{ 
                   padding: '12px 24px', 
                   background: '#28a745', 
