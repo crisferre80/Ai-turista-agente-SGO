@@ -342,6 +342,11 @@ export default function Home() {
   };
 
   const handleNarration = (text: string, opts?: { source?: string, force?: boolean }) => {
+    // Prevenir doble narración de rutas - el mapa ya narra directamente
+    if (opts?.source?.startsWith('map-route')) {
+      console.log('🔇 page.tsx: Skipping narration from map-route to prevent duplication');
+      return;
+    }
     santiSpeak(text, opts);
   };
   

@@ -121,7 +121,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 onLocationChangeRef.current?.(loc);
 
                 if (!hasGreetedRef.current) {
-                    onNarrateRef.current?.("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", { source: 'map-geolocate' });
+                    santiSpeak("¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", { source: 'map-geolocate' });
                     hasGreetedRef.current = true;
                 }
             });
@@ -373,9 +373,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 map.current.removeSource('route');
             }
 
-            // Narrar instrucciones de ruta - esta es la ÚNICA narración que debe ocurrir
+            // Narrar instrucciones de ruta directamente - evita doble narración
             console.log('🗺️ Map: Narrating route details for', destName);
-            onNarrateRef.current?.(`¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`, { source: 'map-route', force: true });
+            const routeMessage = `¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`;
+            santiSpeak(routeMessage, { source: 'map-route', force: true });
 
             const geojson: GeoJSON.Feature<GeoJSON.LineString> = {
                 type: 'Feature',
@@ -407,7 +408,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             console.log('Route drawn successfully');
         } catch (error) {
             console.error('Error drawing route:', error);
-            onNarrateRef.current?.("No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.", { source: 'map' });
+            santiSpeak("No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.", { source: 'map' });
         }
     }, []);
 
@@ -555,7 +556,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
         window.requestRoute = (destLng: number, destLat: number, destName: string) => {
             if (userLocation && map.current) drawRoute(userLocation, [destLng, destLat], destName);
-            else onNarrateRef.current?.("Necesito tu ubicación para guiarte.", { source: 'map' });
+            else santiSpeak("Necesito tu ubicación para guiarte.", { source: 'map' });
         };
 
         window.requestRecord = (id: string, name: string) => openRecorder(id, name);
@@ -563,7 +564,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         window.requestPlayStories = async (id: string, name: string) => {
             const { data } = await supabase.from('narrations').select('audio_url').eq('attraction_id', id).order('created_at', { ascending: false }).limit(1);
             if (data && data.length > 0) onStoryPlayRef.current?.(data[0].audio_url, name);
-            else onNarrateRef.current?.(`Aún no hay historias para ${name}.`, { source: 'map' });
+            else santiSpeak(`Aún no hay historias para ${name}.`, { source: 'map' });
         };
 
 
@@ -609,7 +610,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 } else {
                     console.log('7. No user location, setting pending destination');
                     setPendingDestination({ coords: found.coords as [number, number], name: found.name });
-                    onNarrateRef.current?.("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.", { source: 'map' });
+                    santiSpeak("Para mostrarte la ruta, necesito tu ubicación. Toca el botón azul de la brújula en la esquina superior derecha del mapa.", { source: 'map' });
                 }
 
                 // NO abrir el popup automáticamente cuando es consulta de ruta
