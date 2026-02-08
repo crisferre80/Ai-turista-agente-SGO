@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import StoryRecorder from './StoryRecorder';
 import { supabase } from '@/lib/supabase';
+import { santiSpeak } from '@/lib/speech';
 
 declare global {
     interface Window {
