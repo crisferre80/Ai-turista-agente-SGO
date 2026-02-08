@@ -575,7 +575,7 @@ function AutoPromotionForm({
             {promotion && (
               <button
                 type="button"
-                onClick={() => testEmail(formData)}
+                onClick={() => testEmail(promotion)}
                 style={{ 
                   padding: '12px 24px', 
                   background: '#28a745', 
