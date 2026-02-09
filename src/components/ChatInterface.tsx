@@ -478,13 +478,10 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
             console.log('🎵 ChatInterface: Checking isRouteOnly flag:', isRouteOnly, 'botReply preview:', botReply.substring(0, 50));
             
-            // Speak the response (except for route queries, which are narrated by the map)
-            if (!isRouteOnly) {
-                console.log('🎵 ChatInterface: Playing audio response (not route query)');
-                playAudioResponse(botReply);
-            } else {
-                console.log('🎵 ChatInterface: Skipping audio response (route query detected)');
-            }
+            // Siempre reproducir la respuesta del asistente, incluso para consultas de ruta
+            // El mapa agregará después las instrucciones detalladas mediante eventos
+            console.log('🎵 ChatInterface: Playing audio response for:', isRouteOnly ? 'route query' : 'normal query');
+            playAudioResponse(botReply);
             
             // Solo navegar a detail page si hay placeId Y NO es consulta de ruta
             if (placeId && !isRouteOnly && typeof window !== 'undefined') {
@@ -625,7 +622,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             },
             // Audio control commands
             {
-                keywords: ['silencio', 'cállate', 'para', 'detener', 'basta', 'stop'],
+                keywords: ['silencio', 'cállate', 'detener', 'basta', 'stop'],
                 action: () => {
                     // Stop current narration
                     if (audioRef.current && !audioRef.current.paused) {

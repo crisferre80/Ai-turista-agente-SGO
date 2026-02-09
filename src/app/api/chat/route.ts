@@ -166,14 +166,42 @@ export async function POST(req: Request) {
         }
 
         // 1. Fetch Local Data for Context
-        const { data: attractions } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng');
-        const { data: businesses } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng');
+        console.log('🔍 Fetching data from Supabase...');
+        const { data: attractions, error: attractionsError } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng');
+        const { data: businesses, error: businessesError } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng');
         const { data: videos } = await supabase.from('app_videos').select('id, title, video_url');
+
+        // Debug logging
+        console.log('📊 Attractions fetched:', {
+            count: attractions?.length || 0,
+            error: attractionsError,
+            sample: attractions?.slice(0, 2)
+        });
+        console.log('🏢 Businesses fetched:', {
+            count: businesses?.length || 0,
+            error: businessesError,
+            sample: businesses?.slice(0, 2)
+        });
+
+        // Format data in a more readable way for the AI
+        const formatAttractions = (attractions || []).map((a: any) => 
+            `- ${a.name} (${a.category}): ${a.description || 'Atractivo turístico'}${a.info_extra ? ` - ${a.info_extra}` : ''}`
+        ).join('\n');
+        
+        const formatBusinesses = (businesses || []).map((b: any) => 
+            `- ${b.name} (${b.category})${b.contact_info ? `: ${b.contact_info}` : ''}${b.website_url ? ` - Web: ${b.website_url}` : ''}`
+        ).join('\n');
 
         const localContext = `
         INFORMACIÓN LOCAL REGISTRADA (PRIORIDAD ALTA):
-        Atractivos: ${JSON.stringify(attractions || [])}
-        Negocios/Servicios: ${JSON.stringify(businesses || [])}
+        
+        ATRACTIVOS TURÍSTICOS:
+        ${formatAttractions || 'No hay atractivos registrados'}
+        
+        NEGOCIOS Y SERVICIOS:
+        ${formatBusinesses || 'No hay negocios registrados'}
+        
+        IMPORTANTE: Cuando recomiendes cualquiera de estos lugares, usa el nombre EXACTO como aparece arriba.
         `;
 
         // Construir información del usuario si está autenticado
@@ -211,10 +239,12 @@ export async function POST(req: Request) {
     
     INSTRUCCIONES CRÍTICAS:
     1. PRIORIDAD DE DATOS: Antes de usar tu conocimiento general, REVISA SIEMPRE la "INFORMACIÓN LOCAL REGISTRADA" provista arriba.
-    2. Si el usuario pregunta por un lugar para comer, dormir o visitar, y ese lugar ESTÁ en la lista local, RECOMIÉNDALO PRIMERO mencionando que es un usuario registrado de la app.
-    3. Si NO encuentras algo en la lista local, usa tu conocimiento de la web pero aclara: "Estoy consultando mi base de datos global...".
-    4. Siempre fomenta el turismo local y sé muy amable.
-    5. Cuando recomiendes un lugar específico de la "INFORMACIÓN LOCAL REGISTRADA", asegúrate de escribir su nombre EXACTAMENTE como figura en la lista para que el sistema pueda encontrarlo y mostrar su ubicación o ruta en el mapa automáticamente.
+    2. LUGARES PARA MATES, RELAX, NATURALEZA: Cuando pregunten dónde tomar mates, relajarse, disfrutar la naturaleza, etc., recomienda SOLO los ATRACTIVOS TURÍSTICOS (plazas, parques, reservas ecológicas, espacios naturales) - NUNCA negocios para estas actividades.
+    3. Si el usuario pregunta por servicios comerciales (comer, dormir, comprar), ahí sí recomienda tanto atractivos como negocios según corresponda.
+    4. Si encuentras lugares en la lista local que coincidan con la consulta, RECOMIÉNDALOS PRIMERO mencionando que son lugares registrados en la app.
+    5. Si NO encuentras algo en la lista local, usa tu conocimiento de la web pero aclara: "Estoy consultando mi base de datos global...".
+    6. Siempre fomenta el turismo local y sé muy amable.
+    7. Cuando recomiendes un lugar específico de la "INFORMACIÓN LOCAL REGISTRADA", asegúrate de escribir su nombre EXACTAMENTE como figura en la lista para que el sistema pueda encontrarlo y mostrar su ubicación o ruta en el mapa automáticamente.
     6. CRÍTICO - CONSULTAS DE RUTA: Cuando el usuario pregunte "cómo llegar", "direcciones", "cómo voy" a un lugar:
        - Menciona el nombre EXACTO del lugar en tu respuesta una sola vez
        - Di algo breve como: "¡Dale! Te muestro la ruta a [NOMBRE DEL LUGAR] en el mapa."
