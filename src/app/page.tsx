@@ -222,8 +222,37 @@ export default function Home() {
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
+  // Función para guardar ubicación en localStorage
+  const saveUserLocation = (location: { latitude: number; longitude: number }) => {
+    try {
+      localStorage.setItem('userLocation', JSON.stringify(location));
+      console.log('📍 Ubicación guardada:', location);
+    } catch (e) {
+      console.warn('Error guardando ubicación:', e);
+    }
+  };
+
+  // Función para recuperar ubicación de localStorage
+  const loadUserLocation = () => {
+    try {
+      const saved = localStorage.getItem('userLocation');
+      if (saved) {
+        const location = JSON.parse(saved);
+        setUserLocation(location);
+        console.log('📍 Ubicación recuperada:', location);
+        return location;
+      }
+    } catch (e) {
+      console.warn('Error cargando ubicación:', e);
+    }
+    return null;
+  };
+
   useEffect(() => {
     fetchData();
+
+    // Recuperar ubicación guardada
+    loadUserLocation();
 
     // Check intro
     const introSeen = sessionStorage.getItem(INTRO_KEY);
@@ -681,7 +710,12 @@ export default function Home() {
               onNarrate={handleNarration}
               onStoryPlay={(url, name) => setActiveStory({ url, name })}
               onPlaceFocus={setActivePlace}
-              onLocationChange={(coords) => setUserLocation({ latitude: coords[1], longitude: coords[0] })}
+              userLocation={userLocation}
+              onLocationChange={(coords) => {
+                const location = { latitude: coords[1], longitude: coords[0] };
+                setUserLocation(location);
+                saveUserLocation(location);
+              }}
             />
           )}
           {/* Panel lateral EXPLORA mejorado */}
@@ -968,6 +1002,10 @@ export default function Home() {
           externalStory={activeStory}
           isModalOpen={!!activePlace}
           userLocation={userLocation}
+          onLocationUpdate={(loc) => {
+            setUserLocation(loc);
+            if (loc) saveUserLocation(loc);
+          }}
         />
 
         {/* Place Detail Card - Responsive: Sidebar (Desktop) / Slide-up Panel (Mobile) */}

@@ -37,12 +37,27 @@ interface MapProps {
     onStoryPlay?: (url: string, name: string) => void;
     onPlaceFocus?: (place: Attraction) => void;
     onLocationChange?: (coords: [number, number]) => void;
+    userLocation?: { latitude: number; longitude: number } | null;
 }
 
-const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange }: MapProps) => {
+const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange, userLocation: parentUserLocation }: MapProps) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
-    const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+    // Inicializar ubicación local con la del parent si existe
+    const [userLocation, setUserLocation] = useState<[number, number] | null>(
+        parentUserLocation ? [parentUserLocation.longitude, parentUserLocation.latitude] : null
+    );
+    
+    // Actualizar ubicación local cuando cambia la del parent
+    useEffect(() => {
+        if (parentUserLocation && (!userLocation || 
+            userLocation[0] !== parentUserLocation.longitude || 
+            userLocation[1] !== parentUserLocation.latitude)) {
+            const loc: [number, number] = [parentUserLocation.longitude, parentUserLocation.latitude];
+            setUserLocation(loc);
+            console.log('📍 Map: Ubicación actualizada desde parent:', loc);
+        }
+    }, [parentUserLocation, userLocation]);
     const [isMapReady, setIsMapReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
@@ -114,13 +129,14 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             const hasGreetedRef = { current: false };
             geolocate.on('geolocate', (e: GeolocationPosition) => {
                 const loc: [number, number] = [e.coords.longitude, e.coords.latitude];
-                console.log('User location set:', loc);
+                console.log('📍 Map: Nueva ubicación obtenida:', loc);
                 setUserLocation(loc);
                 
                 // Emit location to parent component
                 onLocationChangeRef.current?.(loc);
 
-                if (!hasGreetedRef.current) {
+                if (!hasGreetedRef.current && !parentUserLocation) {
+                    // Solo saludar si es la primera vez y no ya teníamos ubicación
                     // Enviar evento para que ChatInterface narre
                     if (typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('santi:narrate', {
@@ -441,7 +457,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     // Effect to draw pending route when user location becomes available
     useEffect(() => {
         if (userLocation && pendingDestination && map.current) {
-            console.log('Drawing pending route to:', pendingDestination.name);
+            console.log('🗺️ Map: Procesando destino pendiente:', pendingDestination.name);
+            console.log('🗺️ Map: Con ubicación:', userLocation);
             drawRoute(userLocation, pendingDestination.coords, pendingDestination.name);
             setPendingDestination(null);
         }
