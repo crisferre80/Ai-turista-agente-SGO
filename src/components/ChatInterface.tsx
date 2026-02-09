@@ -318,50 +318,6 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         }
     }, [cleanTextForSpeech]);
 
-    // Auto-promotion system
-    useEffect(() => {
-        const checkAutoPromotions = async () => {
-            if (isSpeaking || isListening || isLoading || isThinking || showHistory) {
-                return;
-            }
-
-            // Verificar si han pasado al menos 30 segundos desde la última interacción
-            const timeSinceLastInteraction = Date.now() - lastInteractionRef.current;
-            if (timeSinceLastInteraction < 30000) { // 30 segundos
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/auto-promotion');
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.shouldShow && data.promotion) {
-                        console.log('🤖 Santi: Mostrando promoción automática:', data.promotion.title);
-                        
-                        // Agregar mensaje como asistente
-                        setMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: `🎯 **${data.promotion.business_name}**: ${data.promotion.message}`
-                        }]);
-
-                        // Reproducir audio
-                        playAudioResponse(data.promotion.message, true);
-                        
-                        // Actualizar tiempo de interacción para evitar spam
-                        updateInteractionTime();
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error checking auto-promotions:', error);
-            }
-        };
-
-        // Verificar promociones automáticas cada 2 minutos
-        const autoPromotionInterval = setInterval(checkAutoPromotions, 120000); // 2 minutos
-
-        return () => clearInterval(autoPromotionInterval);
-    }, [isSpeaking, isListening, isLoading, isThinking, showHistory, playAudioResponse]);
-
     const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);

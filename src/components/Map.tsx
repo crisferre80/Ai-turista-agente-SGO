@@ -59,6 +59,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         }
     }, [parentUserLocation, userLocation]);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [isMapReady, setIsMapReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
