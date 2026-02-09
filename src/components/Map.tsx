@@ -12,6 +12,7 @@ declare global {
         requestRecord?: (id: string, name: string) => void;
         requestPlayStories?: (id: string, name: string) => Promise<void>;
         focusPlaceOnMap?: (place: string) => void;
+        stopMapAnimation?: () => void;
     }
 }
 
@@ -43,6 +44,12 @@ interface MapProps {
 const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange, userLocation: parentUserLocation }: MapProps) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
+    // Refs para controlar animaciones desde funciones globales
+    const isAnimatingRef = useRef(false);
+    const animationIdRef = useRef<number | null>(null);
+    const startTimeRef = useRef(Date.now());
+    const pausedElapsedRef = useRef(0);
+    const isOrbitingRef = useRef(false);
     // Inicializar ubicación local con la del parent si existe
     const [userLocation, setUserLocation] = useState<[number, number] | null>(
         parentUserLocation ? [parentUserLocation.longitude, parentUserLocation.latitude] : null
@@ -62,6 +69,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const [isMapReady, setIsMapReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
+    const [activeRoute, setActiveRoute] = useState<{ start: [number, number], end: [number, number], name: string } | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
 
     // Refs para callbacks para evitar re-renders por cambios en props
@@ -168,7 +176,6 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 // Animación de dron: tour por marcadores con órbita
                 let animationId: number | null = null;
                 let inactivityTimer: NodeJS.Timeout | null = null;
-                let isAnimating = false;
                 let startTime = Date.now();
                 let pausedElapsed = 0;
                 const tourDuration = 10000; // 10 segundos por marcador
@@ -185,11 +192,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 
                 let currentWaypointIndex = 0;
                 let isTransitioning = false;
-                let isOrbiting = false;
                 let orbitStartTime = 0;
                 
                 const animateTour = () => {
-                    if (!map.current || !isAnimating || waypoints.length === 0) return;
+                    if (!map.current || !isAnimatingRef.current || waypoints.length === 0) return;
                     
                     const currentTime = Date.now();
                     
@@ -199,7 +205,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         return;
                     }
                     
-                    if (isOrbiting) {
+                    if (isOrbitingRef.current) {
                         // Órbita circular alrededor del marcador
                         const orbitElapsed = currentTime - orbitStartTime;
                         const bearing = (orbitElapsed * 0.010) % 360; // Velocidad de rotación muy suave
@@ -213,7 +219,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         
                         // Terminar órbita después de orbitDuration
                         if (orbitElapsed >= orbitDuration) {
-                            isOrbiting = false;
+                            isOrbitingRef.current = false;
                             // No cerrar popup aquí, mantenerlo hasta el siguiente vuelo
                             currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.length;
                             // Iniciar vuelo inmediato al siguiente
@@ -239,7 +245,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                                     const popup = marker.getPopup();
                                     if (popup && map.current) popup.addTo(map.current);
                                 }
-                                isOrbiting = true;
+                                isOrbitingRef.current = true;
                                 orbitStartTime = Date.now();
                                 isTransitioning = false;
                             }, 3000);
@@ -268,7 +274,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                                     const popup = marker.getPopup();
                                     if (popup && map.current) popup.addTo(map.current);
                                 }
-                                isOrbiting = true;
+                                isOrbitingRef.current = true;
                                 orbitStartTime = Date.now();
                                 isTransitioning = false;
                             }, 3000);
@@ -279,17 +285,17 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 };
                 
                 const startAnimation = () => {
-                    if (isAnimating) return;
-                    isAnimating = true;
+                    if (isAnimatingRef.current) return;
+                    isAnimatingRef.current = true;
                     console.log('🎬 Iniciando tour de dron con órbitas');
                     animateTour();
                 };
                 
                 const stopAnimation = () => {
-                    if (!isAnimating) return;
-                    isAnimating = false;
+                    if (!isAnimatingRef.current) return;
+                    isAnimatingRef.current = false;
                     pausedElapsed += Date.now() - startTime;
-                    isOrbiting = false;
+                    isOrbitingRef.current = false;
                     if (animationId !== null) {
                         cancelAnimationFrame(animationId);
                         animationId = null;
@@ -372,6 +378,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const drawRoute = useCallback(async (start: [number, number], end: [number, number], destName: string) => {
         if (!map.current) return;
         console.log('Drawing route from', start, 'to', end, 'for', destName);
+        
+        // Guardar información de la ruta activa para Google Maps
+        setActiveRoute({ start, end, name: destName });
+        
         try {
             const query = await fetch(
                 `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&language=es&access_token=${mapboxgl.accessToken}`,
@@ -397,6 +407,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             if (map.current.getSource('route')) {
                 map.current.removeSource('route');
             }
+            
+            // Limpiar ruta activa anterior
+            setActiveRoute(null);
 
             // Narrar instrucciones de ruta a través de evento - ChatInterface lo manejará
             console.log('🗺️ Map: Dispatching route narration event for', destName);
@@ -435,11 +448,29 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             route.forEach((coord: [number, number]) => bounds.extend(coord));
             map.current.fitBounds(bounds, { 
                 padding: 120, 
-                duration: 2000,
-                pitch: 35, // Vista 3D para la ruta
-                bearing: 10, // Orientación ligera
-                easing: (t: number) => t * (2 - t) // Easing suave
+                duration: 1500, // Más rápido para rutas
+                pitch: 0, // Vista plana para mejor navegación
+                bearing: 0, // Sin rotación para vista clara
+                easing: (t: number) => t * (2 - t) // Easing suave pero rápido
             });
+            
+            // Activar la ruta después de que se complete la animación del mapa
+            setTimeout(() => {
+                setActiveRoute({ start, end, name: destName });
+            }, 1500);
+            
+            // Mostrar opción de Google Maps después de dibujar la ruta
+            setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('santi:narrate', {
+                        detail: { 
+                            text: `También podés abrir esta ruta en Google Maps para iniciar la navegación GPS.`, 
+                            source: 'map-route-google',
+                            force: false
+                        }
+                    }));
+                }
+            }, 2000); // Esperar a que termine la animación del mapa
             console.log('Route drawn successfully');
         } catch (error) {
             console.error('Error drawing route:', error);
@@ -465,33 +496,33 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         }
     }, [userLocation, pendingDestination, drawRoute]);
 
-    // Effect to prevent map focus during animations
+    // Effect to prevent map focus when chat input has focus
     useEffect(() => {
-        if (!isAnimating) return;
-
         const preventMapFocus = (e: FocusEvent) => {
-            if (e.target === mapContainer.current) {
+            const target = e.target as HTMLElement;
+            
+            // Never interfere with input or textarea elements
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            // Only act on map container or its canvas
+            if (target !== mapContainer.current && !mapContainer.current?.contains(target)) {
+                return;
+            }
+
+            // Prevent map from taking focus during animations
+            if (isAnimating) {
                 console.log('🗺️ Map: Removiendo foco del mapa durante animación');
-                (e.target as HTMLElement).blur();
+                target.blur();
                 e.preventDefault();
-                e.stopPropagation();
             }
         };
 
-        const preventMapKeyboard = (e: KeyboardEvent) => {
-            if (e.target === mapContainer.current) {
-                console.log('🗺️ Map: Previniendo navegación por teclado durante animación');
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-
-        document.addEventListener('focusin', preventMapFocus);
-        document.addEventListener('keydown', preventMapKeyboard);
+        document.addEventListener('focusin', preventMapFocus, true);
 
         return () => {
-            document.removeEventListener('focusin', preventMapFocus);
-            document.removeEventListener('keydown', preventMapKeyboard);
+            document.removeEventListener('focusin', preventMapFocus, true);
         };
     }, [isAnimating]);
 
@@ -664,6 +695,21 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
     window.focusPlaceOnMap = (placeName: string) => {
             console.log('=== focusPlaceOnMap DEBUG ===');
+            
+            // Don't focus map if chat input has focus (user is typing)
+            const chatInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+            if (chatInput && chatInput === document.activeElement) {
+                console.log('Map: Skipping focusPlaceOnMap because chat input has focus');
+                return;
+            }
+
+            // Additional check: don't focus if any input/textarea has focus
+            const activeElement = document.activeElement;
+            if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+                console.log('Map: Skipping focusPlaceOnMap because an input element has focus');
+                return;
+            }
+            
             console.log('1. Input placeName:', placeName);
             console.log('2. Total attractions available:', attractions.length);
             
@@ -688,6 +734,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 
                 // Marcar que hay una animación en curso
                 setIsAnimating(true);
+                
+                // Limpiar ruta activa anterior cuando se hace flyTo
+                setActiveRoute(null);
                 
                 // Animación cinematográfica 3D con movimiento y orientación
                 setTimeout(() => {
@@ -734,21 +783,43 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             }
         };
 
+        // Global function to stop map animations when user starts typing
+        window.stopMapAnimation = () => {
+            if (!isAnimatingRef.current) return;
+            isAnimatingRef.current = false;
+            pausedElapsedRef.current += Date.now() - startTimeRef.current;
+            isOrbitingRef.current = false;
+            if (animationIdRef.current !== null) {
+                cancelAnimationFrame(animationIdRef.current);
+                animationIdRef.current = null;
+            }
+            console.log('⏸️ Map animation stopped by user interaction (chat focus)');
+        };
+
         // Listen to Santi narrations so we can focus places on the map when mentioned
         const onNarration = (ev: Event) => {
             try {
                 const detail = (ev as CustomEvent).detail as { text: string, source?: string } | undefined;
                 const text = detail?.text || '';
                 const source = detail?.source;
-                // Ignore narrations emitted by our own map actions, place-detail pages, and geolocate to avoid loops
-                if (source && typeof source === 'string' && (source.startsWith('map') || source === 'place-detail' || source === 'chat')) {
+
+                // Don't process narrations if any input has focus (user is typing)
+                const activeElement = document.activeElement;
+                if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+                    console.debug('Map: Ignoring narration because an input element has focus');
+                    return;
+                }
+
+                // Only process narrations that should trigger map focus
+                // Ignore all narrations during typing or from automated sources
+                const shouldProcess = source === 'user-route' || source === 'user-place-query';
+                if (!shouldProcess) {
                     console.debug('Map: Ignoring narration from source:', source, 'text:', text.slice(0,50));
                     return;
                 }
 
                 if (!text) return;
-                // Solo enfocar en el mapa cuando la narración viene del chat o usuario
-                // NO procesar narraciones automáticas de place-detail para evitar doble procesamiento
+                // Process narration that should focus the map
                 console.log('Map: Processing narration from source:', source || 'unknown');
                 window.focusPlaceOnMap?.(text);
             } catch { /* ignore */ }
@@ -801,6 +872,56 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                 }}
             />
+            
+            {/* Overlay de Google Maps cuando hay ruta activa */}
+            {activeRoute && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    right: '20px',
+                    background: 'rgba(255,255,255,0.95)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    zIndex: 1000,
+                    maxWidth: '200px'
+                }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#1A3A6C', marginBottom: '8px' }}>
+                        🗺️ Ruta a {activeRoute.name}
+                    </div>
+                    <a 
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${activeRoute.start[1]},${activeRoute.start[0]}&destination=${activeRoute.end[1]},${activeRoute.end[0]}`}
+                        target="_blank" 
+                        rel="noreferrer"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 12px',
+                            background: '#4285F4',
+                            color: 'white',
+                            textDecoration: 'none',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#3367D6';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#4285F4';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                    >
+                        <span>🚗</span>
+                        <span>Google Maps</span>
+                    </a>
+                </div>
+            )}
         </div>
     );
 };

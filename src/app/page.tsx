@@ -948,7 +948,7 @@ export default function Home() {
                   <GalleryCard
                     title={attr.name}
                     img={attr.image}
-                    onClick={() => santiNarrate(`Contame un poco sobre ${attr.name}`)}
+                    onClick={() => santiNarrate(`Contame un poco sobre ${attr.name}`, { source: 'user-place-query' })}
                   />
                 </div>
               ))}

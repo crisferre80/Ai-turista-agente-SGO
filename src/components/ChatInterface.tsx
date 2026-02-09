@@ -9,6 +9,7 @@ declare global {
         santiNarrate?: (text: string) => void;
         santiSpeak?: (text: string) => void;
         focusPlaceOnMap?: (placeName: string) => void;
+        stopMapAnimation?: () => void;
         SpeechRecognition?: unknown;
         webkitSpeechRecognition?: unknown;
         testSantiAnimation?: () => void;
@@ -53,6 +54,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const lastInteractionRef = useRef(Date.now()); // Track inactivity
     const micHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to auto-hide mic legend on touch
 
@@ -326,6 +328,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         // Trigger map focus if a place is mentioned and not explicitly skipped
         if (!skipMapFocus && typeof window !== 'undefined' && 'focusPlaceOnMap' in window && typeof (window as Window & typeof globalThis).focusPlaceOnMap === 'function') {
             (window as Window & typeof globalThis).focusPlaceOnMap!(text);
+            // Restaurar foco al input del chat después de la animación del mapa
+            setTimeout(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                    console.log('Chat: Focus restored to input after map animation');
+                }
+            }, 3000);
         }
     }, [playAudioResponse]);
 
@@ -479,6 +488,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 if (placeName) {
                     console.log('Route query: Focusing map on place from API:', placeName);
                     (window as Window & typeof globalThis).focusPlaceOnMap!(placeName);
+                    // Restaurar foco al input del chat después de la animación del mapa
+                    setTimeout(() => {
+                        if (inputRef.current) {
+                            inputRef.current.focus();
+                            console.log('Chat: Focus restored to input after map animation');
+                        }
+                    }, 3000); // Dar tiempo suficiente para que termine la animación
                 } else {
                     // Si no se encontró placeName en la respuesta, intentar extraer del mensaje del usuario
                     console.log('Route query: placeName not found in API response, trying to extract from user message');
@@ -487,6 +503,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         const extractedPlace = placeMatch[1].trim();
                         console.log('Route query: Extracted place from user message:', extractedPlace);
                         (window as Window & typeof globalThis).focusPlaceOnMap!(extractedPlace);
+                        // Restaurar foco al input del chat después de la animación del mapa
+                        setTimeout(() => {
+                            if (inputRef.current) {
+                                inputRef.current.focus();
+                                console.log('Chat: Focus restored to input after map animation');
+                            }
+                        }, 3000);
                     } else {
                         console.warn('Route query: Could not extract place name from user message');
                     }
@@ -500,6 +523,13 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         } finally {
             setIsLoading(false);
             updateInteractionTime(); // Reset timer again after response
+            // Restaurar foco al input para permitir escribir inmediatamente
+            setTimeout(() => {
+                if (inputRef.current && !document.activeElement || document.activeElement === document.body) {
+                    inputRef.current.focus();
+                    console.log('Chat: Focus restored to input after loading complete');
+                }
+            }, 100);
         }
     }, [input, getApiMessages, playAudioResponse, router, userLocation]);
 
@@ -983,7 +1013,22 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
     return (
         <div
-            onClick={() => { if (isIdle) { setIsIdle(false); updateInteractionTime(); } }}
+            onClick={(e) => { 
+                // No hacer nada si el clic es en el input o sus contenedores
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
+                    return;
+                }
+                
+                if (isIdle) { 
+                    setIsIdle(false); 
+                    updateInteractionTime(); 
+                }
+                // Enfocar el input para que aparezca el cursor
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                }
+            }}
             style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#333', position: 'relative' }}
         >
             <audio
@@ -1015,29 +1060,42 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
             {/* THINKING MODAL */}
             {isThinking && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 99999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    backdropFilter: 'blur(8px)',
-                    animation: 'fadeIn 0.3s ease-out'
-                }}>
-                    <div style={{
-                        background: 'white',
-                        borderRadius: 24,
-                        padding: '40px',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                <div 
+                    onClick={(e) => {
+                        // Permitir cerrar el modal haciendo clic en el fondo
+                        if (e.target === e.currentTarget) {
+                            setIsThinking(false);
+                        }
+                    }}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 99999,
                         display: 'flex',
-                        flexDirection: 'column',
                         alignItems: 'center',
-                        gap: 20,
-                        maxWidth: '90%',
-                        animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                    }}>
+                        justifyContent: 'center',
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(8px)',
+                        animation: 'fadeIn 0.3s ease-out',
+                        cursor: 'pointer'
+                    }}
+                >
+                    <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            background: 'white',
+                            borderRadius: 24,
+                            padding: '40px',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 20,
+                            maxWidth: '90%',
+                            animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                            cursor: 'default'
+                        }}
+                    >
                         <Image
                             src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768537502/bombo_alpha_ud09ok.webp"
                             alt="Santi pensando"
@@ -1070,6 +1128,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                                 fontWeight: 500
                             }}>
                                 Esperá un momento, estoy buscando la mejor respuesta para vos
+                            </p>
+                            <p style={{
+                                margin: '8px 0 0 0',
+                                fontSize: '0.85rem',
+                                color: '#94a3b8',
+                                fontWeight: 400,
+                                fontStyle: 'italic'
+                            }}>
+                                Podés escribir mientras espero
                             </p>
                         </div>
                         <div style={{
@@ -1440,7 +1507,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 right: '20px',
                 left: 'auto',
                 width: 'min(90%, 400px)',
-                zIndex: 30005,
+                zIndex: 100000,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
@@ -1460,17 +1527,20 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                   </div>
                 )}
 
-                <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    background: 'rgba(255,255,255,1)',
-                    padding: '8px',
-                    borderRadius: '50px',
-                    boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
-                    border: `1px solid ${COLOR_BLUE}22`
-                }}>
+                <div 
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                        display: 'flex',
+                        gap: '8px',
+                        background: 'rgba(255,255,255,1)',
+                        padding: '8px',
+                        borderRadius: '50px',
+                        boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
+                        border: `1px solid ${COLOR_BLUE}22`
+                    }}
+                >
                     <button
-                        onClick={() => handleSend()}
+                        onClick={(e) => { e.stopPropagation(); handleSend(); }}
                         disabled={isLoading || (!input.trim() && !isListening)}
                         style={{
                             background: (isLoading || !input.trim()) ? '#f1f5f9' : COLOR_BLUE,
@@ -1491,12 +1561,45 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     </button>
 
                     <input
+                        ref={inputRef}
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        autoFocus
+                        readOnly={false}
+                        onFocus={(e) => {
+                            e.stopPropagation();
+                            console.log('🎯 Input gained focus');
+                            // Detener animación del mapa cuando el usuario hace foco en el chat
+                            if (typeof window !== 'undefined' && window.stopMapAnimation) {
+                                window.stopMapAnimation();
+                            }
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('🎯 Input clicked');
+                            // Detener animación del mapa cuando el usuario hace clic en el chat
+                            if (typeof window !== 'undefined' && window.stopMapAnimation) {
+                                window.stopMapAnimation();
+                            }
+                            // Asegurar que el input tenga foco
+                            if (inputRef.current) {
+                                inputRef.current.focus();
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            // Debug: log de teclas presionadas
+                            console.log('Key pressed:', e.key, 'Code:', e.code);
+                            
+                            // Solo enviar si es Enter y hay texto
+                            if (e.key === 'Enter' && input.trim()) {
+                                e.preventDefault(); // Prevenir comportamiento por defecto
+                                console.log('Sending message via Enter key');
+                                handleSend();
+                            }
+                        }}
                         placeholder={isListening ? "Te escucho..." : "Tu pregunta..."}
-                        disabled={isLoading || isListening}
+                        disabled={isListening}
                         style={{
                             flex: 1,
                             padding: '0 30px',
@@ -1510,7 +1613,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     />
 
                     <button
-                        onClick={toggleListening}
+                        onClick={(e) => { e.stopPropagation(); toggleListening(); }}
                         onMouseEnter={() => setIsMicHover(true)}
                         onMouseLeave={() => setIsMicHover(false)}
                         onFocus={() => setIsMicHover(true)}
@@ -1546,7 +1649,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     
                     {/* Voice Commands Help Button */}
                     <button
-                        onClick={() => setShowVoiceHelp(true)}
+                        onClick={(e) => { e.stopPropagation(); setShowVoiceHelp(true); }}
                         style={{
                             background: COLOR_BLUE,
                             color: 'white',

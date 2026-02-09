@@ -698,6 +698,22 @@ export async function POST(req: Request) {
             }
         }
         
+        // Si es consulta de ruta, forzar respuesta concisa y directa
+        if (isRouteOnly && placeName) {
+            // Respuesta corta y directa para consultas de ruta
+            const routeResponses = [
+                `¡Dale! Te muestro la ruta a ${placeName} en el mapa.`,
+                `¡Perfecto! Vamos a ${placeName}, te marco la ruta en el mapa.`,
+                `¡Listo! Ruta a ${placeName} trazada en el mapa.`,
+                `¡Vamos! Te llevo a ${placeName} por el mejor camino.`,
+                `¡Claro! Ruta a ${placeName} lista en el mapa.`
+            ];
+            
+            // Elegir respuesta aleatoria para variar
+            reply = routeResponses[Math.floor(Math.random() * routeResponses.length)];
+            console.log('🗺️ Route query: Forced concise response:', reply);
+        }
+
         return NextResponse.json({ 
             reply, 
             placeId, 
@@ -707,7 +723,6 @@ export async function POST(req: Request) {
             relevantVideo,
             remainingRequests: rateLimit.remainingRequests
         });
-
     } catch (error) {
         console.error('Error in chat route:', error);
         const message = error instanceof Error ? error.message : String(error);
