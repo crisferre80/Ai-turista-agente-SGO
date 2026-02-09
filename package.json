@@ -27,6 +27,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "googleapis": "^171.4.0",
+    "js-cookie": "^3.0.5",
     "lucide-react": "^0.563.0",
     "mapbox-gl": "^3.17.0",
     "mercadopago": "^2.12.0",
@@ -40,6 +41,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@types/js-cookie": "^3.0.6",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.9",

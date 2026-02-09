@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
 import { santiSpeak, santiNarrate, stopSantiNarration } from '@/lib/speech';
+import { LocationStorage } from '@/lib/location-storage';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -222,29 +223,27 @@ export default function Home() {
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
-  // Función para guardar ubicación en localStorage
+  // Función para guardar ubicación usando sistema híbrido
   const saveUserLocation = (location: { latitude: number; longitude: number }) => {
-    try {
-      localStorage.setItem('userLocation', JSON.stringify(location));
-      console.log('📍 Ubicación guardada:', location);
-    } catch (e) {
-      console.warn('Error guardando ubicación:', e);
-    }
+    LocationStorage.saveWithTimestamp(location);
   };
 
-  // Función para recuperar ubicación de localStorage
+  // Función para recuperar ubicación usando sistema híbrido
   const loadUserLocation = () => {
-    try {
-      const saved = localStorage.getItem('userLocation');
-      if (saved) {
-        const location = JSON.parse(saved);
-        setUserLocation(location);
-        console.log('📍 Ubicación recuperada:', location);
-        return location;
+    const location = LocationStorage.load();
+    if (location) {
+      setUserLocation(location);
+      console.log('📍 Ubicación recuperada del sistema híbrido:', location);
+      
+      // Mostrar información de antigüedad si está disponible
+      const age = LocationStorage.getLocationAge();
+      if (age !== null) {
+        console.log(`⏰ Ubicación guardada hace ${age} minutos`);
       }
-    } catch (e) {
-      console.warn('Error cargando ubicación:', e);
+      
+      return location;
     }
+    console.log('📍 No hay ubicación guardada');
     return null;
   };
 

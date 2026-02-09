@@ -20,11 +20,12 @@ const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
 
-const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation }: {
+const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation, onLocationUpdate }: {
     externalTrigger?: string,
     externalStory?: { url: string, name: string },
     isModalOpen?: boolean,
-    userLocation?: { latitude: number; longitude: number } | null
+    userLocation?: { latitude: number; longitude: number } | null,
+    onLocationUpdate?: (location: { latitude: number; longitude: number } | null) => void
 }) => {
     const router = useRouter();
     
