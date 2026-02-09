@@ -58,7 +58,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             console.log('📍 Map: Ubicación actualizada desde parent:', loc);
         }
     }, [parentUserLocation, userLocation]);
-    const [isMapReady, setIsMapReady] = useState(false);
+    const [isAnimating, setIsAnimating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -464,6 +464,36 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         }
     }, [userLocation, pendingDestination, drawRoute]);
 
+    // Effect to prevent map focus during animations
+    useEffect(() => {
+        if (!isAnimating) return;
+
+        const preventMapFocus = (e: FocusEvent) => {
+            if (e.target === mapContainer.current) {
+                console.log('🗺️ Map: Removiendo foco del mapa durante animación');
+                (e.target as HTMLElement).blur();
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        const preventMapKeyboard = (e: KeyboardEvent) => {
+            if (e.target === mapContainer.current) {
+                console.log('🗺️ Map: Previniendo navegación por teclado durante animación');
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        document.addEventListener('focusin', preventMapFocus);
+        document.addEventListener('keydown', preventMapKeyboard);
+
+        return () => {
+            document.removeEventListener('focusin', preventMapFocus);
+            document.removeEventListener('keydown', preventMapKeyboard);
+        };
+    }, [isAnimating]);
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const openRecorder = (id: string, _name: string) => {
         const recorderDiv = document.createElement('div');
@@ -655,6 +685,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             if (found && found.coords) {
                 console.log('6. Flying to coordinates:', found.coords);
                 
+                // Marcar que hay una animación en curso
+                setIsAnimating(true);
+                
                 // Animación cinematográfica 3D con movimiento y orientación
                 setTimeout(() => {
                     currentMap.flyTo({
@@ -665,6 +698,11 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         duration: 2500, // Duración más larga para efecto cinematográfico
                         easing: (t: number) => t * (2 - t) // Easing más suave y natural
                     });
+                    
+                    // Terminar la animación después de la duración
+                    setTimeout(() => {
+                        setIsAnimating(false);
+                    }, 2500);
                 }, 300); // Pequeña pausa antes de la animación
 
                 if (userLocation) {
@@ -735,7 +773,33 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
     return (
         <div className="map-wrapper" style={{ position: 'relative', width: '100%', height: '100%' }}>
-            <div ref={mapContainer} style={{ width: '100%', height: '100%', borderRadius: '12px' }} />
+            <div 
+                ref={mapContainer} 
+                tabIndex={-1}
+                style={{ width: '100%', height: '100%', borderRadius: '12px' }}
+                onFocus={(e) => {
+                    // Prevenir que el mapa tome foco, especialmente durante animaciones
+                    if (isAnimating) {
+                        console.log('🗺️ Map: Previniendo foco durante animación');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Remover foco si se logró obtener
+                        if (document.activeElement === e.target) {
+                            (e.target as HTMLElement).blur();
+                        }
+                        return false;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                }}
+                onKeyDown={(e) => {
+                    // Prevenir navegación por teclado durante animaciones
+                    if (isAnimating) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                }}
+            />
         </div>
     );
 };
