@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Canvas } from '@react-three/fiber';
-import { X, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Loader2, AlertTriangle, Camera } from 'lucide-react';
 import type { ARData } from '@/types/ar';
 import { detectWebXRCapabilities, meetsARRequirements, isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARPageClient/ARScene';
@@ -37,7 +37,73 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    const initAR = async () => {
+      try {
+        console.log('🎥 Iniciando AR...');
+        
+        // Primero iniciar la cámara antes de verificar WebXR
+        if (navigator.mediaDevices?.getUserMedia) {
+          try {
+            console.log('🎥 Solicitando acceso a cámara...');
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
+              audio: false,
+            });
+            
+            console.log('✅ Cámara obtenida:', stream.active);
+            streamRef.current = stream;
+
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.onloadedmetadata = () => {
+                console.log('✅ Video metadata cargado');
+                videoRef.current?.play()
+                  .then(() => {
+                    console.log('✅ Video reproduciendo');
+                    setCameraActive(true);
+                  })
+                  .catch(err => console.error('❌ Error reproduciendo video:', err));
+              };
+            }
+          } catch (camError) {
+            console.error('❌ Error iniciando cámara:', camError);
+            setError(`No se pudo acceder a la cámara: ${camError instanceof Error ? camError.message : 'Error desconocido'}`);
+            setLoading(false);
+            return;
+          }
+        } else {
+          setError('Tu navegador no soporta acceso a la cámara.');
+          setLoading(false);
+          return;
+        }
+
+        // Verificar capacidades WebXR (pero no bloquear si falla)
+        try {
+          const caps = await detectWebXRCapabilities();
+          const requirements = await meetsARRequirements();
+          
+          console.log('📱 WebXR capabilities:', caps);
+          console.log('📱 AR requirements:', requirements);
+        } catch (webxrError) {
+          console.warn('⚠️ WebXR no disponible, continuando con vista básica:', webxrError);
+          // No bloqueamos la experiencia si WebXR no está disponible
+        }
+
+        setLoading(false);
+        console.log('✅ AR inicializado correctamente');
+      } catch (err) {
+        console.error('❌ Error inicializando AR:', err);
+        setError(err instanceof Error ? err.message : 'Error desconocido');
+        setLoading(false);
+      }
+    };
+
     initAR();
+    
     return () => {
       // Limpiar stream al desmontar
       if (streamRef.current) {
@@ -45,55 +111,6 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       }
     };
   }, []);
-
-  const initAR = async () => {
-    try {
-      // Verificar capacidades WebXR
-      const caps = await detectWebXRCapabilities();
-      const requirements = await meetsARRequirements();
-
-      if (!requirements.meets) {
-        throw new Error(`Requisitos no cumplidos: ${requirements.missing.join(', ')}`);
-      }
-
-      if (!caps.isSupported) {
-        throw new Error(
-          'WebXR no está soportado. Usa un navegador moderno en HTTPS.'
-        );
-      }
-
-      // Iniciar cámara
-      if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false,
-          });
-          streamRef.current = stream;
-
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            await videoRef.current.play();
-            setCameraActive(true);
-          }
-        } catch (camError) {
-          console.error('Error iniciando cámara:', camError);
-          setError('No se pudo acceder a la cámara. Verifica los permisos.');
-          return;
-        }
-      }
-
-      setLoading(false);
-    } catch (err) {
-      console.error('Error inicializando AR:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
-      setLoading(false);
-    }
-  };
 
   const handleClose = () => {
     if (streamRef.current) {
@@ -129,6 +146,15 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
             <div>
               <h2 className="text-xl font-bold mb-2">Error al iniciar AR</h2>
               <p className="text-gray-200 mb-4">{error}</p>
+              <div className="text-sm text-gray-300 bg-black/30 p-3 rounded mb-4">
+                <p className="font-semibold mb-2">💡 Soluciones posibles:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Acepta los permisos de cámara cuando el navegador los solicite</li>
+                  <li>Verifica que estés usando HTTPS (conexión segura)</li>
+                  <li>Intenta recargar la página y dar permisos nuevamente</li>
+                  <li>Comprueba que ninguna otra app esté usando la cámara</li>
+                </ul>
+              </div>
               <button
                 onClick={handleClose}
                 className="mt-4 bg-white text-red-500 px-6 py-3 rounded-lg font-semibold w-full hover:bg-gray-100 transition"
@@ -151,7 +177,25 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         autoPlay
         muted
         playsInline
+        style={{
+          transform: 'scaleX(-1)', // Efecto espejo (opcional)
+          zIndex: 0
+        }}
+        onLoadedMetadata={() => console.log('📹 Video metadata cargado')}
+        onPlay={() => console.log('▶️ Video iniciado')}
+        onError={(e) => console.error('❌ Error en video:', e)}
       />
+
+      {/* Indicador de que la cámara no está activa */}
+      {!cameraActive && !loading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+          <div className="text-white text-center">
+            <Camera className="h-16 w-16 mx-auto mb-4 animate-pulse" />
+            <h3 className="text-xl font-bold mb-2">Activando cámara...</h3>
+            <p className="text-gray-300">Por favor, acepta los permisos de cámara</p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent">
@@ -177,7 +221,9 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         gl={{ 
           alpha: true,
           antialias: true,
-          preserveDrawingBuffer: true
+          preserveDrawingBuffer: true,
+          powerPreference: 'high-performance',
+          failIfMajorPerformanceCaveat: false
         }}
         style={{ 
           position: 'absolute',
@@ -188,6 +234,9 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           pointerEvents: 'auto'
         }}
         onPointerDown={handlePlaceScene}
+        onCreated={(state) => {
+          console.log('✅ Canvas 3D creado, WebGL:', state.gl.capabilities);
+        }}
       >
         <ARScene
           attraction={{
