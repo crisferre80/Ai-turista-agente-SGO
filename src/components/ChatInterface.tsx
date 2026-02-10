@@ -525,8 +525,12 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             updateInteractionTime(); // Reset timer again after response
             // Restaurar foco al input para permitir escribir inmediatamente
             setTimeout(() => {
-                if (inputRef.current && !document.activeElement || document.activeElement === document.body) {
-                    inputRef.current.focus();
+                const el = inputRef.current;
+                if (!el) return;
+
+                const active = document.activeElement;
+                if (!active || active === document.body) {
+                    el.focus();
                     console.log('Chat: Focus restored to input after loading complete');
                 }
             }, 100);
