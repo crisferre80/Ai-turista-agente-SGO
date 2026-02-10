@@ -39,6 +39,8 @@ interface ARPreview3DProps {
   onHotspotPositionChange?: (id: string, position: { x: number; y: number; z: number }) => void;
   // Modo ligero: no cargar modelo 3D real, sólo grid + primitivas + hotspots
   lightMode?: boolean;
+  primitives?: Primitive[];
+  onPrimitivesChange?: (primitives: Primitive[]) => void;
 }
 
 function Model({ url }: { url: string }) {
@@ -355,10 +357,12 @@ export default function ARPreview3D({
   modelUrl, 
   hotspots, 
   onHotspotPositionChange,
-  lightMode = false
+  lightMode = false,
+  primitives: externalPrimitives,
+  onPrimitivesChange,
 }: ARPreview3DProps) {
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>(null);
-  const [primitives, setPrimitives] = useState<Primitive[]>([]);
+  const primitives = externalPrimitives || [];
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
@@ -367,6 +371,7 @@ export default function ARPreview3D({
   const [webglLost, setWebglLost] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
+  const primitiveIdRef = useRef(0);
   const [modelPosition, setModelPosition] = useState<{ x: number; y: number; z: number }>({
     x: 0,
     y: 0,
@@ -391,19 +396,24 @@ export default function ARPreview3D({
 
   // Funciones para manejar primitivas
   const addPrimitive = (type: Primitive['type']) => {
+    if (!onPrimitivesChange) return;
+    primitiveIdRef.current += 1;
     const newPrimitive: Primitive = {
-      id: `primitive-${Date.now()}`,
+      id: `primitive-${primitiveIdRef.current}`,
       type,
       position: { x: 0, y: 1, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1, z: 1 },
       color: '#667eea'
     };
-    setPrimitives([...primitives, newPrimitive]);
+    const updated = [...primitives, newPrimitive];
+    onPrimitivesChange(updated);
   };
 
   const removePrimitive = (id: string) => {
-    setPrimitives(primitives.filter(p => p.id !== id));
+    if (!onPrimitivesChange) return;
+    const updated = primitives.filter(p => p.id !== id);
+    onPrimitivesChange(updated);
     if (selectedPrimitive === id) setSelectedPrimitive(null);
   };
 
@@ -426,46 +436,56 @@ export default function ARPreview3D({
   // Helpers para editar la primitiva seleccionada
   const updateSelectedPrimitivePosition = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
-    setPrimitives(prev => prev.map(p => 
+    if (!onPrimitivesChange) return;
+    const updated = primitives.map(p => 
       p.id === selectedPrimitive
         ? { ...p, position: { ...p.position, [axis]: value } }
         : p
-    ));
+    );
+    onPrimitivesChange(updated);
   };
 
   const updateSelectedPrimitiveScale = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
-    setPrimitives(prev => prev.map(p => 
+    if (!onPrimitivesChange) return;
+    const updated = primitives.map(p => 
       p.id === selectedPrimitive
         ? { ...p, scale: { ...p.scale, [axis]: value } }
         : p
-    ));
+    );
+    onPrimitivesChange(updated);
   };
 
   const updateSelectedPrimitiveRotation = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
-    setPrimitives(prev => prev.map(p => 
+    if (!onPrimitivesChange) return;
+    const updated = primitives.map(p => 
       p.id === selectedPrimitive
         ? { ...p, rotation: { ...p.rotation, [axis]: value } }
         : p
-    ));
+    );
+    onPrimitivesChange(updated);
   };
 
   const updateSelectedPrimitiveColor = (color: string) => {
     if (!selectedPrimitive) return;
-    setPrimitives(prev => prev.map(p => 
+    if (!onPrimitivesChange) return;
+    const updated = primitives.map(p => 
       p.id === selectedPrimitive
         ? { ...p, color }
         : p
-    ));
+    );
+    onPrimitivesChange(updated);
   };
 
   const updatePrimitivePosition = (id: string, position: { x: number; y: number; z: number }) => {
-    setPrimitives(prev => prev.map(p => 
+    if (!onPrimitivesChange) return;
+    const updated = primitives.map(p => 
       p.id === id
         ? { ...p, position }
         : p
-    ));
+    );
+    onPrimitivesChange(updated);
   };
 
   return (
@@ -540,6 +560,7 @@ export default function ARPreview3D({
                 mode="translate"
                 size={1.3}
                 space="world"
+                translationSnap={1}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -602,6 +623,7 @@ export default function ARPreview3D({
                 key={primitive.id}
                 mode="translate"
                 size={1.2}
+                translationSnap={1}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -649,6 +671,7 @@ export default function ARPreview3D({
                 key={hotspot.id}
                 mode="translate"
                 size={1.0}
+                translationSnap={1}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -1025,7 +1048,7 @@ export default function ARPreview3D({
                           <input
                             key={axis}
                             type="number"
-                            step="1"
+                            step="0.1"
                             value={prim.position[axis].toFixed(2)}
                             onChange={(e) => updateSelectedPrimitivePosition(axis, parseFloat(e.target.value) || 0)}
                             style={{
@@ -1048,7 +1071,7 @@ export default function ARPreview3D({
                           <input
                             key={axis}
                             type="number"
-                            step="0.5"
+                            step="0.1"
                             min={0.1}
                             value={prim.scale[axis].toFixed(2)}
                             onChange={(e) => {
@@ -1257,7 +1280,7 @@ export default function ARPreview3D({
                       <input
                         key={axis}
                         type="number"
-                        step="1"
+                        step="0.1"
                         value={modelPosition[axis].toFixed(2)}
                         onChange={(e) => {
                           const v = parseFloat(e.target.value) || 0;
@@ -1431,10 +1454,10 @@ export default function ARPreview3D({
                         <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           {(['x','y','z'] as const).map(axis => (
-                              <input
+                                <input
                               key={axis}
                               type="number"
-                                step="1"
+                                  step="0.1"
                               value={hs.position[axis].toFixed(2)}
                               onChange={(e) => {
                                 const v = parseFloat(e.target.value) || 0;

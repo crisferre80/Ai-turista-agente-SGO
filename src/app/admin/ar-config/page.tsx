@@ -29,6 +29,15 @@ interface Hotspot {
   content_url?: string;
 }
 
+interface Primitive {
+  id: string;
+  type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane';
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  scale: { x: number; y: number; z: number };
+  color: string;
+}
+
 export default function ARConfigPage() {
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [selectedAttraction, setSelectedAttraction] = useState<Attraction | null>(null);
@@ -40,6 +49,7 @@ export default function ARConfigPage() {
   const [arEnabled, setArEnabled] = useState(false);
   const [modelUrl, setModelUrl] = useState('');
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [primitives, setPrimitives] = useState<Primitive[]>([]);
   const [lightMode, setLightMode] = useState(false);
   const [qrCode, setQrCode] = useState('');
 
@@ -54,7 +64,9 @@ export default function ARConfigPage() {
       setQrCode(selectedAttraction.qr_code || `AR_${selectedAttraction.id}`);
       
       const savedHotspots = selectedAttraction.ar_hotspots?.hotspots || [];
+      const savedPrimitives = (selectedAttraction.ar_hotspots as { primitives?: Primitive[] } | undefined)?.primitives || [];
       setHotspots(savedHotspots);
+      setPrimitives(savedPrimitives);
     }
   }, [selectedAttraction]);
 
@@ -171,7 +183,8 @@ export default function ARConfigPage() {
       setSaving(true);
 
       const arData = {
-        hotspots: hotspots
+        hotspots,
+        primitives,
       };
 
       const { error } = await supabase
@@ -986,7 +999,7 @@ export default function ARConfigPage() {
                     </div>
 
                     {/* Vista Previa 3D */}
-                    {arEnabled && (modelUrl || hotspots.length > 0 || lightMode) && (
+                    {arEnabled && (modelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) && (
                       <div style={{ marginBottom: '24px' }}>
                         <h3 style={{ 
                           margin: '0 0 12px', 
@@ -1005,14 +1018,16 @@ export default function ARConfigPage() {
                           borderRadius: '10px'
                         }}>
                           <ARPreview3D
-                            modelUrl={modelUrl}
+                            modelUrl={modelUrl || undefined}
                             lightMode={lightMode}
                             hotspots={hotspots}
+                            primitives={primitives}
                             onHotspotPositionChange={(id, position) => {
-                              setHotspots(hotspots.map(h => 
+                              setHotspots(prev => prev.map(h => 
                                 h.id === id ? { ...h, position } : h
                               ));
                             }}
+                            onPrimitivesChange={setPrimitives}
                           />
                           
                           <div style={{
