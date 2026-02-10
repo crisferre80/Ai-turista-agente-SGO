@@ -30,6 +30,9 @@ interface Attraction {
   category?: string;
   contact_info?: string;
   gallery_urls?: string[];
+  has_ar_content?: boolean;
+  ar_model_url?: string;
+  qr_code?: string;
 }
 
 interface MapProps {
@@ -576,6 +579,41 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
             wrapper.appendChild(el);
 
+            // Agregar badge AR si el atractivo tiene contenido AR
+            if (attr.has_ar_content) {
+                const arBadge = document.createElement('div');
+                arBadge.className = 'ar-badge';
+                arBadge.innerHTML = '🥽';
+                arBadge.style.cssText = `
+                    position: absolute;
+                    top: -5px;
+                    right: -5px;
+                    width: 22px;
+                    height: 22px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.6);
+                    border: 2px solid white;
+                    animation: pulse-ar 2s infinite;
+                    z-index: 1;
+                `;
+                wrapper.appendChild(arBadge);
+                
+                // Agregar animación de pulso
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes pulse-ar {
+                        0%, 100% { transform: scale(1); }
+                        50% { transform: scale(1.1); box-shadow: 0 2px 12px rgba(102, 126, 234, 0.8); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
             el.onmouseenter = () => {
                 el.style.transform = 'scale(1.2) translateY(-5px)';
                 el.style.boxShadow = `0 0 20px ${markerColor}aa`;
@@ -620,6 +658,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 tooltip.style.transform = 'translateX(-50%) translateY(6px)';
             };
 
+            const arButton = attr.has_ar_content ? `<button onclick="(function(){ window.location.href='/explorar/${attr.id}?openAR=true'; })()" style="flex:1; min-width:90px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;"><span style="font-size:14px;">🥽</span> AR</button>` : '';
+
             const compactContent = `
                 <div style="font-family: system-ui; min-width: 200px;">
                   <div style="display:flex; gap:10px; align-items:center;">
@@ -630,11 +670,13 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         <span style="font-size:11px; color:#666; background:#f0f0f0; padding:4px 8px; border-radius:8px;">${attr.category || 'Lugar'}</span>
                       </div>
                       <div style="font-size:12px; color:#666; margin-top:6px;">${(attr.description || '').slice(0, 70)}${(attr.description && attr.description.length > 70) ? '...' : ''}</div>
+                      ${attr.has_ar_content ? '<div style="font-size:11px; color:#667eea; margin-top:4px; font-weight:600;">✨ Contenido AR disponible</div>' : ''}
                     </div>
                   </div>
-                  <div style="display:flex; gap:8px; margin-top:10px;">
-                    <button onclick="(function(){ window.location.href='/explorar/${attr.id}'; })()" style="flex:1; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
-                    <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Ir</button>
+                  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                    <button onclick="(function(){ window.location.href='/explorar/${attr.id}'; })()" style="flex:1; min-width:90px; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
+                    <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; min-width:90px; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Ir</button>
+                    ${arButton}
                   </div>
                 </div>
             `;
