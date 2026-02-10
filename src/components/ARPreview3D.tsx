@@ -1,8 +1,9 @@
 'use client';
 
 import { useRef, useState, useEffect, Suspense } from 'react';
+import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Sphere, TransformControls } from '@react-three/drei';
+import { OrbitControls, Text, Box, Sphere, TransformControls, Html } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move } from 'lucide-react';
@@ -175,6 +176,81 @@ function HotspotMarker({
   );
 }
 
+// Pequeño "billboard" para mostrar imagen/vídeo asociado a un hotspot en la vista previa
+function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
+  if (!hotspot.content_url) return null;
+
+  const isImage = hotspot.type === 'image';
+  const isVideo = hotspot.type === 'video';
+  if (!isImage && !isVideo) return null;
+
+  // Elevamos un poco el contenido sobre el marcador
+  const yOffset = 0.8;
+
+  return (
+    <Html
+      position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}
+      distanceFactor={8}
+      style={{ pointerEvents: 'none' }}
+    >
+      <div
+        style={{
+          background: 'rgba(0,0,0,0.75)',
+          borderRadius: 8,
+          padding: 6,
+          border: '1px solid rgba(255,255,255,0.2)',
+          maxWidth: 160,
+        }}
+      >
+        {isImage ? (
+          <Image
+            src={hotspot.content_url}
+            alt={hotspot.title}
+            width={160}
+            height={80}
+            style={{
+              width: '100%',
+              height: 80,
+              objectFit: 'cover',
+              borderRadius: 6,
+              display: 'block',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: 60,
+              borderRadius: 6,
+              background:
+                'linear-gradient(135deg, rgba(33,150,243,0.6), rgba(156,39,176,0.6))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: 32,
+            }}
+          >
+            🎬
+          </div>
+        )}
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: '#f3f4f6',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {hotspot.title}
+        </div>
+      </div>
+    </Html>
+  );
+}
+
 function Grid() {
   return (
     <>
@@ -270,7 +346,7 @@ function CustomLight({ light }: { light: Light }) {
 export default function ARPreview3D({ 
   modelUrl, 
   hotspots, 
-  onHotspotPositionChange, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onHotspotPositionChange,
   lightMode = false
 }: ARPreview3DProps) {
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>(null);
@@ -473,14 +549,56 @@ export default function ARPreview3D({
           );
         })}
 
-        {/* Hotspots */}
+        {/* Hotspots con gizmo cuando están seleccionados */}
+        {hotspots.map((hotspot) => {
+          const isSelected = selectedHotspot === hotspot.id;
+
+          if (isSelected && onHotspotPositionChange) {
+            return (
+              <TransformControls
+                key={hotspot.id}
+                mode="translate"
+                size={0.6}
+                onMouseDown={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = false;
+                  }
+                }}
+                onMouseUp={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = true;
+                  }
+                }}
+                onObjectChange={(event) => {
+                  const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
+                  const obj = target?.object;
+                  if (!obj) return;
+                  const { x, y, z } = obj.position;
+                  onHotspotPositionChange(hotspot.id, { x, y, z });
+                }}
+              >
+                <HotspotMarker
+                  hotspot={hotspot}
+                  isSelected
+                  onSelect={() => setSelectedHotspot(hotspot.id)}
+                />
+              </TransformControls>
+            );
+          }
+
+          return (
+            <HotspotMarker
+              key={hotspot.id}
+              hotspot={hotspot}
+              isSelected={isSelected}
+              onSelect={() => setSelectedHotspot(hotspot.id)}
+            />
+          );
+        })}
+
+        {/* Contenido multimedia (imagen / video) anclado en el espacio 3D */}
         {hotspots.map((hotspot) => (
-          <HotspotMarker
-            key={hotspot.id}
-            hotspot={hotspot}
-            isSelected={selectedHotspot === hotspot.id}
-            onSelect={() => setSelectedHotspot(hotspot.id)}
-          />
+          <HotspotMediaBillboard key={`${hotspot.id}-media`} hotspot={hotspot} />
         ))}
         </Canvas>
 
