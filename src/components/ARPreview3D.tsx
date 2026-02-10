@@ -263,7 +263,7 @@ function Grid() {
   return (
     <>
       {/* Grid principal y ejes básicos */}
-      <gridHelper args={[20, 20, '#00ff00', '#004400']} position={[0, 0, 0]} />
+      <gridHelper args={[40, 40, '#00ff00', '#004400']} position={[0, 0, 0]} />
       <axesHelper args={[5]} />
     </>
   );
@@ -451,7 +451,7 @@ export default function ARPreview3D({
         <Canvas
         frameloop="demand"
         dpr={[1, 1.5]}
-        camera={{ position: [6, 4, 6], fov: 60 }}
+        camera={{ position: [4, 3, 4], fov: 60 }}
         style={{ width: '100%', height: '100%', display: 'block', background: '#000000' }}
         onCreated={(state) => {
           state.gl.setClearColor('#000000', 1);
@@ -489,8 +489,10 @@ export default function ARPreview3D({
         {/* Grid */}
         <Grid />
 
-        {/* Modelo 3D o cubo por defecto */}
-        {!lightMode && (
+        {/* Modelo 3D (solo si hay URL definida).
+            Eliminamos el cubo azul fijo para que todo lo editable
+            se maneje como primitivas u otros objetos controlados. */}
+        {!lightMode && modelUrl && (
           <Suspense
             fallback={
               <mesh position={[0, 0.5, 0]}>
@@ -499,14 +501,7 @@ export default function ARPreview3D({
               </mesh>
             }
           >
-            {modelUrl ? (
-              <Model url={modelUrl} />
-            ) : (
-              <mesh position={[0, 0.5, 0]}>
-                <boxGeometry args={[1, 1, 1]} />
-                <meshStandardMaterial color="#667eea" metalness={0.3} roughness={0.4} />
-              </mesh>
-            )}
+            <Model url={modelUrl} />
           </Suspense>
         )}
 
@@ -519,7 +514,7 @@ export default function ARPreview3D({
               <TransformControls
                 key={primitive.id}
                 mode="translate"
-                size={0.8}
+                size={1.2}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -566,7 +561,7 @@ export default function ARPreview3D({
               <TransformControls
                 key={hotspot.id}
                 mode="translate"
-                size={0.6}
+                size={1.0}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
