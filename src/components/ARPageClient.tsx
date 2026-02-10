@@ -36,97 +36,102 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Efecto para iniciar la cámara
   useEffect(() => {
-    const initAR = async () => {
+    const initCamera = async () => {
       try {
-        console.log('🎥 Iniciando AR...');
-        console.log('📹 Video ref disponible:', !!videoRef.current);
+        console.log('🎥 Iniciando cámara...');
         
-        // Primero iniciar la cámara antes de verificar WebXR
-        if (navigator.mediaDevices?.getUserMedia) {
-          try {
-            console.log('🎥 Solicitando acceso a cámara...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-              video: {
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-              },
-              audio: false,
-            });
-            
-            console.log('✅ Cámara obtenida:', stream.active);
-            console.log('📹 Tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
-            streamRef.current = stream;
-
-            if (videoRef.current) {
-              const video = videoRef.current;
-              console.log('📹 Asignando stream a video elemento');
-              video.srcObject = stream;
-              
-              // Intentar reproducir inmediatamente
-              const playVideo = async () => {
-                try {
-                  await video.play();
-                  console.log('✅ Video reproduciendo');
-                  setCameraActive(true);
-                } catch (playError) {
-                  console.error('❌ Error reproduciendo video:', playError);
-                  // Intentar de nuevo después de que los metadatos se carguen
-                  video.onloadedmetadata = async () => {
-                    try {
-                      console.log('✅ Video metadata cargado, reintentando play');
-                      await video.play();
-                      console.log('✅ Video reproduciendo (segundo intento)');
-                      setCameraActive(true);
-                    } catch (retryError) {
-                      console.error('❌ Error en segundo intento:', retryError);
-                    }
-                  };
-                }
-              };
-              
-              playVideo();
-            }
-          } catch (camError) {
-            console.error('❌ Error iniciando cámara:', camError);
-            setError(`No se pudo acceder a la cámara: ${camError instanceof Error ? camError.message : 'Error desconocido'}`);
-            setLoading(false);
-            return;
-          }
-        } else {
+        if (!navigator.mediaDevices?.getUserMedia) {
           setError('Tu navegador no soporta acceso a la cámara.');
           setLoading(false);
           return;
         }
 
-        // Verificar capacidades WebXR (pero no bloquear si falla)
+        console.log('🎥 Solicitando acceso a cámara...');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false,
+        });
+        
+        console.log('✅ Cámara obtenida:', stream.active);
+        console.log('📹 Tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+        streamRef.current = stream;
+
+        // Esperar a que el video ref esté disponible
+        let attempts = 0;
+        const assignStreamToVideo = () => {
+          console.log(`📹 Intento ${attempts + 1} - Video ref disponible:`, !!videoRef.current);
+          
+          if (videoRef.current) {
+            const video = videoRef.current;
+            console.log('📹 Asignando stream a video elemento');
+            video.srcObject = stream;
+            
+            // Reproducir video
+            video.play()
+              .then(() => {
+                console.log('✅ Video reproduciendo');
+                setCameraActive(true);
+                setLoading(false);
+              })
+              .catch(err => {
+                console.error('❌ Error reproduciendo video:', err);
+                // Reintento después de metadata
+                video.onloadedmetadata = () => {
+                  console.log('📹 Metadata cargado, reintentando...');
+                  video.play()
+                    .then(() => {
+                      console.log('✅ Video reproduciendo (segundo intento)');
+                      setCameraActive(true);
+                      setLoading(false);
+                    })
+                    .catch(retryErr => {
+                      console.error('❌ Error en segundo intento:', retryErr);
+                      setLoading(false);
+                    });
+                };
+              });
+          } else if (attempts < 10) {
+            // Reintentar si el ref no está disponible
+            attempts++;
+            setTimeout(assignStreamToVideo, 100);
+          } else {
+            console.error('❌ Video ref no disponible después de 10 intentos');
+            setError('No se pudo inicializar el video. Intenta recargar la página.');
+            setLoading(false);
+          }
+        };
+
+        assignStreamToVideo();
+
+        // Verificar capacidades WebXR (no bloquea)
         try {
           const caps = await detectWebXRCapabilities();
           const requirements = await meetsARRequirements();
-          
           console.log('📱 WebXR capabilities:', caps);
           console.log('📱 AR requirements:', requirements);
         } catch (webxrError) {
-          console.warn('⚠️ WebXR no disponible, continuando con vista básica:', webxrError);
-          // No bloqueamos la experiencia si WebXR no está disponible
+          console.warn('⚠️ WebXR no disponible:', webxrError);
         }
 
-        setLoading(false);
-        console.log('✅ AR inicializado correctamente');
       } catch (err) {
-        console.error('❌ Error inicializando AR:', err);
-        setError(err instanceof Error ? err.message : 'Error desconocido');
+        console.error('❌ Error iniciando cámara:', err);
+        setError(`No se pudo acceder a la cámara: ${err instanceof Error ? err.message : 'Error desconocido'}`);
         setLoading(false);
       }
     };
 
-    initAR();
+    initCamera();
     
     return () => {
-      // Limpiar stream al desmontar
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        console.log('🛑 Stream detenido');
       }
     };
   }, []);
@@ -196,7 +201,8 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         muted
         playsInline
         style={{
-          zIndex: 0
+          zIndex: 1,
+          backgroundColor: '#000'
         }}
         onLoadedMetadata={() => console.log('📹 Video metadata cargado (evento DOM)')}
         onPlay={() => console.log('▶️ Video iniciado (evento DOM)')}
@@ -204,9 +210,17 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         onCanPlay={() => console.log('✅ Video puede reproducirse')}
       />
 
+      {/* Debug: Estado de la cámara */}
+      <div className="absolute top-20 left-4 bg-black/70 text-white p-2 rounded text-xs z-50">
+        <div>Cámara: {cameraActive ? '✅ Activa' : '⏳ Inactiva'}</div>
+        <div>Stream: {streamRef.current ? '✅' : '❌'}</div>
+        <div>Video Ref: {videoRef.current ? '✅' : '❌'}</div>
+        <div>Loading: {loading ? 'Sí' : 'No'}</div>
+      </div>
+
       {/* Indicador de que la cámara no está activa */}
       {!cameraActive && !loading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[90]">
           <div className="text-white text-center">
             <Camera className="h-16 w-16 mx-auto mb-4 animate-pulse" />
             <h3 className="text-xl font-bold mb-2">Activando cámara...</h3>
@@ -216,7 +230,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       )}
 
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-[100] bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center justify-between p-4">
           <div className="text-white">
             <h1 className="text-lg font-bold">{attraction.name}</h1>
@@ -250,7 +264,8 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
             left: 0,
             width: '100%',
             height: '100%',
-            pointerEvents: 'auto'
+            pointerEvents: 'auto',
+            zIndex: 2
           }}
           onPointerDown={handlePlaceScene}
           onCreated={(state) => {
@@ -278,7 +293,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       )}
 
       {/* Instrucciones y controles inferiores */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+      <div className="absolute bottom-0 left-0 right-0 z-[100] bg-gradient-to-t from-black/80 to-transparent p-4">
         <div className="max-w-md mx-auto">
           {/* Indicador de cámara activa */}
           <div className="flex items-center justify-center gap-2 text-white mb-3">
