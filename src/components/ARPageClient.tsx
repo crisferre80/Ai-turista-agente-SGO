@@ -62,52 +62,9 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         console.log('📹 Tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
         streamRef.current = stream;
 
-        // Esperar a que el video ref esté disponible
-        let attempts = 0;
-        const assignStreamToVideo = () => {
-          console.log(`📹 Intento ${attempts + 1} - Video ref disponible:`, !!videoRef.current);
-          
-          if (videoRef.current) {
-            const video = videoRef.current;
-            console.log('📹 Asignando stream a video elemento');
-            video.srcObject = stream;
-            
-            // Reproducir video
-            video.play()
-              .then(() => {
-                console.log('✅ Video reproduciendo');
-                setCameraActive(true);
-                setLoading(false);
-              })
-              .catch(err => {
-                console.error('❌ Error reproduciendo video:', err);
-                // Reintento después de metadata
-                video.onloadedmetadata = () => {
-                  console.log('📹 Metadata cargado, reintentando...');
-                  video.play()
-                    .then(() => {
-                      console.log('✅ Video reproduciendo (segundo intento)');
-                      setCameraActive(true);
-                      setLoading(false);
-                    })
-                    .catch(retryErr => {
-                      console.error('❌ Error en segundo intento:', retryErr);
-                      setLoading(false);
-                    });
-                };
-              });
-          } else if (attempts < 10) {
-            // Reintentar si el ref no está disponible
-            attempts++;
-            setTimeout(assignStreamToVideo, 100);
-          } else {
-            console.error('❌ Video ref no disponible después de 10 intentos');
-            setError('No se pudo inicializar el video. Intenta recargar la página.');
-            setLoading(false);
-          }
-        };
-
-        assignStreamToVideo();
+        // Primero desactivar el loading para que el video se monte en el DOM
+        console.log('📹 Montando elemento video en DOM...');
+        setLoading(false);
 
         // Verificar capacidades WebXR (no bloquea)
         try {
@@ -135,6 +92,44 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       }
     };
   }, []);
+
+  // Efecto separado para asignar el stream al video cuando esté disponible
+  useEffect(() => {
+    if (!streamRef.current || !videoRef.current || cameraActive) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const stream = streamRef.current;
+
+    console.log('📹 Asignando stream a video elemento');
+    video.srcObject = stream;
+    
+    // Reproducir video
+    const playVideo = async () => {
+      try {
+        await video.play();
+        console.log('✅ Video reproduciendo');
+        setCameraActive(true);
+      } catch (err) {
+        console.error('❌ Error reproduciendo video:', err);
+        // Reintento después de metadata
+        video.onloadedmetadata = async () => {
+          console.log('📹 Metadata cargado, reintentando...');
+          try {
+            await video.play();
+            console.log('✅ Video reproduciendo (segundo intento)');
+            setCameraActive(true);
+          } catch (retryErr) {
+            console.error('❌ Error en segundo intento:', retryErr);
+            setError('No se pudo iniciar el video. Intenta recargar la página.');
+          }
+        };
+      }
+    };
+
+    playVideo();
+  }, [loading, cameraActive]);
 
   const handleClose = () => {
     if (streamRef.current) {
