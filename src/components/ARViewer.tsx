@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { X, Loader2, AlertTriangle, Maximize2 } from 'lucide-react';
 import type { ARViewerProps, WebXRCapabilities, ARLoadingState } from '@/types/ar';
-import { detectWebXRCapabilities, meetsARRequirements } from '@/lib/webxr';
+import { detectWebXRCapabilities, meetsARRequirements, isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARScene';
 
 export default function ARViewer({ attraction, onClose, onError }: ARViewerProps) {
@@ -20,11 +20,24 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   });
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPlaced, setIsPlaced] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     initializeAR();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Detener cámara al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    };
   }, []);
 
   const initializeAR = async () => {
@@ -53,7 +66,31 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         );
       }
 
-      setLoadingState({ isLoading: true, progress: 80, currentAsset: 'Cargando escena AR...' });
+      setLoadingState({ isLoading: true, progress: 70, currentAsset: 'Activando cámara...' });
+
+      // Iniciar la cámara para usarla como fondo de la escena
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false,
+          });
+          streamRef.current = stream;
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            // playsInline es importante en iOS para que no abra el reproductor de video
+            await videoRef.current.play().catch(() => {
+              // Ignorar errores de autoplay bloqueado; el usuario verá la imagen cuando interactúe
+            });
+          }
+        } catch (cameraError) {
+          console.warn('No se pudo iniciar la cámara para AR:', cameraError);
+          // No abortamos por completo: permitimos "AR en pantalla" sin fondo de cámara
+        }
+      }
+
+      setLoadingState({ isLoading: true, progress: 90, currentAsset: 'Cargando escena AR...' });
 
       // Simular carga de recursos (modelos, texturas, etc.)
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -87,10 +124,21 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   };
 
   const handleClose = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
     if (isFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
     onClose();
+  };
+
+  // Primer toque en la escena: considerar que el usuario "pegó" la escena al entorno
+  const handleScenePointerDown = () => {
+    if (!isPlaced) {
+      setIsPlaced(true);
+    }
   };
 
   // Renderizar pantalla de carga
@@ -146,7 +194,16 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
 
   // Renderizar escena AR
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 bg-black">
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-black overflow-hidden">
+      {/* Fondo de cámara (si está disponible) */}
+      <video
+        ref={videoRef}
+        className="absolute inset-0 w-full h-full object-cover"
+        autoPlay
+        muted
+        playsInline
+      />
+
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center justify-between p-4">
@@ -178,10 +235,13 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         camera={{ position: [0, 1.6, 3], fov: 75 }}
         gl={{ alpha: true }}
         style={{ background: 'transparent' }}
+        onPointerDown={handleScenePointerDown}
       >
         <ARScene 
           attraction={attraction}
           capabilities={capabilities!}
+          showGrid={!isPlaced}
+          disableOrbitControls={isPlaced && isMobileDevice()}
         />
       </Canvas>
 
@@ -200,6 +260,9 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
           <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 text-white text-sm">
             <p className="font-medium mb-1">Instrucciones:</p>
             <ul className="space-y-1 text-xs text-gray-200">
+              {!isPlaced && (
+                <li>• Toca una vez la escena para colocarla y ocultar la grilla</li>
+              )}
               <li>• Mueve tu dispositivo para explorar en 360°</li>
               <li>• Toca los elementos flotantes para ver más información</li>
               <li>• Usa pellizco para acercar/alejar modelos 3D</li>

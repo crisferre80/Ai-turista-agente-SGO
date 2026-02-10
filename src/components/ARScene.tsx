@@ -20,9 +20,11 @@ import type { AttractionWithAR, WebXRCapabilities, ARHotspot } from '@/types/ar'
 interface ARSceneProps {
   attraction: AttractionWithAR;
   capabilities?: WebXRCapabilities;
+  disableOrbitControls?: boolean;
+  showGrid?: boolean;
 }
 
-export default function ARScene({ attraction }: ARSceneProps) {
+export default function ARScene({ attraction, disableOrbitControls = false, showGrid = true }: ARSceneProps) {
   return (
     <>
       {/* Iluminación */}
@@ -33,14 +35,16 @@ export default function ARScene({ attraction }: ARSceneProps) {
       {/* Cámara */}
       <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
 
-      {/* Controles de cámara (orbitar, zoom) */}
-      <OrbitControls
-        enablePan={true}
-        enableZoom={true}
-        enableRotate={true}
-        maxDistance={10}
-        minDistance={1}
-      />
+      {/* Controles de cámara (orbitar, zoom) - se pueden desactivar en modo AR pegado */}
+      {!disableOrbitControls && (
+        <OrbitControls
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}
+          maxDistance={10}
+          minDistance={1}
+        />
+      )}
 
       {/* Entorno (iluminación ambiente realista) */}
       <Environment preset="city" />
@@ -59,8 +63,10 @@ export default function ARScene({ attraction }: ARSceneProps) {
         </Suspense>
       ))}
 
-      {/* Grid de referencia (opcional) */}
-      <gridHelper args={[10, 10, '#888888', '#444444']} position={[0, 0, 0]} />
+      {/* Grid de referencia (opcional, solo antes de "pegar" la escena) */}
+      {showGrid && (
+        <gridHelper args={[10, 10, '#888888', '#444444']} position={[0, 0, 0]} />
+      )}
     </>
   );
 }
