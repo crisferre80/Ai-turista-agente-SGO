@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import UserReviewsGallery from './UserReviewsGallery';
 import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 import type { ARData } from '@/types/ar';
 
-// Importar componentes AR dinámicamente para evitar problemas de SSR
-const ARViewer = dynamic(() => import('./ARViewer'), { ssr: false });
+// Importar QR Scanner dinámicamente para evitar problemas de SSR
 const QRScanner = dynamic(() => import('./QRScanner'), { ssr: false });
 
 type PlaceSerializable = {
@@ -39,9 +39,9 @@ type Promotion = {
 };
 
 export default function PlaceDetailClient({ place, promotions = [] }: { place: PlaceSerializable; promotions?: Promotion[] }) {
+  const router = useRouter();
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [videoOpen, setVideoOpen] = useState<{ open: boolean; src?: string }>({ open: false });
-  const [arViewerOpen, setArViewerOpen] = useState(false);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a very flexible reference to the map. We'll cast locally when needed.
@@ -249,22 +249,20 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
     };
   }, [place.lat, place.lng, place.name]);
 
-  // Detectar parámetro openAR en la URL y abrir AR automáticamente
+  // Detectar parámetro openAR en la URL y navegar a página AR automáticamente
   useEffect(() => {
     if (typeof window !== 'undefined' && place.has_ar_content) {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('openAR') === 'true') {
-        setArViewerOpen(true);
-        // Limpiar parámetro de la URL sin recargar
-        window.history.replaceState({}, '', window.location.pathname);
+        router.push(`/ar/${place.id}`);
       }
     }
-  }, [place.has_ar_content]);
+  }, [place.has_ar_content, place.id, router]);
 
   // Handlers para AR y QR
   const handleOpenAR = () => {
     if (place.has_ar_content) {
-      setArViewerOpen(true);
+      router.push(`/ar/${place.id}`);
     }
   };
 
@@ -286,8 +284,8 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       if (error) throw error;
 
       if (data) {
-        // Redirigir a la página del atractivo con AR activado
-        window.location.href = `/explorar/${data.id}?openAR=true`;
+        // Redirigir directamente a la página AR
+        router.push(`/ar/${data.id}`);
       } else {
         alert('No se encontró un lugar con este código QR.');
       }
@@ -700,32 +698,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             <button onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
           </div>
         </div>
-      )}
-
-      {/* AR Viewer Modal */}
-      {arViewerOpen && place.has_ar_content && (
-        <ARViewer
-          attraction={{
-            id: place.id,
-            name: place.name,
-            description: place.description,
-            lat: place.lat || 0,
-            lng: place.lng || 0,
-            image_url: place.image_url,
-            ar_model_url: place.ar_model_url,
-            ar_hotspots: place.ar_hotspots,
-            has_ar_content: place.has_ar_content || false,
-            qr_code: place.qr_code,
-            category: place.category,
-            info_extra: place.contact_info,
-          }}
-          onClose={() => setArViewerOpen(false)}
-          onError={(error) => {
-            console.error('Error en AR:', error);
-            setArViewerOpen(false);
-            alert('Error al iniciar Realidad Aumentada. Verifica que tu dispositivo soporte esta funcionalidad.');
-          }}
-        />
       )}
 
       {/* QR Scanner Modal */}
