@@ -362,15 +362,16 @@ export default function ARPreview3D({
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [webglLost, setWebglLost] = useState(false);
+  const orbitRef = useRef<OrbitControlsImpl | null>(null);
+  const modelGroupRef = useRef<THREE.Group | null>(null);
   const [modelPosition, setModelPosition] = useState<{ x: number; y: number; z: number }>({
     x: 0,
     y: 0,
     z: 0,
   });
-  const [showTools, setShowTools] = useState(false);
-  const [canvasReady, setCanvasReady] = useState(false);
-  const [webglLost, setWebglLost] = useState(false);
-  const orbitRef = useRef<OrbitControlsImpl | null>(null);
 
   // Funciones para manejar primitivas
   const addPrimitive = (type: Primitive['type']) => {
@@ -496,7 +497,9 @@ export default function ARPreview3D({
         <Grid />
 
         {/* Modelo 3D (solo si hay URL definida).
-            Ahora puede seleccionarse y moverse con gizmo igual que las primitivas. */}
+            Ahora puede seleccionarse y moverse con gizmo igual que las primitivas.
+            El TransformControls actúa directamente sobre el grupo del modelo
+            y modelPosition solo refleja esa posición en la UI. */}
         {!lightMode && modelUrl && (
           <Suspense
             fallback={
@@ -530,7 +533,7 @@ export default function ARPreview3D({
                 }}
               >
                 <group
-                  position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                  ref={modelGroupRef}
                   onClick={(e) => {
                     e.stopPropagation();
                     setModelSelected(true);
@@ -541,7 +544,7 @@ export default function ARPreview3D({
               </TransformControls>
             ) : (
               <group
-                position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                ref={modelGroupRef}
                 onClick={(e) => {
                   e.stopPropagation();
                   setModelSelected(true);
@@ -1194,6 +1197,11 @@ export default function ARPreview3D({
                         onChange={(e) => {
                           const v = parseFloat(e.target.value) || 0;
                           setModelPosition(prev => ({ ...prev, [axis]: v }));
+                          if (modelGroupRef.current) {
+                            if (axis === 'x') modelGroupRef.current.position.x = v;
+                            if (axis === 'y') modelGroupRef.current.position.y = v;
+                            if (axis === 'z') modelGroupRef.current.position.z = v;
+                          }
                         }}
                         style={{
                           width: '33%',
@@ -1210,7 +1218,12 @@ export default function ARPreview3D({
 
                 <button
                   type="button"
-                  onClick={() => setModelPosition({ x: 0, y: 0, z: 0 })}
+                  onClick={() => {
+                    setModelPosition({ x: 0, y: 0, z: 0 });
+                    if (modelGroupRef.current) {
+                      modelGroupRef.current.position.set(0, 0, 0);
+                    }
+                  }}
                   style={{
                     marginTop: '4px',
                     padding: '4px 8px',
