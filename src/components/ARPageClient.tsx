@@ -40,6 +40,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     const initAR = async () => {
       try {
         console.log('🎥 Iniciando AR...');
+        console.log('📹 Video ref disponible:', !!videoRef.current);
         
         // Primero iniciar la cámara antes de verificar WebXR
         if (navigator.mediaDevices?.getUserMedia) {
@@ -55,19 +56,37 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
             });
             
             console.log('✅ Cámara obtenida:', stream.active);
+            console.log('📹 Tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
             streamRef.current = stream;
 
             if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.onloadedmetadata = () => {
-                console.log('✅ Video metadata cargado');
-                videoRef.current?.play()
-                  .then(() => {
-                    console.log('✅ Video reproduciendo');
-                    setCameraActive(true);
-                  })
-                  .catch(err => console.error('❌ Error reproduciendo video:', err));
+              const video = videoRef.current;
+              console.log('📹 Asignando stream a video elemento');
+              video.srcObject = stream;
+              
+              // Intentar reproducir inmediatamente
+              const playVideo = async () => {
+                try {
+                  await video.play();
+                  console.log('✅ Video reproduciendo');
+                  setCameraActive(true);
+                } catch (playError) {
+                  console.error('❌ Error reproduciendo video:', playError);
+                  // Intentar de nuevo después de que los metadatos se carguen
+                  video.onloadedmetadata = async () => {
+                    try {
+                      console.log('✅ Video metadata cargado, reintentando play');
+                      await video.play();
+                      console.log('✅ Video reproduciendo (segundo intento)');
+                      setCameraActive(true);
+                    } catch (retryError) {
+                      console.error('❌ Error en segundo intento:', retryError);
+                    }
+                  };
+                }
               };
+              
+              playVideo();
             }
           } catch (camError) {
             console.error('❌ Error iniciando cámara:', camError);
@@ -174,16 +193,15 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       <video
         ref={videoRef}
         className="absolute inset-0 w-full h-full object-cover"
-        autoPlay
         muted
         playsInline
         style={{
-          transform: 'scaleX(-1)', // Efecto espejo (opcional)
           zIndex: 0
         }}
-        onLoadedMetadata={() => console.log('📹 Video metadata cargado')}
-        onPlay={() => console.log('▶️ Video iniciado')}
-        onError={(e) => console.error('❌ Error en video:', e)}
+        onLoadedMetadata={() => console.log('📹 Video metadata cargado (evento DOM)')}
+        onPlay={() => console.log('▶️ Video iniciado (evento DOM)')}
+        onError={(e) => console.error('❌ Error en video elemento:', e)}
+        onCanPlay={() => console.log('✅ Video puede reproducirse')}
       />
 
       {/* Indicador de que la cámara no está activa */}
@@ -214,48 +232,50 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         </div>
       </div>
 
-      {/* Canvas 3D con fondo transparente */}
-      <Canvas
-        ref={canvasRef}
-        camera={{ position: [0, 1.6, 3], fov: 75 }}
-        gl={{ 
-          alpha: true,
-          antialias: true,
-          preserveDrawingBuffer: true,
-          powerPreference: 'high-performance',
-          failIfMajorPerformanceCaveat: false
-        }}
-        style={{ 
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'auto'
-        }}
-        onPointerDown={handlePlaceScene}
-        onCreated={(state) => {
-          console.log('✅ Canvas 3D creado, WebGL:', state.gl.capabilities);
-        }}
-      >
-        <ARScene
-          attraction={{
-            id: attraction.id,
-            name: attraction.name,
-            description: attraction.description,
-            lat: attraction.lat || 0,
-            lng: attraction.lng || 0,
-            image_url: attraction.image_url,
-            ar_model_url: attraction.ar_model_url,
-            ar_hotspots: attraction.ar_hotspots,
-            has_ar_content: true,
-            qr_code: attraction.qr_code,
-            category: attraction.category,
+      {/* Canvas 3D con fondo transparente - solo se renderiza cuando la cámara está activa */}
+      {cameraActive && (
+        <Canvas
+          ref={canvasRef}
+          camera={{ position: [0, 1.6, 3], fov: 75 }}
+          gl={{ 
+            alpha: true,
+            antialias: true,
+            preserveDrawingBuffer: true,
+            powerPreference: 'high-performance',
+            failIfMajorPerformanceCaveat: false
+          }}
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'auto'
+          }}
+          onPointerDown={handlePlaceScene}
+          onCreated={(state) => {
+            console.log('✅ Canvas 3D creado, WebGL:', state.gl.capabilities);
+          }}
+        >
+          <ARScene
+            attraction={{
+              id: attraction.id,
+              name: attraction.name,
+              description: attraction.description,
+              lat: attraction.lat || 0,
+              lng: attraction.lng || 0,
+              image_url: attraction.image_url,
+              ar_model_url: attraction.ar_model_url,
+              ar_hotspots: attraction.ar_hotspots,
+              has_ar_content: true,
+              qr_code: attraction.qr_code,
+              category: attraction.category,
           }}
           showGrid={!isPlaced}
           disableOrbitControls={isPlaced && isMobileDevice()}
         />
-      </Canvas>
+        </Canvas>
+      )}
 
       {/* Instrucciones y controles inferiores */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
