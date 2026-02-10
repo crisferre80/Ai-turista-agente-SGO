@@ -139,7 +139,14 @@ function LoadingModel() {
  */
 function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const position = hotspot.position as [number, number, number];
+  const rawPosition = (hotspot as unknown as { position?: unknown }).position;
+  const position: [number, number, number] = Array.isArray(rawPosition)
+    ? (rawPosition as [number, number, number])
+    : [
+        (rawPosition as { x?: number })?.x ?? 0,
+        (rawPosition as { y?: number })?.y ?? 0,
+        (rawPosition as { z?: number })?.z ?? 0,
+      ];
 
   switch (hotspot.type) {
     case 'info':
@@ -171,8 +178,28 @@ function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
         <ModelHotspot
           position={position}
           modelUrl={hotspot.model_url}
-          scale={hotspot.scale || [1, 1, 1]}
-          rotation={hotspot.rotation || [0, 0, 0]}
+          scale={
+            Array.isArray(hotspot.scale)
+              ? hotspot.scale
+              : hotspot.scale
+              ? [
+                  (hotspot.scale as { 0?: number; x?: number }).x ?? (hotspot.scale as unknown as number[])[0] ?? 1,
+                  (hotspot.scale as { 1?: number; y?: number }).y ?? (hotspot.scale as unknown as number[])[1] ?? 1,
+                  (hotspot.scale as { 2?: number; z?: number }).z ?? (hotspot.scale as unknown as number[])[2] ?? 1,
+                ]
+              : [1, 1, 1]
+          }
+          rotation={
+            Array.isArray(hotspot.rotation)
+              ? hotspot.rotation
+              : hotspot.rotation
+              ? [
+                  (hotspot.rotation as { 0?: number; x?: number }).x ?? (hotspot.rotation as unknown as number[])[0] ?? 0,
+                  (hotspot.rotation as { 1?: number; y?: number }).y ?? (hotspot.rotation as unknown as number[])[1] ?? 0,
+                  (hotspot.rotation as { 2?: number; z?: number }).z ?? (hotspot.rotation as unknown as number[])[2] ?? 0,
+                ]
+              : [0, 0, 0]
+          }
         />
       );
 

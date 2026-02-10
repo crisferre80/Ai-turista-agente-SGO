@@ -372,6 +372,22 @@ export default function ARPreview3D({
     y: 0,
     z: 0,
   });
+  const [modelRotation, setModelRotation] = useState<{ x: number; y: number; z: number }>({
+    x: 0,
+    y: 0,
+    z: 0,
+  });
+  const [modelScale, setModelScale] = useState<{ x: number; y: number; z: number }>({
+    x: 1,
+    y: 1,
+    z: 1,
+  });
+
+  const clearSelection = () => {
+    setSelectedPrimitive(null);
+    setSelectedHotspot(null);
+    setModelSelected(false);
+  };
 
   // Funciones para manejar primitivas
   const addPrimitive = (type: Primitive['type']) => {
@@ -426,6 +442,15 @@ export default function ARPreview3D({
     ));
   };
 
+  const updateSelectedPrimitiveRotation = (axis: 'x' | 'y' | 'z', value: number) => {
+    if (!selectedPrimitive) return;
+    setPrimitives(prev => prev.map(p => 
+      p.id === selectedPrimitive
+        ? { ...p, rotation: { ...p.rotation, [axis]: value } }
+        : p
+    ));
+  };
+
   const updateSelectedPrimitiveColor = (color: string) => {
     if (!selectedPrimitive) return;
     setPrimitives(prev => prev.map(p => 
@@ -475,6 +500,7 @@ export default function ARPreview3D({
           setCanvasReady(true);
           console.log('Canvas 3D iniciado correctamente');
         }}
+        onPointerMissed={clearSelection}
         >
         <OrbitControls 
           ref={orbitRef}
@@ -530,6 +556,16 @@ export default function ARPreview3D({
                   if (!obj) return;
                   const { x, y, z } = obj.position;
                   setModelPosition({ x, y, z });
+                  setModelRotation({
+                    x: obj.rotation.x,
+                    y: obj.rotation.y,
+                    z: obj.rotation.z,
+                  });
+                  setModelScale({
+                    x: obj.scale.x,
+                    y: obj.scale.y,
+                    z: obj.scale.z,
+                  });
                 }}
               >
                 <group
@@ -989,7 +1025,7 @@ export default function ARPreview3D({
                           <input
                             key={axis}
                             type="number"
-                            step="0.1"
+                            step="1"
                             value={prim.position[axis].toFixed(2)}
                             onChange={(e) => updateSelectedPrimitivePosition(axis, parseFloat(e.target.value) || 0)}
                             style={{
@@ -1012,7 +1048,7 @@ export default function ARPreview3D({
                           <input
                             key={axis}
                             type="number"
-                            step="0.1"
+                            step="0.5"
                             min={0.1}
                             value={prim.scale[axis].toFixed(2)}
                             onChange={(e) => {
@@ -1029,6 +1065,35 @@ export default function ARPreview3D({
                             }}
                           />
                         ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '6px' }}>
+                      <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación (X, Y, Z)</div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {(['x','y','z'] as const).map(axis => (
+                          <input
+                            key={axis}
+                            type="number"
+                            step="0.1"
+                            value={prim.rotation[axis].toFixed(2)}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value) || 0;
+                              updateSelectedPrimitiveRotation(axis, v);
+                            }}
+                            style={{
+                              width: '33%',
+                              padding: '3px 4px',
+                              borderRadius: '4px',
+                              border: '1px solid #555',
+                              background: '#111',
+                              color: 'white'
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: 2 }}>
+                        Valores en radianes (π ≈ 3.14)
                       </div>
                     </div>
 
@@ -1192,7 +1257,7 @@ export default function ARPreview3D({
                       <input
                         key={axis}
                         type="number"
-                        step="0.1"
+                        step="1"
                         value={modelPosition[axis].toFixed(2)}
                         onChange={(e) => {
                           const v = parseFloat(e.target.value) || 0;
@@ -1213,6 +1278,72 @@ export default function ARPreview3D({
                         }}
                       />
                     ))}
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala modelo (X, Y, Z)</div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['x','y','z'] as const).map(axis => (
+                      <input
+                        key={axis}
+                        type="number"
+                        step="0.1"
+                        min={0.1}
+                        value={modelScale[axis].toFixed(2)}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0.1;
+                          setModelScale(prev => ({ ...prev, [axis]: v }));
+                          if (modelGroupRef.current) {
+                            if (axis === 'x') modelGroupRef.current.scale.x = v;
+                            if (axis === 'y') modelGroupRef.current.scale.y = v;
+                            if (axis === 'z') modelGroupRef.current.scale.z = v;
+                          }
+                        }}
+                        style={{
+                          width: '33%',
+                          padding: '3px 4px',
+                          borderRadius: '4px',
+                          border: '1px solid #555',
+                          background: '#111',
+                          color: 'white'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación modelo (X, Y, Z)</div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['x','y','z'] as const).map(axis => (
+                      <input
+                        key={axis}
+                        type="number"
+                        step="0.1"
+                        value={modelRotation[axis].toFixed(2)}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0;
+                          setModelRotation(prev => ({ ...prev, [axis]: v }));
+                          if (modelGroupRef.current) {
+                            if (axis === 'x') modelGroupRef.current.rotation.x = v;
+                            if (axis === 'y') modelGroupRef.current.rotation.y = v;
+                            if (axis === 'z') modelGroupRef.current.rotation.z = v;
+                          }
+                        }}
+                        style={{
+                          width: '33%',
+                          padding: '3px 4px',
+                          borderRadius: '4px',
+                          border: '1px solid #555',
+                          background: '#111',
+                          color: 'white'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: 2 }}>
+                    Valores en radianes (π ≈ 3.14)
                   </div>
                 </div>
 
@@ -1300,10 +1431,10 @@ export default function ARPreview3D({
                         <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           {(['x','y','z'] as const).map(axis => (
-                            <input
+                              <input
                               key={axis}
                               type="number"
-                              step="0.1"
+                                step="1"
                               value={hs.position[axis].toFixed(2)}
                               onChange={(e) => {
                                 const v = parseFloat(e.target.value) || 0;
