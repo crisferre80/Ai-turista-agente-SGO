@@ -4,7 +4,7 @@
  * Componente para escanear códigos QR y obtener información de atractivos turísticos
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import { X, Camera, Loader2 } from 'lucide-react';
@@ -19,23 +19,7 @@ export default function QRScanner({ onScanSuccess, onScanError, onClose }: QRSca
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const elementIdRef = useRef(`qr-reader-${Date.now()}`);
 
-  const handleScanSuccess = (decodedText: string) => {
-    console.log('QR detectado:', decodedText);
-    
-    // Detener escáner después de escaneo exitoso
-    stopScanning();
-    
-    // Notificar al componente padre
-    onScanSuccess(decodedText);
-  };
-
-  const handleScanFailure = () => {
-    // Este callback se llama cuando no se detecta QR en un frame
-    // No es un error real, solo significa que no hay QR en la vista
-    // No hacer nada aquí para evitar spam de logs
-  };
-
-  const stopScanning = async () => {
+  const stopScanning = useCallback(async () => {
     if (scannerRef.current) {
       try {
         if (scannerRef.current.isScanning) {
@@ -48,9 +32,19 @@ export default function QRScanner({ onScanSuccess, onScanError, onClose }: QRSca
       }
     }
     setIsScanning(false);
-  };
+  }, []);
 
-  const requestCameraPermission = async () => {
+  const handleScanSuccess = useCallback((decodedText: string) => {
+    console.log('QR detectado:', decodedText);
+    
+    // Detener escáner después de escaneo exitoso
+    void stopScanning();
+    
+    // Notificar al componente padre
+    onScanSuccess(decodedText);
+  }, [onScanSuccess, stopScanning]);
+
+  const requestCameraPermission = useCallback(async () => {
     try {
       setIsInitializing(true);
       setError(null);
@@ -91,9 +85,9 @@ export default function QRScanner({ onScanSuccess, onScanError, onClose }: QRSca
         onScanError(errorMessage);
       }
     }
-  };
+  }, [onScanError]);
 
-  const initScanner = async () => {
+  const initScanner = useCallback(async () => {
     try {
       // Esperar un poco para asegurar que el elemento esté en el DOM
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -123,7 +117,8 @@ export default function QRScanner({ onScanSuccess, onScanError, onClose }: QRSca
         { facingMode: 'environment' }, // Cámara trasera
         config,
         handleScanSuccess,
-        handleScanFailure
+        // Callback de fallo por frame: no hacemos nada para evitar spam de logs
+        () => {}
       );
 
       setIsScanning(true);
@@ -140,27 +135,27 @@ export default function QRScanner({ onScanSuccess, onScanError, onClose }: QRSca
         onScanError(errorMessage);
       }
     }
-  };
+  }, [handleScanSuccess, onScanError]);
 
   useEffect(() => {
     setIsMounted(true);
     return () => {
       // Limpiar escáner cuando el componente se desmonta
-      stopScanning();
+      void stopScanning();
     };
-  }, []);
+  }, [stopScanning]);
 
   // Inicializar escáner cuando se otorgan permisos
   useEffect(() => {
     if (hasPermission === true && !scannerRef.current) {
       initScanner();
     }
-  }, [hasPermission]);
+  }, [hasPermission, initScanner]);
 
-  const handleClose = async () => {
+  const handleClose = useCallback(async () => {
     await stopScanning();
     onClose();
-  };
+  }, [onClose, stopScanning]);
 
   if (!isMounted) {
     return null; // No renderizar en el servidor

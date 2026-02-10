@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Sphere } from '@react-three/drei';
+import { OrbitControls, Text, Box, Sphere, TransformControls } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move } from 'lucide-react';
 
@@ -279,6 +280,7 @@ export default function ARPreview3D({
   const [showTools, setShowTools] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
+  const orbitRef = useRef<OrbitControlsImpl | null>(null);
 
   // Funciones para manejar primitivas
   const addPrimitive = (type: Primitive['type']) => {
@@ -342,17 +344,27 @@ export default function ARPreview3D({
     ));
   };
 
+  const updatePrimitivePosition = (id: string, position: { x: number; y: number; z: number }) => {
+    setPrimitives(prev => prev.map(p => 
+      p.id === id
+        ? { ...p, position }
+        : p
+    ));
+  };
+
   return (
-    <div style={{ 
-      width: '100%', 
-      height: '500px', 
-      background: '#1a1a1a',
-      borderRadius: '10px',
-      overflow: 'hidden',
-      position: 'relative',
-      border: '1px solid #333'
-    }}>
-      <Canvas
+    <div style={{ width: '100%' }}>
+      {/* Contenedor del visor 3D */}
+      <div style={{ 
+        width: '100%', 
+        height: '500px', 
+        background: '#1a1a1a',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        position: 'relative',
+        border: '1px solid #333'
+      }}>
+        <Canvas
         frameloop="demand"
         dpr={[1, 1.5]}
         camera={{ position: [6, 4, 6], fov: 60 }}
@@ -372,8 +384,9 @@ export default function ARPreview3D({
           setCanvasReady(true);
           console.log('Canvas 3D iniciado correctamente');
         }}
-      >
+        >
         <OrbitControls 
+          ref={orbitRef}
           enableDamping
           dampingFactor={0.05}
           minDistance={2}
@@ -413,15 +426,52 @@ export default function ARPreview3D({
           </Suspense>
         )}
 
-        {/* Primitivas personalizadas */}
-        {primitives.map((primitive) => (
-          <PrimitiveObject
-            key={primitive.id}
-            primitive={primitive}
-            isSelected={selectedPrimitive === primitive.id}
-            onClick={() => setSelectedPrimitive(primitive.id)}
-          />
-        ))}
+        {/* Primitivas personalizadas con gizmo para la seleccionada */}
+        {primitives.map((primitive) => {
+          const isSelected = selectedPrimitive === primitive.id;
+
+          if (isSelected) {
+            return (
+              <TransformControls
+                key={primitive.id}
+                mode="translate"
+                size={0.8}
+                onMouseDown={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = false;
+                  }
+                }}
+                onMouseUp={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = true;
+                  }
+                }}
+                onObjectChange={(event) => {
+                  const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
+                  const obj = target?.object;
+                  if (!obj) return;
+                  const { x, y, z } = obj.position;
+                  updatePrimitivePosition(primitive.id, { x, y, z });
+                }}
+              >
+                <PrimitiveObject
+                  primitive={primitive}
+                  isSelected
+                  onClick={() => setSelectedPrimitive(primitive.id)}
+                />
+              </TransformControls>
+            );
+          }
+
+          return (
+            <PrimitiveObject
+              key={primitive.id}
+              primitive={primitive}
+              isSelected={false}
+              onClick={() => setSelectedPrimitive(primitive.id)}
+            />
+          );
+        })}
 
         {/* Hotspots */}
         {hotspots.map((hotspot) => (
@@ -432,87 +482,174 @@ export default function ARPreview3D({
             onSelect={() => setSelectedHotspot(hotspot.id)}
           />
         ))}
-      </Canvas>
+        </Canvas>
 
-      {/* Indicador de carga del Canvas */}
-      {!canvasReady && !webglLost && (
+        {/* Indicador de carga del Canvas */}
+        {!canvasReady && !webglLost && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0,0,0,0.8)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>🔄</div>
+            <div>Iniciando visor 3D...</div>
+          </div>
+        )}
+
+        {/* Mensaje si se pierde el contexto WebGL */}
+        {webglLost && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0,0,0,0.9)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '10px',
+            textAlign: 'center',
+            maxWidth: '280px'
+          }}>
+            <div style={{ fontSize: '1.6rem', marginBottom: '10px' }}>⚠️</div>
+            <div style={{ fontSize: '0.9rem', marginBottom: '6px' }}>
+              El navegador perdió el contexto 3D (WebGL).
+            </div>
+            <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+              Cierra otras pestañas con gráficos 3D y recarga esta página.
+            </div>
+          </div>
+        )}
+
+        {/* Controles e información */}
         <div style={{
           position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
+          top: 10,
+          left: 10,
           background: 'rgba(0,0,0,0.8)',
           color: 'white',
-          padding: '20px',
-          borderRadius: '10px',
-          textAlign: 'center'
+          padding: '10px',
+          borderRadius: '8px',
+          fontSize: '0.8rem',
+          maxWidth: '250px',
+          border: '1px solid rgba(0, 255, 0, 0.3)'
         }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>🔄</div>
-          <div>Iniciando visor 3D...</div>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            🎮 Controles
+            <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: canvasReady ? '#00ff00' : '#ff9800', borderRadius: '4px', color: '#000' }}>
+              {canvasReady ? '✓' : '...'}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.7rem', lineHeight: '1.5' }}>
+            • <strong>Rotar:</strong> Click izq + arrastrar<br/>
+            • <strong>Zoom:</strong> Rueda del mouse<br/>
+            • <strong>Mover:</strong> Click der + arrastrar<br/>
+            • <strong>Seleccionar:</strong> Click en objeto
+          </div>
         </div>
-      )}
 
-      {/* Mensaje si se pierde el contexto WebGL */}
-      {webglLost && (
+        {/* Leyenda de colores */}
         <div style={{
           position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          background: 'rgba(0,0,0,0.9)',
+          top: 10,
+          right: 10,
+          background: 'rgba(0,0,0,0.7)',
           color: 'white',
-          padding: '20px',
-          borderRadius: '10px',
-          textAlign: 'center',
-          maxWidth: '280px'
+          padding: '10px',
+          borderRadius: '8px',
+          fontSize: '0.75rem'
         }}>
-          <div style={{ fontSize: '1.6rem', marginBottom: '10px' }}>⚠️</div>
-          <div style={{ fontSize: '0.9rem', marginBottom: '6px' }}>
-            El navegador perdió el contexto 3D (WebGL).
+          <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+            Tipos de Hotspot
           </div>
-          <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
-            Cierra otras pestañas con gráficos 3D y recarga esta página.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#4CAF50' }} />
+            <span>Información</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#2196F3' }} />
+            <span>Imagen</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#FF9800' }} />
+            <span>Video</span>
           </div>
         </div>
-      )}
 
-      {/* Controles e información */}
-      <div style={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        background: 'rgba(0,0,0,0.8)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        fontSize: '0.8rem',
-        maxWidth: '250px',
-        border: '1px solid rgba(0, 255, 0, 0.3)'
-      }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          🎮 Controles
-          <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: canvasReady ? '#00ff00' : '#ff9800', borderRadius: '4px', color: '#000' }}>
-            {canvasReady ? '✓' : '...'}
-          </span>
-        </div>
-        <div style={{ fontSize: '0.7rem', lineHeight: '1.5' }}>
-          • <strong>Rotar:</strong> Click izq + arrastrar<br/>
-          • <strong>Zoom:</strong> Rueda del mouse<br/>
-          • <strong>Mover:</strong> Click der + arrastrar<br/>
-          • <strong>Seleccionar:</strong> Click en objeto
-        </div>
+        {/* Info del hotspot seleccionado */}
+        {selectedHotspot && (
+          <div style={{
+            position: 'absolute',
+            bottom: 10,
+            left: 10,
+            right: 10,
+            background: 'rgba(0,0,0,0.8)',
+            color: 'white',
+            padding: '12px',
+            borderRadius: '8px',
+            fontSize: '0.85rem'
+          }}>
+            {(() => {
+              const hotspot = hotspots.find(h => h.id === selectedHotspot);
+              if (!hotspot) return null;
+              return (
+                <>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                    {hotspot.title}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', marginBottom: '6px', opacity: 0.8 }}>
+                    {hotspot.description}
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '12px', 
+                    fontSize: '0.7rem',
+                    fontFamily: 'monospace',
+                    background: 'rgba(255,255,255,0.1)',
+                    padding: '6px',
+                    borderRadius: '4px'
+                  }}>
+                    <span>X: {hotspot.position.x.toFixed(2)}</span>
+                    <span>Y: {hotspot.position.y.toFixed(2)}</span>
+                    <span>Z: {hotspot.position.z.toFixed(2)}</span>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {!modelUrl && !lightMode && primitives.length === 0 && hotspots.length === 0 && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0,0,0,0.8)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📦</div>
+            <div>Agrega un modelo 3D para ver la vista previa</div>
+          </div>
+        )}
       </div>
 
-      {/* Panel de Herramientas de Edición */}
+      {/* Panel de Herramientas de Edición debajo del visor */}
       <div style={{
-        position: 'absolute',
-        bottom: 10,
-        right: 10,
-        background: 'rgba(0,0,0,0.8)',
+        marginTop: '12px',
+        background: '#111',
         color: 'white',
         padding: '12px',
         borderRadius: '8px',
-        minWidth: '200px'
+        border: '1px solid #333'
       }}>
         <button
           onClick={() => setShowTools(!showTools)}
@@ -923,94 +1060,6 @@ export default function ARPreview3D({
           </div>
         )}
       </div>
-
-      {/* Leyenda de colores */}
-      <div style={{
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        background: 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        fontSize: '0.75rem'
-      }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
-          Tipos de Hotspot
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#4CAF50' }} />
-          <span>Información</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#2196F3' }} />
-          <span>Imagen</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#FF9800' }} />
-          <span>Video</span>
-        </div>
-      </div>
-
-      {/* Info del hotspot seleccionado */}
-      {selectedHotspot && (
-        <div style={{
-          position: 'absolute',
-          bottom: 10,
-          left: 10,
-          right: 10,
-          background: 'rgba(0,0,0,0.8)',
-          color: 'white',
-          padding: '12px',
-          borderRadius: '8px',
-          fontSize: '0.85rem'
-        }}>
-          {(() => {
-            const hotspot = hotspots.find(h => h.id === selectedHotspot);
-            if (!hotspot) return null;
-            return (
-              <>
-                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                  {hotspot.title}
-                </div>
-                <div style={{ fontSize: '0.75rem', marginBottom: '6px', opacity: 0.8 }}>
-                  {hotspot.description}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '12px', 
-                  fontSize: '0.7rem',
-                  fontFamily: 'monospace',
-                  background: 'rgba(255,255,255,0.1)',
-                  padding: '6px',
-                  borderRadius: '4px'
-                }}>
-                  <span>X: {hotspot.position.x.toFixed(2)}</span>
-                  <span>Y: {hotspot.position.y.toFixed(2)}</span>
-                  <span>Z: {hotspot.position.z.toFixed(2)}</span>
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
-
-      {!modelUrl && !lightMode && primitives.length === 0 && hotspots.length === 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          background: 'rgba(0,0,0,0.8)',
-          color: 'white',
-          padding: '20px',
-          borderRadius: '10px',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📦</div>
-          <div>Agrega un modelo 3D para ver la vista previa</div>
-        </div>
-      )}
     </div>
   );
 }
