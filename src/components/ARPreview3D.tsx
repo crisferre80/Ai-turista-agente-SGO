@@ -361,6 +361,12 @@ export default function ARPreview3D({
   const [primitives, setPrimitives] = useState<Primitive[]>([]);
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
+  const [modelSelected, setModelSelected] = useState(false);
+  const [modelPosition, setModelPosition] = useState<{ x: number; y: number; z: number }>({
+    x: 0,
+    y: 0,
+    z: 0,
+  });
   const [showTools, setShowTools] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
@@ -490,8 +496,7 @@ export default function ARPreview3D({
         <Grid />
 
         {/* Modelo 3D (solo si hay URL definida).
-            Eliminamos el cubo azul fijo para que todo lo editable
-            se maneje como primitivas u otros objetos controlados. */}
+            Ahora puede seleccionarse y moverse con gizmo igual que las primitivas. */}
         {!lightMode && modelUrl && (
           <Suspense
             fallback={
@@ -501,7 +506,50 @@ export default function ARPreview3D({
               </mesh>
             }
           >
-            <Model url={modelUrl} />
+            {modelSelected ? (
+              <TransformControls
+                mode="translate"
+                size={1.3}
+                space="world"
+                onMouseDown={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = false;
+                  }
+                }}
+                onMouseUp={() => {
+                  if (orbitRef.current) {
+                    orbitRef.current.enabled = true;
+                  }
+                }}
+                onObjectChange={(event) => {
+                  const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
+                  const obj = target?.object;
+                  if (!obj) return;
+                  const { x, y, z } = obj.position;
+                  setModelPosition({ x, y, z });
+                }}
+              >
+                <group
+                  position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModelSelected(true);
+                  }}
+                >
+                  <Model url={modelUrl} />
+                </group>
+              </TransformControls>
+            ) : (
+              <group
+                position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModelSelected(true);
+                }}
+              >
+                <Model url={modelUrl} />
+              </group>
+            )}
           </Suspense>
         )}
 
@@ -1109,6 +1157,75 @@ export default function ARPreview3D({
                 </div>
               )}
             </div>
+
+            {/* Modelo 3D */}
+            {!lightMode && modelUrl && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{
+                  fontWeight: 'bold',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.85rem'
+                }}>
+                  Modelo 3D
+                </div>
+                <div style={{ fontSize: '0.7rem', marginBottom: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="checkbox"
+                      checked={modelSelected}
+                      onChange={(e) => setModelSelected(e.target.checked)}
+                    />
+                    Habilitar gizmo para mover el modelo
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición modelo (X, Y, Z)</div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['x','y','z'] as const).map(axis => (
+                      <input
+                        key={axis}
+                        type="number"
+                        step="0.1"
+                        value={modelPosition[axis].toFixed(2)}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0;
+                          setModelPosition(prev => ({ ...prev, [axis]: v }));
+                        }}
+                        style={{
+                          width: '33%',
+                          padding: '3px 4px',
+                          borderRadius: '4px',
+                          border: '1px solid #555',
+                          background: '#111',
+                          color: 'white'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setModelPosition({ x: 0, y: 0, z: 0 })}
+                  style={{
+                    marginTop: '4px',
+                    padding: '4px 8px',
+                    background: '#374151',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '0.7rem'
+                  }}
+                >
+                  Resetear al centro
+                </button>
+              </div>
+            )}
 
             {/* Hotspots */}
             <div style={{ marginBottom: '16px' }}>
