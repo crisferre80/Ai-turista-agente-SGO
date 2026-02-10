@@ -1,9 +1,8 @@
 'use client';
 
 import { useRef, useState, useEffect, Suspense } from 'react';
-import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Sphere, TransformControls, Html } from '@react-three/drei';
+import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move } from 'lucide-react';
@@ -176,79 +175,88 @@ function HotspotMarker({
   );
 }
 
-// Pequeño "billboard" para mostrar imagen/vídeo asociado a un hotspot en la vista previa
-function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
-  if (!hotspot.content_url) return null;
-
-  const isImage = hotspot.type === 'image';
-  const isVideo = hotspot.type === 'video';
-  if (!isImage && !isVideo) return null;
+// Billboard 3D para mostrar imagen asociada a un hotspot con perspectiva real
+function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
+  const texture = useTexture(hotspot.content_url || '');
 
   // Elevamos un poco el contenido sobre el marcador
   const yOffset = 0.8;
 
   return (
-    <Html
-      position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}
-      distanceFactor={8}
-      style={{ pointerEvents: 'none' }}
-    >
-      <div
-        style={{
-          background: 'rgba(0,0,0,0.75)',
-          borderRadius: 8,
-          padding: 6,
-          border: '1px solid rgba(255,255,255,0.2)',
-          maxWidth: 160,
-        }}
+    <group position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}>
+      {/* Fondo ligeramente más grande para hacer de marco */}
+      <mesh position={[0, 0, -0.001]}>
+        <planeGeometry args={[1.7, 0.9]} />
+        <meshBasicMaterial color="black" opacity={0.7} transparent />
+      </mesh>
+      <mesh>
+        <planeGeometry args={[1.6, 0.8]} />
+        <meshBasicMaterial map={texture} toneMapped={false} />
+      </mesh>
+      <Text
+        position={[0, -0.55, 0]}
+        fontSize={0.12}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor="#000000"
       >
-        {isImage ? (
-          <Image
-            src={hotspot.content_url}
-            alt={hotspot.title}
-            width={160}
-            height={80}
-            style={{
-              width: '100%',
-              height: 80,
-              objectFit: 'cover',
-              borderRadius: 6,
-              display: 'block',
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: 60,
-              borderRadius: 6,
-              background:
-                'linear-gradient(135deg, rgba(33,150,243,0.6), rgba(156,39,176,0.6))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: 32,
-            }}
-          >
-            🎬
-          </div>
-        )}
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 11,
-            color: '#f3f4f6',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {hotspot.title}
-        </div>
-      </div>
-    </Html>
+        {hotspot.title}
+      </Text>
+    </group>
   );
+}
+
+// Billboard 3D simple para vídeos (placeholder)
+function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
+  const yOffset = 0.8;
+
+  return (
+    <group position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}>
+      <mesh>
+        <planeGeometry args={[1.6, 0.8]} />
+        <meshBasicMaterial color="#7c3aed" opacity={0.9} transparent />
+      </mesh>
+      <Text
+        position={[0, 0, 0.01]}
+        fontSize={0.4}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.03}
+        outlineColor="#000000"
+      >
+        🎬
+      </Text>
+      <Text
+        position={[0, -0.55, 0]}
+        fontSize={0.12}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor="#000000"
+      >
+        {hotspot.title}
+      </Text>
+    </group>
+  );
+}
+
+// Selector de billboard según tipo de hotspot
+function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
+  if (!hotspot.content_url) return null;
+
+  if (hotspot.type === 'image') {
+    return <HotspotImageBillboard hotspot={hotspot} />;
+  }
+
+  if (hotspot.type === 'video') {
+    return <HotspotVideoBillboard hotspot={hotspot} />;
+  }
+
+  return null;
 }
 
 function Grid() {
@@ -1104,6 +1112,95 @@ export default function ARPreview3D({
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Hotspots */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{
+                fontWeight: 'bold',
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.85rem'
+              }}>
+                Hotspots
+              </div>
+
+              {hotspots.length === 0 ? (
+                <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                  Aún no hay hotspots configurados.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
+                    {hotspots.map((hotspot) => (
+                      <div
+                        key={hotspot.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '4px',
+                          background: selectedHotspot === hotspot.id ? 'rgba(102, 126, 234, 0.3)' : 'transparent',
+                          borderRadius: '4px',
+                          marginBottom: '2px'
+                        }}
+                      >
+                        <span
+                          onClick={() => setSelectedHotspot(hotspot.id)}
+                          style={{ cursor: 'pointer', flex: 1 }}
+                        >
+                          {hotspot.title || '(sin título)'}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
+                          {hotspot.type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedHotspot && (() => {
+                    const hs = hotspots.find(h => h.id === selectedHotspot);
+                    if (!hs) return null;
+
+                    return (
+                      <div style={{
+                        marginTop: '10px',
+                        paddingTop: '8px',
+                        borderTop: '1px solid rgba(255,255,255,0.1)',
+                        fontSize: '0.7rem'
+                      }}>
+                        <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {(['x','y','z'] as const).map(axis => (
+                            <input
+                              key={axis}
+                              type="number"
+                              step="0.1"
+                              value={hs.position[axis].toFixed(2)}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value) || 0;
+                                if (!onHotspotPositionChange) return;
+                                const newPos = { ...hs.position, [axis]: v };
+                                onHotspotPositionChange(hs.id, newPos);
+                              }}
+                              style={{
+                                width: '33%',
+                                padding: '3px 4px',
+                                borderRadius: '4px',
+                                border: '1px solid #555',
+                                background: '#111',
+                                color: 'white'
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
 
