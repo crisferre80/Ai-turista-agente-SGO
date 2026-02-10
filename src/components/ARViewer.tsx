@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
 import { X, Loader2, AlertTriangle, Maximize2 } from 'lucide-react';
 import type { ARViewerProps, WebXRCapabilities, ARLoadingState } from '@/types/ar';
@@ -20,6 +21,8 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   });
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [canPortal, setCanPortal] = useState(false);
   const [isPlaced, setIsPlaced] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -28,6 +31,11 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   useEffect(() => {
     initializeAR();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Habilitar portal una vez montado en cliente
+  useEffect(() => {
+    setCanPortal(true);
   }, []);
 
   // Detener cámara al desmontar el componente
@@ -86,6 +94,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
           }
         } catch (cameraError) {
           console.warn('No se pudo iniciar la cámara para AR:', cameraError);
+          setCameraError('No se pudo acceder a la cámara. Revisa los permisos del navegador.');
           // No abortamos por completo: permitimos "AR en pantalla" sin fondo de cámara
         }
       }
@@ -192,8 +201,8 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
     );
   }
 
-  // Renderizar escena AR
-  return (
+  // Contenido principal de la escena AR
+  const content = (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-black overflow-hidden">
       {/* Fondo de cámara (si está disponible) */}
       <video
@@ -268,8 +277,21 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
               <li>• Usa pellizco para acercar/alejar modelos 3D</li>
             </ul>
           </div>
+
+          {cameraError && (
+            <div className="mt-3 bg-red-500/80 text-white text-xs rounded-md px-3 py-2">
+              {cameraError}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+
+  // Renderizar escena AR (en portal a <body> para asegurar overlay global)
+  if (canPortal && typeof document !== 'undefined') {
+    return createPortal(content, document.body);
+  }
+
+  return content;
 }
