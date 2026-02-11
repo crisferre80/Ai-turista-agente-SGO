@@ -54,6 +54,17 @@ export default function ARConfigPage() {
   const [primitives, setPrimitives] = useState<Primitive[]>([]);
   const [lightMode, setLightMode] = useState(false);
   const [qrCode, setQrCode] = useState('');
+  
+  // Estado para transformaciones del modelo 3D
+  const [modelTransform, setModelTransform] = useState<{
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  }>({
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 }
+  });
 
   useEffect(() => {
     loadAttractions();
@@ -65,10 +76,25 @@ export default function ARConfigPage() {
       setModelUrl(selectedAttraction.ar_model_url || '');
       setQrCode(selectedAttraction.qr_code || `AR_${selectedAttraction.id}`);
       
-      const savedHotspots = selectedAttraction.ar_hotspots?.hotspots || [];
-      const savedPrimitives = (selectedAttraction.ar_hotspots as { primitives?: Primitive[] } | undefined)?.primitives || [];
+      const arData = selectedAttraction.ar_hotspots as any;
+      const savedHotspots = arData?.hotspots || [];
+      const savedPrimitives = arData?.primitives || [];
+      const savedModelTransform = arData?.modelTransform;
+      
       setHotspots(savedHotspots);
       setPrimitives(savedPrimitives);
+      
+      // Cargar transformaciones del modelo si existen
+      if (savedModelTransform) {
+        setModelTransform(savedModelTransform);
+      } else {
+        // Resetear a valores por defecto
+        setModelTransform({
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 }
+        });
+      }
     }
   }, [selectedAttraction]);
 
@@ -189,6 +215,7 @@ export default function ARConfigPage() {
       const arData = {
         hotspots,
         primitives,
+        modelTransform
       };
 
       const { error } = await supabase
@@ -236,168 +263,565 @@ export default function ARConfigPage() {
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '20px' }}>
-          {/* Lista de Atractivos */}
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr 360px', gap: '20px', height: 'calc(100vh - 180px)' }}>
+          {/* Columna Izquierda: Selector y Configuración Básica */}
           <div style={{
-            background: 'white',
-            borderRadius: '16px',
-            padding: '20px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-            maxHeight: 'calc(100vh - 180px)',
-            overflowY: 'auto'
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
           }}>
-            <h2 style={{ margin: '0 0 16px', fontSize: '1.25rem', color: '#1A3A6C' }}>
-              Atractivos
-            </h2>
-
-            {loading ? (
-              <p style={{ textAlign: 'center', color: '#666' }}>Cargando...</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {attractions.map(attraction => (
+            {/* Selector de Atractivos Compacto */}
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              maxHeight: '200px'
+            }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
+                📍 Atractivo Actual
+              </h3>
+              
+              {selectedAttraction ? (
+                <div style={{
+                  padding: '12px',
+                  background: '#f0f7ff',
+                  borderRadius: '8px',
+                  border: '1px solid #667eea'
+                }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#1A3A6C', marginBottom: '4px' }}>
+                    {selectedAttraction.name}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '8px' }}>
+                    {selectedAttraction.category || 'Sin categoría'}
+                  </div>
                   <button
-                    key={attraction.id}
-                    onClick={() => setSelectedAttraction(attraction)}
+                    onClick={() => setSelectedAttraction(null)}
                     style={{
-                      background: selectedAttraction?.id === attraction.id ? '#667eea' : '#f8f9fa',
-                      color: selectedAttraction?.id === attraction.id ? 'white' : '#333',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
+                      background: 'transparent',
+                      border: '1px solid #667eea',
+                      color: '#667eea',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer'
                     }}
                   >
-                    {attraction.has_ar_content ? (
-                      <Eye size={16} style={{ color: selectedAttraction?.id === attraction.id ? 'white' : '#4CAF50' }} />
-                    ) : (
-                      <EyeOff size={16} style={{ color: selectedAttraction?.id === attraction.id ? 'white' : '#999' }} />
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>
-                        {attraction.name}
-                      </div>
-                      <div style={{ 
-                        fontSize: '0.75rem', 
-                        opacity: 0.8,
-                        marginTop: '2px'
-                      }}>
-                        {attraction.category || 'Sin categoría'}
-                      </div>
-                    </div>
-                    {attraction.has_ar_content && (
-                      <Box size={16} />
-                    )}
+                    Cambiar Atractivo
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ) : (
+                <select
+                  onChange={(e) => {
+                    const attraction = attractions.find(a => a.id === e.target.value);
+                    setSelectedAttraction(attraction || null);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  <option value="">Seleccionar atractivo...</option>
+                  {attractions.map(attraction => (
+                    <option key={attraction.id} value={attraction.id}>
+                      {attraction.name} {attraction.has_ar_content ? '(AR)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
-          {/* Panel de Configuración */}
-          <div style={{
-            background: 'white',
-            borderRadius: '16px',
-            padding: '24px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-            maxHeight: 'calc(100vh - 180px)',
-            overflowY: 'auto'
-          }}>
-            {!selectedAttraction ? (
-              <div style={{ 
-                textAlign: 'center', 
-                padding: '60px 20px',
-                color: '#999'
+            {/* Configuración Básica */}
+            {selectedAttraction && (
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '16px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                flex: 1,
+                overflowY: 'auto'
               }}>
-                <Box size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
-                  Selecciona un atractivo
-                </h3>
-                <p style={{ margin: '8px 0 0' }}>
-                  Elige un lugar de la lista para configurar su contenido AR
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Header del atractivo seleccionado */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '24px',
-                  paddingBottom: '16px',
-                  borderBottom: '2px solid #f0f0f0'
+                  alignItems: 'center',
+                  marginBottom: '16px'
                 }}>
-                  <div style={{ flex: 1 }}>
-                    <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1A3A6C' }}>
-                      {selectedAttraction.name}
-                    </h2>
-                    <p style={{ margin: '4px 0 0', color: '#666', fontSize: '0.9rem' }}>
-                      {selectedAttraction.description}
-                    </p>
-                  </div>
-                  
+                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                    ⚙️ Configuración
+                  </h3>
                   <button
                     onClick={() => setArEnabled(!arEnabled)}
                     style={{
                       background: arEnabled ? '#4CAF50' : '#999',
                       color: 'white',
                       border: 'none',
-                      padding: '10px 20px',
-                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
                       cursor: 'pointer',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s'
+                      fontSize: '0.8rem',
+                      fontWeight: '600'
                     }}
                   >
-                    {arEnabled ? <Eye size={18} /> : <EyeOff size={18} />}
-                    {arEnabled ? 'AR Activo' : 'AR Inactivo'}
+                    {arEnabled ? 'AR ON' : 'AR OFF'}
                   </button>
                 </div>
 
                 {arEnabled && (
-                  <>
-                    {/* Modelo 3D */}
-                    <div style={{ marginBottom: '24px' }}>
-                      <h3 style={{ 
-                        margin: '0 0 12px', 
-                        fontSize: '1.1rem',
-                        color: '#1A3A6C',
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* URL del modelo */}
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>
+                        Modelo 3D
+                      </label>
+                      <input
+                        type="text"
+                        value={modelUrl}
+                        onChange={(e) => setModelUrl(e.target.value)}
+                        placeholder="URL del modelo .glb/.gltf"
+                        style={{
+                          width: '100%',
+                          padding: '6px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem'
+                        }}
+                      />
+                    </div>
+
+                    {/* Modo ligero */}
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={lightMode}
+                        onChange={(e) => setLightMode(e.target.checked)}
+                      />
+                      Modo ligero (sin modelo)
+                    </label>
+
+                    {/* QR Code */}
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>
+                        ID QR
+                      </label>
+                      <input
+                        type="text"
+                        value={qrCode}
+                        onChange={(e) => setQrCode(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '6px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem'
+                        }}
+                      />
+                    </div>
+
+                    {/* Botón guardar */}
+                    <button
+                      onClick={saveARConfiguration}
+                      disabled={saving}
+                      style={{
+                        background: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        cursor: saving ? 'not-allowed' : 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '600',
+                        marginTop: '8px',
+                        opacity: saving ? 0.6 : 1
+                      }}
+                    >
+                      {saving ? 'Guardando...' : 'Guardar'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Columna Central: Canvas 3D */}
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0
+          }}>
+            {!selectedAttraction ? (
+              <div style={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: '#999'
+              }}>
+                <Box size={64} style={{ margin: '0 0 16px', opacity: 0.3 }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
+                  Selecciona un atractivo
+                </h3>
+                <p style={{ margin: '8px 0 0', textAlign: 'center' }}>
+                  Elige un lugar para configurar su contenido AR
+                </p>
+              </div>
+            ) : arEnabled && (modelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) ? (
+              <>
+                <h3 style={{ 
+                  margin: '0 0 16px', 
+                  fontSize: '1.1rem',
+                  color: '#1A3A6C',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  👁️ Vista Previa 3D
+                </h3>
+                
+                <div style={{ 
+                  flex: 1,
+                  minHeight: '400px',
+                  background: '#f8f9fa',
+                  borderRadius: '8px',
+                  position: 'relative'
+                }}>
+                  <ARPreview3D
+                    modelUrl={modelUrl || undefined}
+                    lightMode={lightMode}
+                    hotspots={hotspots}
+                    primitives={primitives}
+                    onHotspotPositionChange={(id, position) => {
+                      setHotspots(prev => prev.map(h => 
+                        h.id === id ? { ...h, position } : h
+                      ));
+                    }}
+                    onHotspotScaleChange={(id, scale) => {
+                      setHotspots(prev => prev.map(h => 
+                        h.id === id ? { ...h, scale } : h
+                      ));
+                    }}
+                    onHotspotRotationChange={(id, rotation) => {
+                      setHotspots(prev => prev.map(h => 
+                        h.id === id ? { ...h, rotation } : h
+                      ));
+                    }}
+                    onModelTransformChange={(transform) => {
+                      console.log('Actualizando transformación del modelo:', transform);
+                      setModelTransform(transform);
+                    }}
+                    onPrimitivesChange={setPrimitives}
+                  />
+                </div>
+                
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px',
+                  background: '#e3f2fd',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  color: '#1976d2'
+                }}>
+                  <strong>💡 Consejo:</strong> Usa los controles para rotar y hacer zoom. 
+                  Los puntos representan tus hotspots.
+                </div>
+              </>
+            ) : (
+              <div style={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: '#999'
+              }}>
+                <Box size={48} style={{ margin: '0 0 16px', opacity: 0.3 }} />
+                <h4 style={{ margin: 0, fontSize: '1rem' }}>
+                  Canvas vacío
+                </h4>
+                <p style={{ margin: '8px 0 0', textAlign: 'center', fontSize: '0.9rem' }}>
+                  Habilita AR y agrega un modelo o hotspots
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Columna Derecha: Herramientas y Controles */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {selectedAttraction && arEnabled && (
+              <>
+                {/* Herramientas de Hotspots */}
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  maxHeight: '400px',
+                  overflowY: 'auto'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '12px'
+                  }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                      📍 Hotspots ({hotspots.length})
+                    </h3>
+                    <button
+                      onClick={addHotspot}
+                      style={{
+                        background: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px'
-                      }}>
-                        <Box size={20} />
-                        Modelo 3D
-                      </h3>
+                        gap: '4px'
+                      }}
+                    >
+                      <Plus size={14} />
+                      Agregar
+                    </button>
+                  </div>
 
+                  {hotspots.map(hotspot => (
+                    <div key={hotspot.id} style={{
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginBottom: '8px',
+                      background: '#fafafa'
+                    }}>
                       <div style={{
-                        background: '#f8f9fa',
-                        padding: '16px',
-                        borderRadius: '10px'
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '8px'
                       }}>
-                        <label style={{ 
-                          display: 'block', 
-                          marginBottom: '8px',
-                          fontWeight: '500',
-                          fontSize: '0.9rem'
-                        }}>
-                          URL del Modelo (.glb, .gltf)
-                        </label>
                         <input
                           type="text"
-                          value={modelUrl}
-                          onChange={(e) => setModelUrl(e.target.value)}
-                          placeholder="https://example.com/model.glb"
+                          value={hotspot.title}
+                          onChange={(e) => updateHotspot(hotspot.id, { title: e.target.value })}
+                          placeholder="Título del hotspot"
                           style={{
-                            width: '100%',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            fontSize: '0.85rem',
+                            flex: 1,
+                            marginRight: '8px'
+                          }}
+                        />
+                        <button
+                          onClick={() => removeHotspot(hotspot.id)}
+                          style={{
+                            background: '#ff5252',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            color: 'white'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      <select
+                        value={hotspot.type}
+                        onChange={(e) => updateHotspot(hotspot.id, { type: e.target.value as 'info' | 'image' | 'video' })}
+                        style={{
+                          width: '100%',
+                          padding: '4px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="info">📄 Información</option>
+                        <option value="image">🖼️ Imagen</option>
+                        <option value="video">🎥 Video</option>
+                      </select>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginBottom: '8px' }}>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={hotspot.position?.x ?? 0}
+                          onChange={(e) => updateHotspotPosition(hotspot.id, 'x', parseFloat(e.target.value))}
+                          placeholder="X"
+                          style={{
+                            padding: '4px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem'
+                          }}
+                        />
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={hotspot.position?.y ?? 0}
+                          onChange={(e) => updateHotspotPosition(hotspot.id, 'y', parseFloat(e.target.value))}
+                          placeholder="Y"
+                          style={{
+                            padding: '4px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem'
+                          }}
+                        />
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={hotspot.position?.z ?? 0}
+                          onChange={(e) => updateHotspotPosition(hotspot.id, 'z', parseFloat(e.target.value))}
+                          placeholder="Z"
+                          style={{
+                            padding: '4px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem'
+                          }}
+                        />
+                      </div>
+
+                      <textarea
+                        value={hotspot.description}
+                        onChange={(e) => updateHotspot(hotspot.id, { description: e.target.value })}
+                        placeholder="Descripción del hotspot"
+                        rows={2}
+                        style={{
+                          width: '100%',
+                          padding: '4px 6px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem',
+                          resize: 'vertical',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+
+                      {hotspot.type !== 'info' && (
+                        <div style={{ marginTop: '8px' }}>
+                          <label style={{
+                            background: '#2196F3',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <ImageIcon size={12} />
+                            Subir {hotspot.type === 'image' ? 'Imagen' : 'Video'}
+                            <input
+                              type="file"
+                              accept={hotspot.type === 'image' ? 'image/*' : 'video/*'}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleHotspotImageUpload(file, hotspot.id);
+                              }}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                          {hotspot.content_url && (
+                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#4CAF50' }}>
+                              ✓ Contenido cargado
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {hotspots.length === 0 && (
+                    <p style={{
+                      textAlign: 'center',
+                      color: '#999',
+                      padding: '20px',
+                      fontSize: '0.85rem'
+                    }}>
+                      No hay hotspots. Haz clic en "Agregar" para crear uno.
+                    </p>
+                  )}
+                </div>
+
+                {/* Configuraciones Avanzadas */}
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
+                    ⚙️ Configuración Avanzada
+                  </h3>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+                    <div>
+                      <label>Posición del modelo:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                        <span>X: {modelTransform.position.x.toFixed(2)}</span>
+                        <span>Y: {modelTransform.position.y.toFixed(2)}</span>
+                        <span>Z: {modelTransform.position.z.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label>Rotación del modelo:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                        <span>X: {modelTransform.rotation.x.toFixed(2)}</span>
+                        <span>Y: {modelTransform.rotation.y.toFixed(2)}</span>
+                        <span>Z: {modelTransform.rotation.z.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label>Escala del modelo:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                        <span>X: {modelTransform.scale.x.toFixed(2)}</span>
+                        <span>Y: {modelTransform.scale.y.toFixed(2)}</span>
+                        <span>Z: {modelTransform.scale.z.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      padding: '8px',
+                      background: '#f0f7ff',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      color: '#1976d2'
+                    }}>
+                      💡 Las transformaciones del modelo se guardan automáticamente
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
                             padding: '10px',
                             border: '2px solid #ddd',
                             borderRadius: '8px',
@@ -1042,8 +1466,8 @@ export default function ARConfigPage() {
                               ));
                             }}
                             onModelTransformChange={(transform) => {
-                              console.log('Guardando transformación del modelo:', transform);
-                              // Aquí podrías guardar en la base de datos si es necesario
+                              console.log('Actualizando transformación del modelo:', transform);
+                              setModelTransform(transform);
                             }}
                             onPrimitivesChange={setPrimitives}
                           />
