@@ -363,6 +363,8 @@ export default function ARPreview3D({
   modelUrl, 
   hotspots, 
   onHotspotPositionChange,
+  onHotspotScaleChange,
+  onHotspotRotationChange,
   lightMode = false,
   primitives: externalPrimitives,
   onPrimitivesChange,
