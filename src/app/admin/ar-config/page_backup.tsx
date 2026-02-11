@@ -388,6 +388,32 @@ export default function ARConfigPage() {
                           fontSize: '0.8rem'
                         }}
                       />
+                      <div style={{ marginTop: '8px' }}>
+                        <label style={{
+                          background: '#667eea',
+                          color: 'white',
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <Upload size={16} />
+                          {uploadingModel ? 'Subiendo...' : 'Seleccionar archivo'}
+                          <input
+                            type="file"
+                            accept=".glb,.gltf"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleModelFileUpload(file);
+                            }}
+                            style={{ display: 'none' }}
+                            disabled={uploadingModel}
+                          />
+                        </label>
+                      </div>
                     </div>
 
                     {/* Modo ligero */}
@@ -824,69 +850,6 @@ export default function ARConfigPage() {
         </div>
       </div>
     </div>
-  );
-}
-                          <label style={{
-                            background: '#667eea',
-                            color: 'white',
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}>
-                            <Upload size={16} />
-                            {uploadingModel ? 'Subiendo...' : 'Seleccionar archivo'}
-                            <input
-                              type="file"
-                              accept=".glb,.gltf"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleModelFileUpload(file);
-                              }}
-                              style={{ display: 'none' }}
-                              disabled={uploadingModel}
-                            />
-                          </label>
-
-                          {/* Toggle modo ligero */}
-                          <label style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            fontSize: '0.8rem',
-                            background: lightMode ? '#e3f2fd' : 'transparent',
-                            padding: '6px 10px',
-                            borderRadius: '20px',
-                            border: '1px solid #bbb',
-                            cursor: 'pointer'
-                          }}>
-                            <input
-                              type="checkbox"
-                              checked={lightMode}
-                              onChange={(e) => setLightMode(e.target.checked)}
-                              style={{ cursor: 'pointer' }}
-                            />
-                            <span><strong>Modo ligero</strong> (sin cargar modelo 3D)</span>
-                          </label>
-                        </div>
-
-                        {modelUrl && (
-                          <div style={{
-                            marginTop: '12px',
-                            padding: '8px 12px',
-                            background: '#e3f2fd',
-                            borderRadius: '6px',
-                            fontSize: '0.85rem',
-                            color: '#1976d2'
-                          }}>
-                            ✓ Modelo configurado
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
                     {/* Código QR */}
                     <div style={{ marginBottom: '24px' }}>
