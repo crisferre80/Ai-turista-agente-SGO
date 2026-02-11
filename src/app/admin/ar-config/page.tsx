@@ -27,6 +27,8 @@ interface Hotspot {
   description: string;
   type: 'info' | 'image' | 'video';
   content_url?: string;
+  scale?: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
 }
 
 interface Primitive {
@@ -146,7 +148,9 @@ export default function ARConfigPage() {
       position: { x: 0, y: 1.5, z: -2 },
       title: 'Nuevo punto de interés',
       description: 'Descripción del punto',
-      type: 'info'
+      type: 'info',
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: { x: 0, y: 0, z: 0 }
     };
     setHotspots([...hotspots, newHotspot]);
   };
@@ -1026,6 +1030,20 @@ export default function ARConfigPage() {
                               setHotspots(prev => prev.map(h => 
                                 h.id === id ? { ...h, position } : h
                               ));
+                            }}
+                            onHotspotScaleChange={(id, scale) => {
+                              setHotspots(prev => prev.map(h => 
+                                h.id === id ? { ...h, scale } : h
+                              ));
+                            }}
+                            onHotspotRotationChange={(id, rotation) => {
+                              setHotspots(prev => prev.map(h => 
+                                h.id === id ? { ...h, rotation } : h
+                              ));
+                            }}
+                            onModelTransformChange={(transform) => {
+                              console.log('Guardando transformación del modelo:', transform);
+                              // Aquí podrías guardar en la base de datos si es necesario
                             }}
                             onPrimitivesChange={setPrimitives}
                           />

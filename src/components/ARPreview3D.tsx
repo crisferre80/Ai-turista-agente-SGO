@@ -10,6 +10,8 @@ import { Settings, Lightbulb, Camera, Trash2, Move } from 'lucide-react';
 interface Hotspot {
   id: string;
   position: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
+  scale?: { x: number; y: number; z: number };
   title: string;
   description: string;
   type: 'info' | 'image' | 'video';
@@ -37,10 +39,14 @@ interface ARPreview3DProps {
   modelUrl?: string;
   hotspots: Hotspot[];
   onHotspotPositionChange?: (id: string, position: { x: number; y: number; z: number }) => void;
+  onHotspotScaleChange?: (id: string, scale: { x: number; y: number; z: number }) => void;
+  onHotspotRotationChange?: (id: string, rotation: { x: number; y: number; z: number }) => void;
   // Modo ligero: no cargar modelo 3D real, sólo grid + primitivas + hotspots
   lightMode?: boolean;
   primitives?: Primitive[];
   onPrimitivesChange?: (primitives: Primitive[]) => void;
+  // Nuevo: callback para guardar posiciones de modelos
+  onModelTransformChange?: (transform: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) => void;
 }
 
 function Model({ url }: { url: string }) {
@@ -367,6 +373,8 @@ export default function ARPreview3D({
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [showLightControls, setShowLightControls] = useState(false);
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
@@ -490,15 +498,16 @@ export default function ARPreview3D({
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Contenedor del visor 3D */}
+      {/* Contenedor del visor 3D - Adaptativo */}
       <div style={{ 
         width: '100%', 
-        height: '500px', 
+        height: showAdvancedControls || showLightControls ? '350px' : '500px', // Canvas más pequeño cuando se edita
         background: '#1a1a1a',
         borderRadius: '10px',
         overflow: 'hidden',
         position: 'relative',
-        border: '1px solid #333'
+        border: '1px solid #333',
+        transition: 'height 0.3s ease'
       }}>
         <Canvas
         frameloop="demand"
@@ -1451,13 +1460,14 @@ export default function ARPreview3D({
                         borderTop: '1px solid rgba(255,255,255,0.1)',
                         fontSize: '0.7rem'
                       }}>
+                        {/* Controles de Posición */}
                         <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
                           {(['x','y','z'] as const).map(axis => (
-                                <input
+                            <input
                               key={axis}
                               type="number"
-                                  step="0.1"
+                              step="0.1"
                               value={hs.position[axis].toFixed(2)}
                               onChange={(e) => {
                                 const v = parseFloat(e.target.value) || 0;
@@ -1476,6 +1486,70 @@ export default function ARPreview3D({
                             />
                           ))}
                         </div>
+
+                        {/* Controles de Escala */}
+                        {hs.scale && (
+                          <>
+                            <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala Hotspot (X, Y, Z)</div>
+                            <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                              {(['x','y','z'] as const).map(axis => (
+                                <input
+                                  key={axis}
+                                  type="number"
+                                  step="0.1"
+                                  min="0.1"
+                                  value={hs.scale![axis].toFixed(2)}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value) || 0.1;
+                                    if (!onHotspotScaleChange) return;
+                                    const newScale = { ...hs.scale!, [axis]: v };
+                                    onHotspotScaleChange(hs.id, newScale);
+                                  }}
+                                  style={{
+                                    width: '33%',
+                                    padding: '3px 4px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #555',
+                                    background: '#111',
+                                    color: 'white'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Controles de Rotación */}
+                        {hs.rotation && (
+                          <>
+                            <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación Hotspot (X, Y, Z) [grados]</div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              {(['x','y','z'] as const).map(axis => (
+                                <input
+                                  key={axis}
+                                  type="number"
+                                  step="5"
+                                  value={((hs.rotation![axis] * 180) / Math.PI).toFixed(1)}
+                                  onChange={(e) => {
+                                    const degrees = parseFloat(e.target.value) || 0;
+                                    const radians = (degrees * Math.PI) / 180;
+                                    if (!onHotspotRotationChange) return;
+                                    const newRotation = { ...hs.rotation!, [axis]: radians };
+                                    onHotspotRotationChange(hs.id, newRotation);
+                                  }}
+                                  style={{
+                                    width: '33%',
+                                    padding: '3px 4px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #555',
+                                    background: '#111',
+                                    color: 'white'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })()}
@@ -1491,10 +1565,51 @@ export default function ARPreview3D({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                fontSize: '0.85rem'
+                fontSize: '0.85rem',
+                justifyContent: 'space-between'
               }}>
-                <Camera size={14} />
-                Vista de Cámara
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Camera size={14} />
+                  Vista de Cámara
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => setShowLightControls(!showLightControls)}
+                    style={{
+                      padding: '4px 8px',
+                      background: showLightControls ? '#4CAF50' : '#607D8B',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.65rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px'
+                    }}
+                  >
+                    <Lightbulb size={10} />
+                    Luces
+                  </button>
+                  <button
+                    onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+                    style={{
+                      padding: '4px 8px',
+                      background: showAdvancedControls ? '#4CAF50' : '#607D8B', 
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.65rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px'
+                    }}
+                  >
+                    <Settings size={10} />
+                    Avanzado
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                 <button
@@ -1551,6 +1666,250 @@ export default function ARPreview3D({
                 </button>
               </div>
             </div>
+
+            {/* Panel de Controles de Luces */}
+            {showLightControls && (
+              <div style={{ 
+                marginTop: '12px',
+                padding: '12px',
+                background: '#0a0a0a',
+                borderRadius: '6px',
+                border: '1px solid #444'
+              }}>
+                <div style={{ 
+                  fontWeight: 'bold', 
+                  marginBottom: '8px',
+                  fontSize: '0.8rem',
+                  color: '#FFC107'
+                }}>
+                  ⚡ Sistema de Iluminación
+                </div>
+                
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  <button
+                    onClick={() => {
+                      const newLight: Light = {
+                        id: `light-${Date.now()}`,
+                        type: 'ambient',
+                        position: { x: 0, y: 0, z: 0 },
+                        intensity: 0.5,
+                        color: '#ffffff'
+                      };
+                      setLights([...lights, newLight]);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      background: '#673AB7',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.65rem'
+                    }}
+                  >
+                    + Ambiental
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newLight: Light = {
+                        id: `light-${Date.now()}`,
+                        type: 'directional',
+                        position: { x: 5, y: 10, z: 5 },
+                        intensity: 1.0,
+                        color: '#ffffff'
+                      };
+                      setLights([...lights, newLight]);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      background: '#FF5722',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.65rem'
+                    }}
+                  >
+                    + Direccional
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newLight: Light = {
+                        id: `light-${Date.now()}`,
+                        type: 'point',
+                        position: { x: 0, y: 5, z: 0 },
+                        intensity: 1.2,
+                        color: '#ffffff'
+                      };
+                      setLights([...lights, newLight]);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      background: '#009688',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.65rem'
+                    }}
+                  >
+                    + Punto
+                  </button>
+                </div>
+
+                {lights.length > 0 && (
+                  <div style={{ fontSize: '0.65rem', maxHeight: '120px', overflowY: 'auto' }}>
+                    {lights.map((light, index) => (
+                      <div 
+                        key={light.id}
+                        style={{ 
+                          padding: '4px',
+                          marginBottom: '4px',
+                          background: 'rgba(255,255,255,0.05)',
+                          borderRadius: '3px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: '60px' }}>
+                          {light.type.charAt(0).toUpperCase() + light.type.slice(1)}
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="3"
+                          step="0.1"
+                          value={light.intensity}
+                          onChange={(e) => {
+                            const newLights = [...lights];
+                            newLights[index].intensity = parseFloat(e.target.value);
+                            setLights(newLights);
+                          }}
+                          style={{ width: '40px' }}
+                        />
+                        <input
+                          type="color"
+                          value={light.color}
+                          onChange={(e) => {
+                            const newLights = [...lights];
+                            newLights[index].color = e.target.value;
+                            setLights(newLights);
+                          }}
+                          style={{ width: '20px', height: '16px', border: 'none' }}
+                        />
+                        <button
+                          onClick={() => {
+                            setLights(lights.filter(l => l.id !== light.id));
+                          }}
+                          style={{
+                            padding: '2px 4px',
+                            background: '#f44336',
+                            border: 'none',
+                            borderRadius: '2px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '0.6rem'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Panel de Controles Avanzados */}
+            {showAdvancedControls && (
+              <div style={{ 
+                marginTop: '12px',
+                padding: '12px',
+                background: '#0a0a0a',
+                borderRadius: '6px',
+                border: '1px solid #444'
+              }}>
+                <div style={{ 
+                  fontWeight: 'bold', 
+                  marginBottom: '8px',
+                  fontSize: '0.8rem',
+                  color: '#00BCD4'
+                }}>
+                  🔧 Controles Avanzados
+                </div>
+                
+                <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button
+                    onClick={() => {
+                      // Reset de la cámara a posición inicial
+                      if (orbitRef.current) {
+                        orbitRef.current.reset();
+                      }
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#FF9800',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem'
+                    }}
+                  >
+                    🎥 Resetear Cámara
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      // Reset de todas las posiciones de modelo
+                      setModelPosition({ x: 0, y: 0, z: 0 });
+                      setModelRotation({ x: 0, y: 0, z: 0 });
+                      setModelScale({ x: 1, y: 1, z: 1 });
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#E91E63',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem'
+                    }}
+                  >
+                    📦 Resetear Modelo
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setLights([]);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#9C27B0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem'
+                    }}
+                  >
+                    💡 Limpiar Luces
+                  </button>
+                  
+                  <div style={{ 
+                    marginTop: '8px', 
+                    paddingTop: '8px', 
+                    borderTop: '1px solid #333',
+                    opacity: 0.7 
+                  }}>
+                    <div>Canvas: {(showAdvancedControls || showLightControls) ? '350px' : '500px'}</div>
+                    <div>WebGL: {webglLost ? 'Perdido' : 'Activo'}</div>
+                    <div>Modelo: {modelUrl ? 'Cargado' : 'Sin modelo'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
