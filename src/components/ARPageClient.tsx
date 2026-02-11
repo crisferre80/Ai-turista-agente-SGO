@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Canvas } from '@react-three/fiber';
 import { X, Loader2, AlertTriangle, Camera } from 'lucide-react';
 import type { ARData } from '@/types/ar';
-import { detectWebXRCapabilities, meetsARRequirements, isMobileDevice } from '@/lib/webxr';
+import { isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARPageClient/ARScene';
+import WebXRScene from './ARPageClient/WebXRScene';
 
 type Attraction = {
   id: string;
@@ -34,15 +35,16 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
   const [isPlaced, setIsPlaced] = useState(false);
   const [anchorPosition, setAnchorPosition] = useState<[number, number, number]>([0, 0, -3]);
   const [showPlacedFeedback, setShowPlacedFeedback] = useState(false);
+  const [useWebXR, setUseWebXR] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);  
 
-  // Efecto para iniciar la cámara
+  // Efecto para detectar WebXR y decidir qué sistema usar
   useEffect(() => {
     const initCamera = async () => {
       try {
-        console.log('🎥 Iniciando cámara...');
+        console.log('🎥 Iniciando cámara para AR simulado...');
         
         if (!navigator.mediaDevices?.getUserMedia) {
           setError('Tu navegador no soporta acceso a la cámara.');
@@ -50,43 +52,62 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           return;
         }
 
-        console.log('🎥 Solicitando acceso a cámara...');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
             facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false,
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          } 
         });
         
-        console.log('✅ Cámara obtenida:', stream.active);
-        console.log('📹 Tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
         streamRef.current = stream;
-
-        // Primero desactivar el loading para que el video se monte en el DOM
-        console.log('📹 Montando elemento video en DOM...');
-        setLoading(false);
-
-        // Verificar capacidades WebXR (no bloquea)
-        try {
-          const caps = await detectWebXRCapabilities();
-          const requirements = await meetsARRequirements();
-          console.log('📱 WebXR capabilities:', caps);
-          console.log('📱 AR requirements:', requirements);
-        } catch (webxrError) {
-          console.warn('⚠️ WebXR no disponible:', webxrError);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await new Promise((resolve) => {
+            if (videoRef.current) {
+              videoRef.current.onloadedmetadata = resolve;
+            }
+          });
+          console.log('✅ Cámara inicializada');
         }
-
       } catch (err) {
-        console.error('❌ Error iniciando cámara:', err);
-        setError(`No se pudo acceder a la cámara: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+        console.error('❌ Error accediendo a la cámara:', err);
+        setError('No se pudo acceder a la cámara. Verifique los permisos.');
+        setLoading(false);
+      }
+    };
+    const initAR = async () => {
+      try {
+        console.log('🔍 Detectando capacidades AR...');
+        
+        // Verificar WebXR primero
+        if ('xr' in navigator && navigator.xr) {
+          const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+          if (isSupported) {
+            console.log('✅ WebXR AR soportado - Usando AR real');
+            setUseWebXR(true);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Fallback al sistema simulado con cámara
+        console.log('⚠️ WebXR no disponible - Usando AR simulado');
+        setUseWebXR(false);
+        await initCamera();
+        
+      } catch (err) {
+        console.error('❌ Error iniciando AR:', err);
+        setError(`Error iniciando AR: ${err instanceof Error ? err.message : 'Error desconocido'}`);
         setLoading(false);
       }
     };
 
-    initCamera();
-    
+    initAR();
+  }, []);
+
+  // Cleanup
+  useEffect(() => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -95,9 +116,9 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     };
   }, []);
 
-  // Efecto separado para asignar el stream al video cuando esté disponible
+  // Efecto separado para asignar el stream al video cuando esté disponible (solo para AR simulado)
   useEffect(() => {
-    if (!streamRef.current || !videoRef.current || cameraActive) {
+    if (useWebXR || !streamRef.current || !videoRef.current || cameraActive) {
       return;
     }
 
@@ -131,7 +152,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     };
 
     playVideo();
-  }, [loading, cameraActive]);
+  }, [loading, cameraActive, useWebXR]);
 
   const handleClose = () => {
     if (streamRef.current) {
@@ -143,7 +164,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
   const handlePlaceScene = (event: React.PointerEvent) => {
     if (isPlaced) return;
     
-    console.log('📍 Anclando escena en posición del toque');
+    console.log('📍 Anclando escena en posición del toque (AR simulado)');
     
     // Obtener las coordenadas normalizadas del toque (-1 a 1)
     const target = event.target as HTMLElement;
@@ -152,14 +173,14 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
     // Calcular posición 3D basada en el toque
-    // Colocar la escena frente a la cámara, ligeramente desplazada según el toque
-    const distance = 3; // Distancia fija desde la cámara
-    const offsetX = x * 1.5; // Desplazamiento horizontal
-    const offsetY = y * 1.5 + 0.5; // Desplazamiento vertical (+ 0.5 para elevar un poco)
+    // Para AR más realista, colocar a distancia más cercana y fija
+    const distance = 2; // Distancia más cercana para simular AR
+    const offsetX = x * 0.8; // Menos desplazamiento horizontal
+    const offsetY = y * 0.5 + 0.2; // Menos desplazamiento vertical, ligeramente elevado
     
     const newPosition: [number, number, number] = [offsetX, offsetY, -distance];
     
-    console.log('📍 Nueva posición de anclaje:', newPosition);
+    console.log('📍 Nueva posición de anclaje AR simulado:', newPosition);
     console.log('📍 Coordenadas de toque - x:', x.toFixed(2), 'y:', y.toFixed(2));
     
     setAnchorPosition(newPosition);
@@ -170,18 +191,25 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     setTimeout(() => setShowPlacedFeedback(false), 2000);
   };
 
+  // Si está cargando
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
         <div className="text-white text-center">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
           <h2 className="text-xl font-bold">Iniciando Realidad Aumentada</h2>
-          <p className="text-gray-300 mt-2">Preparando cámara y sensores...</p>
+          <p className="text-gray-300 mt-2">
+            Preparando AR...
+          </p>
+          <div className="mt-4 p-3 bg-black/30 rounded text-xs text-gray-400">
+            <div>Detectando capacidades de AR...</div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // Si hay error
   if (error) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-4">
@@ -194,9 +222,9 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
               <div className="text-sm text-gray-300 bg-black/30 p-3 rounded mb-4">
                 <p className="font-semibold mb-2">💡 Soluciones posibles:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Acepta los permisos de cámara cuando el navegador los solicite</li>
                   <li>Verifica que estés usando HTTPS (conexión segura)</li>
-                  <li>Intenta recargar la página y dar permisos nuevamente</li>
+                  <li>Usa un navegador compatible con WebXR (Chrome, Edge)</li>
+                  <li>Acepta los permisos de cámara cuando se soliciten</li>
                   <li>Comprueba que ninguna otra app esté usando la cámara</li>
                 </ul>
               </div>
@@ -213,6 +241,12 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     );
   }
 
+  // Renderizado condicional: WebXR real o simulado
+  if (useWebXR) {
+    return <WebXRScene attraction={attraction} onClose={handleClose} />;
+  }
+
+  // --- RENDER AR SIMULADO (Fallback) ---
   return (
     <div className="fixed inset-0 z-50 bg-black overflow-hidden">
       {/* Video de cámara como fondo */}
@@ -233,6 +267,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
 
       {/* Debug: Estado de la cámara */}
       <div className="absolute top-20 left-4 bg-black/70 text-white p-2 rounded text-xs z-50 space-y-0.5">
+        <div className="text-orange-400">🔄 AR Simulado (Fallback)</div>
         <div>Cámara: {cameraActive ? '✅ Activa' : '⏳ Inactiva'}</div>
         <div>Loading: {loading ? 'Sí' : 'No'}</div>
         <div>Anclado: {isPlaced ? '✅ Sí' : '⏳ No'}</div>
@@ -321,6 +356,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           showGrid={!isPlaced}
           disableOrbitControls={isPlaced && isMobileDevice()}
           anchorPosition={anchorPosition}
+          isAnchored={isPlaced}
         />
         </Canvas>
       )}
@@ -342,14 +378,16 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
             <ul className="space-y-1 text-xs text-gray-200">
               {!isPlaced ? (
                 <>
-                  <li>• Apunta la cámara hacia una superficie plana (mesa, suelo)</li>
-                  <li>• <strong>Toca la pantalla</strong> para anclar la escena en ese punto</li>
+                  <li>• Apunta la cámara hacia donde quieres colocar el objeto</li>
+                  <li>• <strong>Toca la pantalla</strong> para fijar el objeto en esa posición</li>
+                  <li>• El objeto aparecerá como si estuviera en el mundo real</li>
                 </>
               ) : (
                 <>
-                  <li>• Mueve el dispositivo para ver los objetos desde diferentes ángulos</li>
-                  <li>• Toca los elementos para ver más información</li>
-                  <li>• Los objetos están anclados al mundo real</li>
+                  <li>✅ <strong>Objeto anclado</strong> - Ahora está fijo en el espacio</li>
+                  <li>• Muévete alrededor para verlo desde diferentes ángulos</li>
+                  <li>• La cámara simula movimientos naturales de AR</li>
+                  <li>• Los objetos permanecen en su lugar como en AR real</li>
                 </>
               )}
             </ul>

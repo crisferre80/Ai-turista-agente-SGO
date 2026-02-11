@@ -31,13 +31,15 @@ type ARScenePageProps = {
   showGrid?: boolean;
   disableOrbitControls?: boolean;
   anchorPosition?: [number, number, number];
+  isAnchored?: boolean;
 };
 
 export default function ARScene({ 
   attraction, 
   showGrid = true, 
   disableOrbitControls = false,
-  anchorPosition = [0, 0, -3]
+  anchorPosition = [0, 0, -3],
+  isAnchored = false
 }: ARScenePageProps) {
   return (
     <>
@@ -46,17 +48,22 @@ export default function ARScene({
       <directionalLight position={[5, 5, 5]} intensity={0.8} castShadow />
       <pointLight position={[-5, 5, -5]} intensity={0.4} />
 
-      {/* Cámara */}
-      <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
+      {/* Cámara con simulación AR */}
+      {isAnchored ? (
+        <ARCamera anchorTarget={anchorPosition} />
+      ) : (
+        <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
+      )}
 
       {/* Controles de cámara (solo si no están desactivados) */}
       {!disableOrbitControls && (
         <OrbitControls
           enablePan={true}
-          enableZoom={true}
+          enableZoom={!isAnchored}
           enableRotate={true}
           maxDistance={10}
-          minDistance={1}
+          minDistance={isAnchored ? 0.5 : 1}
+          target={isAnchored ? anchorPosition : [0, 0, 0]}
         />
       )}
 
@@ -66,10 +73,10 @@ export default function ARScene({
       {/* Modelo 3D principal */}
       {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
         <Suspense fallback={<LoadingModel position={anchorPosition} />}>
-          <MainModel modelUrl={attraction.ar_model_url} position={anchorPosition} />
+          <MainModel modelUrl={attraction.ar_model_url} position={anchorPosition} isAnchored={isAnchored} />
         </Suspense>
       ) : (
-        <PlaceholderModel position={anchorPosition} />
+        <PlaceholderModel position={anchorPosition} isAnchored={isAnchored} />
       )}
 
       {/* Hotspots AR */}
@@ -99,7 +106,40 @@ export default function ARScene({
   );
 }
 
-function MainModel({ modelUrl, position }: { modelUrl: string; position: [number, number, number] }) {
+// Cámara con simulación de movimiento AR
+function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) {
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+  const basePosition = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.6, 3));
+
+  useFrame((state) => {
+    if (!cameraRef.current) return;
+
+    const time = state.clock.getElapsedTime();
+    
+    // Simular pequeños movimientos como si fuera movimiento natural del usuario
+    const sway = Math.sin(time * 0.5) * 0.02;
+    const bob = Math.cos(time * 0.7) * 0.01;
+    const drift = Math.sin(time * 0.3) * 0.015;
+    
+    // Aplicar movimientos sutiles a la cámara
+    cameraRef.current.position.set(
+      basePosition.current.x + sway,
+      basePosition.current.y + bob,
+      basePosition.current.z + drift
+    );
+    
+    // Hacer que la cámara mire hacia el objeto anclado
+    cameraRef.current.lookAt(anchorTarget[0], anchorTarget[1], anchorTarget[2]);
+  });
+
+  return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
+}
+
+function MainModel({ modelUrl, position, isAnchored }: { 
+  modelUrl: string; 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
   let gltfScene = null;
   let error = null;
   
@@ -113,18 +153,27 @@ function MainModel({ modelUrl, position }: { modelUrl: string; position: [number
 
   if (error || !gltfScene) {
     console.warn('⚠️ Usando modelo placeholder por fallo en la carga');
-    return <PlaceholderModel position={position} />;
+    return <PlaceholderModel position={position} isAnchored={isAnchored} />;
   }
 
-  return <AnimatedModel scene={gltfScene} position={position} />;
+  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} />;
 }
 
-function AnimatedModel({ scene, position }: { scene: THREE.Group | THREE.Object3D; position: [number, number, number] }) {
+function StaticModel({ scene, position, isAnchored }: { 
+  scene: THREE.Group | THREE.Object3D; 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
   const mesh = useRef<THREE.Mesh>(null);
 
   useFrame((state, delta) => {
-    if (mesh.current) {
+    if (mesh.current && !isAnchored) {
+      // Solo rotar si no está anclado
       mesh.current.rotation.y += delta * 0.15;
+    } else if (mesh.current && isAnchored) {
+      // Cuando está anclado, agregar un pequeño movimiento sutil
+      const time = state.clock.getElapsedTime();
+      mesh.current.rotation.y = Math.sin(time * 0.1) * 0.05; // Oscilación muy sutil
     }
   });
 
@@ -133,25 +182,42 @@ function AnimatedModel({ scene, position }: { scene: THREE.Group | THREE.Object3
       ref={mesh}
       object={scene.clone()}
       position={position}
-      scale={1}
+      scale={isAnchored ? 0.3 : 0.8} // Más pequeño cuando está anclado
     />
   );
 }
 
-function PlaceholderModel({ position }: { position: [number, number, number] }) {
+function PlaceholderModel({ position, isAnchored }: { 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
   const mesh = useRef<THREE.Mesh>(null);
 
   useFrame((state, delta) => {
-    if (mesh.current) {
+    if (mesh.current && !isAnchored) {
+      // Solo rotar si no está anclado
       mesh.current.rotation.y += delta * 0.2;
       mesh.current.rotation.x += delta * 0.1;
+    } else if (mesh.current && isAnchored) {
+      // Cuando está anclado, movimiento muy sutil
+      const time = state.clock.getElapsedTime();
+      mesh.current.rotation.y = Math.sin(time * 0.2) * 0.1; 
+      mesh.current.rotation.x = Math.cos(time * 0.15) * 0.05;
     }
   });
 
+  const size = isAnchored ? 0.3 : 0.6;
+  
   return (
     <mesh ref={mesh} position={position} castShadow>
-      <boxGeometry args={[0.8, 0.8, 0.8]} />
-      <meshStandardMaterial color="#4A90E2" metalness={0.5} roughness={0.2} />
+      <boxGeometry args={[size, size, size]} />
+      <meshStandardMaterial 
+        color={isAnchored ? "#00ff88" : "#4A90E2"} 
+        metalness={0.5} 
+        roughness={0.2}
+        emissive={isAnchored ? "#004420" : "#001122"}
+        emissiveIntensity={0.2}
+      />
     </mesh>
   );
 }

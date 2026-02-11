@@ -2,6 +2,7 @@ import React from 'react';
 import { supabase } from '@/lib/supabase';
 import { notFound } from 'next/navigation';
 import type { ARData } from '@/types/ar';
+import WebXRInitializer from '@/components/WebXRInitializer';
 
 type ARPageProps = {
   params: Promise<{ id: string }>;
@@ -58,5 +59,10 @@ export default async function ARPage({ params }: ARPageProps) {
   const ARPageClientModule = await import('@/components/ARPageClient');
   const ARPageClient = ARPageClientModule.default;
 
-  return <ARPageClient attraction={attractionData} />;
+  return (
+    <>
+      <WebXRInitializer />
+      <ARPageClient attraction={attractionData} />
+    </>
+  );
 }

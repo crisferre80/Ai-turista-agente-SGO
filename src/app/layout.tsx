@@ -33,7 +33,9 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#1A3A6C" />
         <link rel="apple-touch-icon" href="/santi-avatar.png" />
-
+        {/* WebXR Meta Tags */}
+        <meta name="xr-spatial-tracking" content="enabled" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
