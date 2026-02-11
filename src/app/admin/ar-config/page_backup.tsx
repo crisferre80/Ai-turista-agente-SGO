@@ -181,10 +181,8 @@ export default function ARConfigPage() {
     setHotspots([...hotspots, newHotspot]);
   };
 
-  const updateHotspot = (id: string, field: string, value: string) => {
-    setHotspots(hotspots.map(h => 
-      h.id === id ? { ...h, [field]: value } : h
-    ));
+  const updateHotspot = (id: string, updates: Partial<Hotspot>) => {
+    setHotspots(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
   };
 
   const updateHotspotPosition = (id: string, axis: 'x' | 'y' | 'z', value: number) => {
@@ -1167,7 +1165,7 @@ export default function ARConfigPage() {
                                 <input
                                   type="text"
                                   value={hotspot.title || ''}
-                                onChange={(e) => updateHotspot(hotspot.id, 'title', e.target.value)}
+                                onChange={(e) => updateHotspot(hotspot.id, { title: e.target.value })}
                                 style={{
                                   flex: 1,
                                   padding: '8px',
@@ -1196,7 +1194,7 @@ export default function ARConfigPage() {
 
                               <textarea
                                 value={hotspot.description || ''}
-                              onChange={(e) => updateHotspot(hotspot.id, 'description', e.target.value)}
+                              onChange={(e) => updateHotspot(hotspot.id, { description: e.target.value })}
                               style={{
                                 width: '100%',
                                 padding: '8px',
@@ -1222,7 +1220,7 @@ export default function ARConfigPage() {
                                 </label>
                                 <select
                                   value={hotspot.type || 'info'}
-                                  onChange={(e) => updateHotspot(hotspot.id, 'type', e.target.value)}
+                                  onChange={(e) => updateHotspot(hotspot.id, { type: e.target.value as 'info' | 'image' | 'video' })}
                                   style={{
                                     width: '100%',
                                     padding: '8px',
@@ -1284,7 +1282,7 @@ export default function ARConfigPage() {
                                 <input
                                   type="text"
                                   value={hotspot.content_url || ''}
-                                  onChange={(e) => updateHotspot(hotspot.id, 'content_url', e.target.value)}
+                                  onChange={(e) => updateHotspot(hotspot.id, { content_url: e.target.value })}
                                   placeholder={hotspot.type === 'image' ? 'https://ejemplo.com/imagen.jpg' : 'https://ejemplo.com/video.mp4'}
                                   style={{
                                     width: '100%',
