@@ -6,7 +6,8 @@
 export type ARHotspotType = 'info' | 'video' | '3d_model' | 'audio';
 
 // Vector 3D para posiciones, rotaciones y escalas
-export type Vector3 = [number, number, number];
+// Permite tanto formato array como objeto para compatibilidad
+export type Vector3 = [number, number, number] | { x: number; y: number; z: number };
 
 // Hotspot base con propiedades comunes
 export interface ARHotspotBase {

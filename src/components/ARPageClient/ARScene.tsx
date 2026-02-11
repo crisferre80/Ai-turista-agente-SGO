@@ -30,9 +30,15 @@ type ARScenePageProps = {
   attraction: AttractionAR;
   showGrid?: boolean;
   disableOrbitControls?: boolean;
+  anchorPosition?: [number, number, number];
 };
 
-export default function ARScene({ attraction, showGrid = true, disableOrbitControls = false }: ARScenePageProps) {
+export default function ARScene({ 
+  attraction, 
+  showGrid = true, 
+  disableOrbitControls = false,
+  anchorPosition = [0, 0, -3]
+}: ARScenePageProps) {
   return (
     <>
       {/* Iluminación */}
@@ -58,46 +64,62 @@ export default function ARScene({ attraction, showGrid = true, disableOrbitContr
       <Environment preset="city" />
 
       {/* Modelo 3D principal */}
-      {attraction.ar_model_url && (
-        <Suspense fallback={<LoadingModel />}>
-          <MainModel modelUrl={attraction.ar_model_url} />
+      {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
+        <Suspense fallback={<LoadingModel position={anchorPosition} />}>
+          <MainModel modelUrl={attraction.ar_model_url} position={anchorPosition} />
         </Suspense>
+      ) : (
+        <PlaceholderModel position={anchorPosition} />
       )}
 
       {/* Hotspots AR */}
-      {attraction.ar_hotspots?.hotspots?.map((hotspot) => (
-        <Suspense key={hotspot.id} fallback={null}>
-          <ARHotspotComponent hotspot={hotspot} />
-        </Suspense>
-      ))}
+      {attraction.ar_hotspots?.hotspots?.map((hotspot) => {
+        // Ajustar posición del hotspot relativa al ancla
+        const hotspotPos = hotspot.position;
+        const adjustedPos: [number, number, number] = Array.isArray(hotspotPos)
+          ? [hotspotPos[0] + anchorPosition[0], hotspotPos[1] + anchorPosition[1], hotspotPos[2] + anchorPosition[2]]
+          : [
+              (hotspotPos.x ?? 0) + anchorPosition[0],
+              (hotspotPos.y ?? 0) + anchorPosition[1],
+              (hotspotPos.z ?? 0) + anchorPosition[2]
+            ];
+        
+        return (
+          <Suspense key={hotspot.id} fallback={null}>
+            <ARHotspotComponent hotspot={{...hotspot, position: adjustedPos}} />
+          </Suspense>
+        );
+      })}
 
       {/* Grid de referencia (se oculta después de colocar) */}
       {showGrid && (
-        <gridHelper args={[10, 10, '#00ff00', '#004400']} position={[0, 0, 0]} />
+        <gridHelper args={[10, 10, '#00ff00', '#004400']} position={anchorPosition} />
       )}
     </>
   );
 }
 
-function MainModel({ modelUrl }: { modelUrl: string }) {
+function MainModel({ modelUrl, position }: { modelUrl: string; position: [number, number, number] }) {
   let gltfScene = null;
+  let error = null;
   
   try {
     const gltf = useGLTF(modelUrl);
     gltfScene = gltf.scene;
-  } catch (error) {
-    console.error('Error al cargar modelo 3D:', error);
-    return <PlaceholderModel />;
+  } catch (err) {
+    error = err;
+    console.error('❌ Error al cargar modelo 3D desde:', modelUrl, err);
   }
 
-  if (!gltfScene) {
-    return <PlaceholderModel />;
+  if (error || !gltfScene) {
+    console.warn('⚠️ Usando modelo placeholder por fallo en la carga');
+    return <PlaceholderModel position={position} />;
   }
 
-  return <AnimatedModel scene={gltfScene} />;
+  return <AnimatedModel scene={gltfScene} position={position} />;
 }
 
-function AnimatedModel({ scene }: { scene: THREE.Group | THREE.Object3D }) {
+function AnimatedModel({ scene, position }: { scene: THREE.Group | THREE.Object3D; position: [number, number, number] }) {
   const mesh = useRef<THREE.Mesh>(null);
 
   useFrame((state, delta) => {
@@ -110,24 +132,33 @@ function AnimatedModel({ scene }: { scene: THREE.Group | THREE.Object3D }) {
     <primitive
       ref={mesh}
       object={scene.clone()}
-      position={[0, 0, -3]}
+      position={position}
       scale={1}
     />
   );
 }
 
-function PlaceholderModel() {
+function PlaceholderModel({ position }: { position: [number, number, number] }) {
+  const mesh = useRef<THREE.Mesh>(null);
+
+  useFrame((state, delta) => {
+    if (mesh.current) {
+      mesh.current.rotation.y += delta * 0.2;
+      mesh.current.rotation.x += delta * 0.1;
+    }
+  });
+
   return (
-    <mesh position={[0, 1, -3]} castShadow>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#4A90E2" />
+    <mesh ref={mesh} position={position} castShadow>
+      <boxGeometry args={[0.8, 0.8, 0.8]} />
+      <meshStandardMaterial color="#4A90E2" metalness={0.5} roughness={0.2} />
     </mesh>
   );
 }
 
-function LoadingModel() {
+function LoadingModel({ position }: { position: [number, number, number] }) {
   return (
-    <mesh position={[0, 1, -3]}>
+    <mesh position={position}>
       <sphereGeometry args={[0.5, 16, 16]} />
       <meshBasicMaterial color="#666" wireframe />
     </mesh>

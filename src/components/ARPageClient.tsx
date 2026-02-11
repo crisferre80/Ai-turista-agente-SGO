@@ -32,6 +32,8 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [isPlaced, setIsPlaced] = useState(false);
+  const [anchorPosition, setAnchorPosition] = useState<[number, number, number]>([0, 0, -3]);
+  const [showPlacedFeedback, setShowPlacedFeedback] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -138,10 +140,34 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
     router.push(`/explorar/${attraction.id}`);
   };
 
-  const handlePlaceScene = () => {
-    if (!isPlaced) {
-      setIsPlaced(true);
-    }
+  const handlePlaceScene = (event: React.PointerEvent) => {
+    if (isPlaced) return;
+    
+    console.log('📍 Anclando escena en posición del toque');
+    
+    // Obtener las coordenadas normalizadas del toque (-1 a 1)
+    const target = event.target as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Calcular posición 3D basada en el toque
+    // Colocar la escena frente a la cámara, ligeramente desplazada según el toque
+    const distance = 3; // Distancia fija desde la cámara
+    const offsetX = x * 1.5; // Desplazamiento horizontal
+    const offsetY = y * 1.5 + 0.5; // Desplazamiento vertical (+ 0.5 para elevar un poco)
+    
+    const newPosition: [number, number, number] = [offsetX, offsetY, -distance];
+    
+    console.log('📍 Nueva posición de anclaje:', newPosition);
+    console.log('📍 Coordenadas de toque - x:', x.toFixed(2), 'y:', y.toFixed(2));
+    
+    setAnchorPosition(newPosition);
+    setIsPlaced(true);
+    
+    // Mostrar feedback visual
+    setShowPlacedFeedback(true);
+    setTimeout(() => setShowPlacedFeedback(false), 2000);
   };
 
   if (loading) {
@@ -206,11 +232,12 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
       />
 
       {/* Debug: Estado de la cámara */}
-      <div className="absolute top-20 left-4 bg-black/70 text-white p-2 rounded text-xs z-50">
+      <div className="absolute top-20 left-4 bg-black/70 text-white p-2 rounded text-xs z-50 space-y-0.5">
         <div>Cámara: {cameraActive ? '✅ Activa' : '⏳ Inactiva'}</div>
-        <div>Stream: {streamRef.current ? '✅' : '❌'}</div>
-        <div>Video Ref: {videoRef.current ? '✅' : '❌'}</div>
         <div>Loading: {loading ? 'Sí' : 'No'}</div>
+        <div>Anclado: {isPlaced ? '✅ Sí' : '⏳ No'}</div>
+        <div>Pos: [{anchorPosition.map(v => v.toFixed(1)).join(', ')}]</div>
+        <div className="text-yellow-400 mt-1">Modelo: {attraction.ar_model_url ? '✅' : '❌ Sin URL'}</div>
       </div>
 
       {/* Indicador de que la cámara no está activa */}
@@ -220,6 +247,16 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
             <Camera className="h-16 w-16 mx-auto mb-4 animate-pulse" />
             <h3 className="text-xl font-bold mb-2">Activando cámara...</h3>
             <p className="text-gray-300">Por favor, acepta los permisos de cámara</p>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback visual cuando se ancla la escena */}
+      {showPlacedFeedback && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[95]">
+          <div className="bg-green-500/90 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 animate-pulse">
+            <div className="w-3 h-3 bg-white rounded-full"></div>
+            <span className="font-bold text-lg">¡Escena anclada!</span>
           </div>
         </div>
       )}
@@ -283,6 +320,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           }}
           showGrid={!isPlaced}
           disableOrbitControls={isPlaced && isMobileDevice()}
+          anchorPosition={anchorPosition}
         />
         </Canvas>
       )}
