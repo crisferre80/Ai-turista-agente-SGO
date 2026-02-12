@@ -12,5 +12,5 @@ UPDATE attractions SET category = 'artesanía' WHERE category = 'artesania';
 -- Verificar que todas las categorías en attractions estén en categories
 SELECT DISTINCT a.category, c.name IS NOT NULL as exists_in_categories
 FROM attractions a
-LEFT JOIN categories c ON a.category = c.name AND c.type = 'attraction'
+LEFT JOIN categories c ON a.category = c.name
 ORDER BY a.category;

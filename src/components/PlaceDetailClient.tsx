@@ -42,6 +42,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const router = useRouter();
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [videoOpen, setVideoOpen] = useState<{ open: boolean; src?: string }>({ open: false });
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a very flexible reference to the map. We'll cast locally when needed.
@@ -58,6 +59,31 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const closeGallery = () => setGalleryOpen({ open: false, index: 0 });
   const openVideo = (src?: string) => setVideoOpen({ open: true, src });
   const closeVideo = () => setVideoOpen({ open: false, src: undefined });
+
+  const getYoutubeEmbedUrl = (url: string) => {
+    const trimmedUrl = url.trim();
+    const match = trimmedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (!match?.[1]) return null;
+    return `https://www.youtube.com/embed/${match[1]}`;
+  };
+
+  const isYoutubeUrl = (url: string) => getYoutubeEmbedUrl(url) !== null;
+  const normalizedVideoUrls = (place.video_urls || []).filter((videoUrl) => videoUrl?.trim().length > 0);
+  const currentVideoUrl = normalizedVideoUrls[currentVideoIndex] || '';
+
+  useEffect(() => {
+    setCurrentVideoIndex(0);
+  }, [place.id, normalizedVideoUrls.length]);
+
+  const goToPreviousVideo = () => {
+    if (normalizedVideoUrls.length === 0) return;
+    setCurrentVideoIndex((prev) => (prev - 1 + normalizedVideoUrls.length) % normalizedVideoUrls.length);
+  };
+
+  const goToNextVideo = () => {
+    if (normalizedVideoUrls.length === 0) return;
+    setCurrentVideoIndex((prev) => (prev + 1) % normalizedVideoUrls.length);
+  };
 
   // Narrate place description on load
   useEffect(() => {
@@ -588,19 +614,64 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             )}
 
             {/* Videos */}
-            {place.video_urls && place.video_urls.length > 0 && (
+            {normalizedVideoUrls.length > 0 && (
               <section style={{ marginTop: 20 }}>
                 <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>Videos</h3>
-                <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8 }}>
-                  {place.video_urls.map((v, i) => (
-                    <div key={i} style={{ minWidth: 220, height: 130, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative' }} className="video-container" onClick={() => openVideo(v)}>
-                      <video src={v} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ background: 'rgba(0,0,0,0.4)', padding: 10, borderRadius: 999 }}>&#9658;</div>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ borderRadius: 12, overflow: 'hidden', background: '#111', position: 'relative', minHeight: 260 }}>
+                  {isYoutubeUrl(currentVideoUrl) ? (
+                    <iframe
+                      src={getYoutubeEmbedUrl(currentVideoUrl) || undefined}
+                      style={{ width: '100%', height: 320, border: 'none' }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title="Video principal"
+                    />
+                  ) : (
+                    <video src={currentVideoUrl} controls style={{ width: '100%', height: 320, background: '#000' }} />
+                  )}
+                  {normalizedVideoUrls.length > 1 && (
+                    <>
+                      <button onClick={goToPreviousVideo} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.85)', border: 'none', borderRadius: 999, width: 34, height: 34, cursor: 'pointer', fontWeight: 900 }}>
+                        ‹
+                      </button>
+                      <button onClick={goToNextVideo} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.85)', border: 'none', borderRadius: 999, width: 34, height: 34, cursor: 'pointer', fontWeight: 900 }}>
+                        ›
+                      </button>
+                    </>
+                  )}
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '0.9rem', color: '#555', fontWeight: 700 }}>
+                    Video {currentVideoIndex + 1} de {normalizedVideoUrls.length}
+                  </div>
+                  <button onClick={() => openVideo(currentVideoUrl)} style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                    Ver en grande
+                  </button>
+                </div>
+                {normalizedVideoUrls.length > 1 && (
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 8 }}>
+                    {normalizedVideoUrls.map((videoUrl, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => setCurrentVideoIndex(index)}
+                        style={{
+                          minWidth: 34,
+                          height: 34,
+                          borderRadius: 999,
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: index === currentVideoIndex ? '#1A3A6C' : '#e5e7eb',
+                          color: index === currentVideoIndex ? 'white' : '#374151',
+                          fontWeight: 800
+                        }}
+                        title={videoUrl}
+                      >
+                        {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
 
@@ -694,7 +765,17 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       {videoOpen.open && videoOpen.src && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeVideo}>
           <div style={{ width: '90%', maxWidth: 1000, height: '70%', position: 'relative' }} className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <video src={videoOpen.src} controls style={{ width: '100%', height: '100%', background: '#000' }} />
+            {isYoutubeUrl(videoOpen.src) ? (
+              <iframe
+                src={getYoutubeEmbedUrl(videoOpen.src) || undefined}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                title="Video"
+              />
+            ) : (
+              <video src={videoOpen.src} controls style={{ width: '100%', height: '100%', background: '#000' }} />
+            )}
             <button onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
           </div>
         </div>

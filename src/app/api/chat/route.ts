@@ -2,10 +2,27 @@ import { NextResponse } from 'next/server';
 import { getGeminiModel } from '@/lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
+const supabaseBase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
 );
+
+const getRequestSupabase = (jwt?: string) => {
+    if (!jwt) return supabaseBase;
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            auth: { persistSession: false },
+            global: {
+                headers: {
+                    Authorization: `Bearer ${jwt}`,
+                },
+            },
+        }
+    );
+};
 
 // Rate limiting: almacenar timestamps de últimas llamadas por usuario
 const requestTimestamps = new Map<string, number[]>();
@@ -43,10 +60,12 @@ export async function POST(req: Request) {
         let userProfile = null;
         let userId: string | null = null;
 
-        if (authHeader) {
+        const requestJwt = authHeader ? authHeader.replace('Bearer ', '') : undefined;
+        const supabase = getRequestSupabase(requestJwt);
+
+        if (requestJwt) {
             try {
-                const token = authHeader.replace('Bearer ', '');
-                const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+            const { data: { user }, error: authError } = await supabase.auth.getUser();
                 
                 if (user && !authError) {
                     userId = user.id;

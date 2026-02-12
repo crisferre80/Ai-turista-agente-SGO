@@ -9,18 +9,13 @@ import GalleryModal from '@/components/GalleryModal';
 import Header from '@/components/Header';
 import UserReviewModal from '@/components/UserReviewModal';
 import UserReviewsGallery from '@/components/UserReviewsGallery';
+import { mergeWithDefaultCategories, normalizeCategoryName, type CategoryItem } from '@/lib/categories';
 
 const COLOR_PRIMARY = "#2563eb"; // Azul profesional
 const COLOR_SECONDARY = "#64748b"; // Gris azulado
 const COLOR_ACCENT = "#f1f5f9"; // Gris muy claro
 const COLOR_TEXT = "#1e293b"; // Gris oscuro
 const COLOR_BACKGROUND = "#ffffff"; // Blanco
-
-type CategoryType = {
-    name: string;
-    icon: string;
-    type: 'attraction' | 'business';
-};
 
 type PlaceType = {
     id: string;
@@ -49,7 +44,7 @@ export default function ExplorePage() {
     const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [isMobile, setIsMobile] = useState(false);
-    const [categories, setCategories] = useState<CategoryType[]>([]);
+    const [categories, setCategories] = useState<CategoryItem[]>([]);
     const router = useRouter();
 
     useEffect(() => {
@@ -133,49 +128,14 @@ export default function ExplorePage() {
 
             if (error) {
                 console.error('❌ Error fetching categories:', error);
-                // Fallback: usar categorías hardcodeadas
-                console.log('⚠️ Using fallback categories');
-                setCategories([
-                    { name: 'histórico', icon: '🏛️', type: 'attraction' },
-                    { name: 'naturaleza', icon: '🌿', type: 'attraction' },
-                    { name: 'compras', icon: '🛍️', type: 'attraction' },
-                    { name: 'cultura', icon: '🎭', type: 'attraction' },
-                    { name: 'arquitectura', icon: '🏗️', type: 'attraction' },
-                    { name: 'monumentos', icon: '🗿', type: 'attraction' },
-                    { name: 'reservas naturales', icon: '🏞️', type: 'attraction' },
-                    { name: 'gastronomía', icon: '🍽️', type: 'attraction' },
-                    { name: 'artesanía', icon: '🎨', type: 'attraction' },
-                    { name: 'restaurante', icon: '🍽️', type: 'business' },
-                    { name: 'hotel', icon: '🏨', type: 'business' },
-                    { name: 'artesanía', icon: '🎨', type: 'business' },
-                    { name: 'compras', icon: '🛍️', type: 'business' },
-                    { name: 'cultura', icon: '🎭', type: 'business' },
-                    { name: 'servicios', icon: '🛠️', type: 'business' }
-                ]);
+                setCategories(mergeWithDefaultCategories());
             } else {
                 console.log('✅ Categories fetched:', data);
-                setCategories(data || []);
+                setCategories(mergeWithDefaultCategories(data || []));
             }
         } catch (err) {
             console.error('❌ Exception fetching categories:', err);
-            // Fallback en caso de excepción
-            setCategories([
-                { name: 'histórico', icon: '🏛️', type: 'attraction' },
-                { name: 'naturaleza', icon: '🌿', type: 'attraction' },
-                { name: 'compras', icon: '🛍️', type: 'attraction' },
-                { name: 'cultura', icon: '🎭', type: 'attraction' },
-                { name: 'arquitectura', icon: '🏗️', type: 'attraction' },
-                { name: 'monumentos', icon: '🗿', type: 'attraction' },
-                { name: 'reservas naturales', icon: '🏞️', type: 'attraction' },
-                { name: 'gastronomía', icon: '🍽️', type: 'attraction' },
-                { name: 'artesanía', icon: '🎨', type: 'attraction' },
-                { name: 'restaurante', icon: '🍽️', type: 'business' },
-                { name: 'hotel', icon: '🏨', type: 'business' },
-                { name: 'artesanía', icon: '🎨', type: 'business' },
-                { name: 'compras', icon: '🛍️', type: 'business' },
-                { name: 'cultura', icon: '🎭', type: 'business' },
-                { name: 'servicios', icon: '🛠️', type: 'business' }
-            ]);
+            setCategories(mergeWithDefaultCategories());
         }
     };
 
@@ -213,7 +173,10 @@ export default function ExplorePage() {
         const matchesSearch = place.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             place.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
+        const matchesCategory =
+            selectedCategory === 'all' ||
+            normalizeCategoryName(place.category || '', place.isBusiness ? 'business' : 'attraction') ===
+                normalizeCategoryName(selectedCategory, place.isBusiness ? 'business' : 'attraction');
 
         return matchesFilter && matchesSearch && matchesCategory;
     });

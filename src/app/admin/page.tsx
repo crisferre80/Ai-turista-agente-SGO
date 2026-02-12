@@ -8,6 +8,7 @@ import AdminAISettings from '@/components/AdminAISettings';
 import EmailManagement from '@/components/EmailManagement';
 import { takePhoto } from '@/lib/photoService';
 import EmailManager from '@/email/EmailManager';
+import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 
 // Tipos básicos usados en este panel
 interface PlaceRecord {
@@ -20,6 +21,7 @@ interface PlaceRecord {
     info_extra?: string;
     category: string;
     gallery_urls?: string[];
+    video_urls?: string[];
 }
 
 interface VideoRecord { id: string; title: string; video_url: string }
@@ -66,8 +68,9 @@ export default function AdminDashboard() {
 
     // Form States
     const [editingId, setEditingId] = useState<string | null>(null);
+    const defaultAttractionCategory = getDefaultCategories('attraction')[0]?.name || 'histórico';
     const [newPlace, setNewPlace] = useState({
-        name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: 'historico', gallery: [] as string[]
+        name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: defaultAttractionCategory, gallery: [] as string[], videoUrls: [''] as string[]
     });
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
     const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
@@ -131,7 +134,7 @@ export default function AdminDashboard() {
 
     const fetchData = async () => {
         setLoading(true);
-        const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category').order('created_at', { ascending: false });
+        const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls').order('created_at', { ascending: false });
         const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,is_active,payment_status,phone,address,description,lat,lng').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
@@ -169,15 +172,22 @@ export default function AdminDashboard() {
 
             if (error) {
                 console.error('❌ Admin: Error fetching categories:', error);
+                const fallback = getDefaultCategories();
+                setAttractionCategories(fallback.filter(cat => cat.type === 'attraction'));
+                setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
             } else {
                 console.log('✅ Admin: Categories fetched:', data);
-                const attractions = data?.filter(cat => cat.type === 'attraction') || [];
-                const businesses = data?.filter(cat => cat.type === 'business') || [];
+                const mergedCategories = mergeWithDefaultCategories(data || []);
+                const attractions = mergedCategories.filter(cat => cat.type === 'attraction');
+                const businesses = mergedCategories.filter(cat => cat.type === 'business');
                 setAttractionCategories(attractions);
                 setBusinessCategories(businesses);
             }
         } catch (err) {
             console.error('❌ Admin: Exception fetching categories:', err);
+            const fallback = getDefaultCategories();
+            setAttractionCategories(fallback.filter(cat => cat.type === 'attraction'));
+            setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
         }
     };
 
@@ -255,14 +265,33 @@ export default function AdminDashboard() {
         }
     };
 
+    const updatePlaceVideoAt = (index: number, value: string) => {
+        setNewPlace(prev => ({
+            ...prev,
+            videoUrls: prev.videoUrls.map((videoUrl, idx) => (idx === index ? value : videoUrl))
+        }));
+    };
+
+    const addPlaceVideoField = () => {
+        setNewPlace(prev => ({ ...prev, videoUrls: [...prev.videoUrls, ''] }));
+    };
+
+    const removePlaceVideoField = (index: number) => {
+        setNewPlace(prev => {
+            const nextVideoUrls = prev.videoUrls.filter((_, idx) => idx !== index);
+            return { ...prev, videoUrls: nextVideoUrls.length > 0 ? nextVideoUrls : [''] };
+        });
+    };
+
     const handleAddPlace = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
         try {
             // Validar que la categoría existe
-            const validCategories = attractionCategories.map(cat => cat.name);
-            if (!validCategories.includes(newPlace.category)) {
+            const normalizedCategory = normalizeCategoryName(newPlace.category, 'attraction');
+            const validCategories = attractionCategories.map(cat => normalizeCategoryName(cat.name, 'attraction'));
+            if (!validCategories.includes(normalizedCategory)) {
                 alert(`Categoría inválida: ${newPlace.category}. Selecciona una categoría válida.`);
                 setLoading(false);
                 return;
@@ -288,8 +317,9 @@ export default function AdminDashboard() {
                 lng: newPlace.lng,
                 image_url: finalImgUrl,
                 info_extra: newPlace.info,
-                category: newPlace.category,
-                gallery_urls: finalGallery
+                category: normalizedCategory,
+                gallery_urls: finalGallery,
+                video_urls: newPlace.videoUrls.map(videoUrl => videoUrl.trim()).filter(Boolean)
             };
 
             console.log('📝 Admin: Updating place with data:', placeData);
@@ -322,7 +352,7 @@ export default function AdminDashboard() {
     };
 
     const resetPlaceForm = () => {
-        setNewPlace({ name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: 'histórico', gallery: [] });
+        setNewPlace({ name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: defaultAttractionCategory, gallery: [], videoUrls: [''] });
         setEditingId(null);
         setUploadFile(null);
         setGalleryFiles([]);
@@ -411,8 +441,9 @@ export default function AdminDashboard() {
             desc: p.description || '',
             img: p.image_url || '',
             info: p.info_extra || '',
-            category: p.category,
-            gallery: p.gallery_urls || []
+            category: normalizeCategoryName(p.category, 'attraction') || defaultAttractionCategory,
+            gallery: p.gallery_urls || [],
+            videoUrls: p.video_urls && p.video_urls.length > 0 ? p.video_urls : ['']
         });
         setActiveTab('lugares');
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -561,8 +592,9 @@ export default function AdminDashboard() {
             return;
         }
         try {
+            const canonicalName = normalizeCategoryName(newCategory.name, newCategory.type as 'attraction' | 'business');
             const { error } = await supabase.from('categories').insert([{
-                name: newCategory.name.trim(),
+                name: canonicalName,
                 icon: newCategory.icon.trim(),
                 type: newCategory.type
             }]);
@@ -955,6 +987,35 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                                 <Input label="Info Extra (Horarios, tips)" value={newPlace.info} onChange={v => setNewPlace({ ...newPlace, info: v })} />
+                                <div style={{ background: '#f9f9f9', padding: '12px', borderRadius: '10px', border: '1px solid #eee' }}>
+                                    <label style={labelStyle}>URLs de Videos (lista)</label>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                        {newPlace.videoUrls.map((videoUrl, index) => (
+                                            <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <input
+                                                    style={{ ...inputStyle, marginBottom: 0 }}
+                                                    placeholder="https://youtube.com/watch?v=... o https://...mp4"
+                                                    value={videoUrl}
+                                                    onChange={(e) => updatePlaceVideoAt(index, e.target.value)}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePlaceVideoField(index)}
+                                                    style={{ padding: '8px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={addPlaceVideoField}
+                                        style={{ marginTop: '10px', padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                                    >
+                                        + Agregar URL de video
+                                    </button>
+                                </div>
 
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     <button type="submit" disabled={loading} style={btnPrimary}>{editingId ? 'Guardar Cambios' : 'Publicar Atractivo'}</button>
@@ -966,7 +1027,7 @@ export default function AdminDashboard() {
                                 <label style={labelStyle}>Ubicación (Arrastrá el pin)</label>
                                 <AdminMap
                                     initialCoords={[newPlace.lng, newPlace.lat]}
-                                    onLocationSelect={(lng, lat) => setNewPlace({ ...newPlace, lat, lng })}
+                                    onLocationSelect={(lng, lat) => setNewPlace(prev => ({ ...prev, lat, lng }))}
                                 />
                                 <div style={{ background: '#eee', padding: '10px', borderRadius: '8px', fontSize: '11px', marginTop: '10px' }}>
                                     Coords: {newPlace.lat.toFixed(6)}, {newPlace.lng.toFixed(6)}
@@ -1322,7 +1383,7 @@ export default function AdminDashboard() {
                                 <label style={labelStyle}>Ubicación del Negocio</label>
                                 <AdminMap
                                     initialCoords={[newBusiness.lng, newBusiness.lat]}
-                                    onLocationSelect={(lng, lat) => setNewBusiness({ ...newBusiness, lat, lng })}
+                                    onLocationSelect={(lng, lat) => setNewBusiness(prev => ({ ...prev, lat, lng }))}
                                 />
                                 <div style={{ background: '#eee', padding: '10px', borderRadius: '8px', fontSize: '11px', marginTop: '10px' }}>
                                     Coords: {newBusiness.lat.toFixed(6)}, {newBusiness.lng.toFixed(6)}

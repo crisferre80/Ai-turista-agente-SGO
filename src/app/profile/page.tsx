@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { takePhoto } from '@/lib/photoService';
 import Header from '@/components/Header';
+import { mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 
 interface UserProfile {
     id: string;
@@ -123,37 +124,18 @@ export default function ProfilePage() {
 
             if (error) {
                 console.error('❌ Error fetching categories:', error);
-                // Fallback: usar categorías hardcodeadas
-                console.log('⚠️ Using fallback categories');
-                setCategories([
-                    { name: 'histórico', icon: '🏛️' },
-                    { name: 'naturaleza', icon: '🌿' },
-                    { name: 'compras', icon: '🛍️' },
-                    { name: 'cultura', icon: '🎭' },
-                    { name: 'arquitectura', icon: '🏗️' },
-                    { name: 'monumentos', icon: '🗿' },
-                    { name: 'reservas naturales', icon: '🏞️' },
-                    { name: 'gastronomía', icon: '🍽️' },
-                    { name: 'artesanía', icon: '🎨' }
-                ]);
+                const fallback = mergeWithDefaultCategories().filter(cat => cat.type === 'attraction');
+                setCategories(fallback.map(cat => ({ name: cat.name, icon: cat.icon })));
             } else {
                 console.log('✅ Categories fetched:', data);
-                setCategories(data || []);
+                const merged = mergeWithDefaultCategories((data || []).map(cat => ({ ...cat, type: 'attraction' as const })))
+                    .filter(cat => cat.type === 'attraction');
+                setCategories(merged.map(cat => ({ name: cat.name, icon: cat.icon })));
             }
         } catch (err) {
             console.error('❌ Exception fetching categories:', err);
-            // Fallback en caso de excepción
-            setCategories([
-                { name: 'histórico', icon: '🏛️' },
-                { name: 'naturaleza', icon: '🌿' },
-                { name: 'compras', icon: '🛍️' },
-                { name: 'cultura', icon: '🎭' },
-                { name: 'arquitectura', icon: '🏗️' },
-                { name: 'monumentos', icon: '🗿' },
-                { name: 'reservas naturales', icon: '🏞️' },
-                { name: 'gastronomía', icon: '🍽️' },
-                { name: 'artesanía', icon: '🎨' }
-            ]);
+            const fallback = mergeWithDefaultCategories().filter(cat => cat.type === 'attraction');
+            setCategories(fallback.map(cat => ({ name: cat.name, icon: cat.icon })));
         }
     };
 
@@ -378,7 +360,8 @@ export default function ProfilePage() {
     };
 
     const getCategoryIcon = (categoryName: string) => {
-        const category = categories.find(cat => cat.name === categoryName);
+        const normalizedCategory = normalizeCategoryName(categoryName, 'attraction');
+        const category = categories.find(cat => normalizeCategoryName(cat.name, 'attraction') === normalizedCategory);
         return category?.icon || '📍';
     };
 
