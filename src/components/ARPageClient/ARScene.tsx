@@ -72,11 +72,11 @@ export default function ARScene({
 
       {/* Modelo 3D principal */}
       {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
-        <Suspense fallback={<LoadingModel position={anchorPosition} />}>
-          <MainModel modelUrl={attraction.ar_model_url} position={anchorPosition} isAnchored={isAnchored} />
+        <Suspense fallback={<LoadingModel position={anchorPosition} isAnchored={isAnchored} />}>
+          <MainModel modelUrl={attraction.ar_model_url} imageUrl={attraction.image_url} position={anchorPosition} isAnchored={isAnchored} />
         </Suspense>
       ) : (
-        <PlaceholderModel position={anchorPosition} isAnchored={isAnchored} />
+        <FallbackVisual imageUrl={attraction.image_url} position={anchorPosition} isAnchored={isAnchored} />
       )}
 
       {/* Hotspots AR */}
@@ -135,8 +135,9 @@ function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) 
   return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
 }
 
-function MainModel({ modelUrl, position, isAnchored }: { 
+function MainModel({ modelUrl, imageUrl, position, isAnchored }: { 
   modelUrl: string; 
+  imageUrl?: string;
   position: [number, number, number];
   isAnchored: boolean;
 }) {
@@ -153,7 +154,7 @@ function MainModel({ modelUrl, position, isAnchored }: {
 
   if (error || !gltfScene) {
     console.warn('⚠️ Usando modelo placeholder por fallo en la carga');
-    return <PlaceholderModel position={position} isAnchored={isAnchored} />;
+    return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;
   }
 
   return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} />;
@@ -187,42 +188,69 @@ function StaticModel({ scene, position, isAnchored }: {
   );
 }
 
-function PlaceholderModel({ position, isAnchored }: { 
+function FallbackVisual({ imageUrl, position, isAnchored }: {
+  imageUrl?: string;
   position: [number, number, number];
   isAnchored: boolean;
 }) {
-  const mesh = useRef<THREE.Mesh>(null);
+  if (!isAnchored) {
+    return null;
+  }
 
+  if (imageUrl && imageUrl.trim() !== '') {
+    return (
+      <group position={position}>
+        <mesh position={[0, 0.9, 0]}>
+          <planeGeometry args={[1.2, 1.5]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.2} />
+        </mesh>
+        <Html transform sprite position={[0, 0.9, 0]} distanceFactor={2}>
+          <div
+            style={{
+              width: 220,
+              height: 280,
+              borderRadius: 16,
+              border: '2px solid rgba(255,255,255,0.9)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+              backgroundImage: `url(${imageUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              overflow: 'hidden'
+            }}
+          />
+        </Html>
+      </group>
+    );
+  }
+
+  const mesh = useRef<THREE.Mesh>(null);
   useFrame((state, delta) => {
-    if (mesh.current && !isAnchored) {
-      // Solo rotar si no está anclado
-      mesh.current.rotation.y += delta * 0.2;
-      mesh.current.rotation.x += delta * 0.1;
-    } else if (mesh.current && isAnchored) {
-      // Cuando está anclado, movimiento muy sutil
+    if (mesh.current) {
       const time = state.clock.getElapsedTime();
       mesh.current.rotation.y = Math.sin(time * 0.2) * 0.1; 
       mesh.current.rotation.x = Math.cos(time * 0.15) * 0.05;
     }
   });
-
-  const size = isAnchored ? 0.3 : 0.6;
   
   return (
     <mesh ref={mesh} position={position} castShadow>
-      <boxGeometry args={[size, size, size]} />
+      <boxGeometry args={[0.26, 0.26, 0.26]} />
       <meshStandardMaterial 
-        color={isAnchored ? "#00ff88" : "#4A90E2"} 
+        color="#1A3A6C"
         metalness={0.5} 
         roughness={0.2}
-        emissive={isAnchored ? "#004420" : "#001122"}
+        emissive="#001122"
         emissiveIntensity={0.2}
       />
     </mesh>
   );
 }
 
-function LoadingModel({ position }: { position: [number, number, number] }) {
+function LoadingModel({ position, isAnchored }: { position: [number, number, number]; isAnchored: boolean }) {
+  if (!isAnchored) {
+    return null;
+  }
+
   return (
     <mesh position={position}>
       <sphereGeometry args={[0.5, 16, 16]} />

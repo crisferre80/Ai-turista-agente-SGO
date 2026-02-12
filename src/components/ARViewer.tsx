@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * Componente principal de Realidad Aumentada usando WebXR y Three.js
- * Renderiza modelos 3D, información y videos en AR
+ * Componente principal de Realidad Aumentada con interfaz intuitiva y profesional
+ * Incluye tutorial de introducción, diseño moderno y experiencia guiada para turistas
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas } from '@react-three/fiber';
-import { X, Loader2, AlertTriangle, Maximize2 } from 'lucide-react';
+import { X, Loader2, AlertTriangle, Maximize2, Camera, Eye, Hand, RotateCcw, Play, CheckCircle } from 'lucide-react';
 import type { ARViewerProps, WebXRCapabilities, ARLoadingState } from '@/types/ar';
 import { detectWebXRCapabilities, meetsARRequirements, isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARScene';
@@ -24,6 +24,9 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [canPortal, setCanPortal] = useState(false);
   const [isPlaced, setIsPlaced] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [hasCameraPermission, setHasCameraPermission] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -50,33 +53,33 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
 
   const initializeAR = async () => {
     try {
-      setLoadingState({ isLoading: true, progress: 20, currentAsset: 'Detectando capacidades...' });
+      setLoadingState({ isLoading: true, progress: 20, currentAsset: 'Preparando experiencia AR...' });
 
       // Verificar capacidades WebXR
       const caps = await detectWebXRCapabilities();
       setCapabilities(caps);
 
-      setLoadingState({ isLoading: true, progress: 50, currentAsset: 'Verificando requisitos...' });
+      setLoadingState({ isLoading: true, progress: 50, currentAsset: 'Verificando compatibilidad...' });
 
       // Verificar requisitos mínimos
       const requirements = await meetsARRequirements();
-      
+
       if (!requirements.meets) {
         throw new Error(
-          `Requisitos no cumplidos: ${requirements.missing.join(', ')}`
+          `Tu dispositivo no es compatible con Realidad Aumentada. ${requirements.missing.join(', ')}`
         );
       }
 
       if (!caps.isSupported) {
         throw new Error(
-          'WebXR no está soportado en este dispositivo. ' +
-          'Asegúrate de estar usando un navegador moderno en HTTPS.'
+          'Realidad Aumentada no está disponible en este navegador. ' +
+          'Te recomendamos usar Chrome, Safari o Edge en un dispositivo móvil.'
         );
       }
 
-      setLoadingState({ isLoading: true, progress: 70, currentAsset: 'Activando cámara...' });
+      setLoadingState({ isLoading: true, progress: 70, currentAsset: 'Configurando cámara...' });
 
-      // Iniciar la cámara para usarla como fondo de la escena
+      // Solicitar permisos de cámara de manera más amigable
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -84,32 +87,32 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
             audio: false,
           });
           streamRef.current = stream;
+          setHasCameraPermission(true);
 
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // playsInline es importante en iOS para que no abra el reproductor de video
             await videoRef.current.play().catch(() => {
-              // Ignorar errores de autoplay bloqueado; el usuario verá la imagen cuando interactúe
+              // El usuario verá la imagen cuando interactúe
             });
           }
         } catch (cameraError) {
-          console.warn('No se pudo iniciar la cámara para AR:', cameraError);
-          setCameraError('No se pudo acceder a la cámara. Revisa los permisos del navegador.');
-          // No abortamos por completo: permitimos "AR en pantalla" sin fondo de cámara
+          console.warn('Permisos de cámara denegados:', cameraError);
+          setCameraError('Para una mejor experiencia, permite el acceso a la cámara.');
+          // Continuamos sin cámara - el usuario puede usar AR en pantalla
         }
       }
 
-      setLoadingState({ isLoading: true, progress: 90, currentAsset: 'Cargando escena AR...' });
+      setLoadingState({ isLoading: true, progress: 90, currentAsset: 'Cargando contenido...' });
 
-      // Simular carga de recursos (modelos, texturas, etc.)
+      // Simular carga de recursos
       await new Promise(resolve => setTimeout(resolve, 500));
 
       setLoadingState({ isLoading: false, progress: 100 });
     } catch (err) {
       console.error('Error al inicializar AR:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al iniciar Realidad Aumentada';
       setError(errorMessage);
-      
+
       if (onError) {
         onError(err instanceof Error ? err : new Error(errorMessage));
       }
@@ -143,6 +146,24 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
     onClose();
   };
 
+  const startExperience = () => {
+    setShowTutorial(false);
+  };
+
+  const nextTutorialStep = () => {
+    if (tutorialStep < 2) {
+      setTutorialStep(tutorialStep + 1);
+    } else {
+      startExperience();
+    }
+  };
+
+  const prevTutorialStep = () => {
+    if (tutorialStep > 0) {
+      setTutorialStep(tutorialStep - 1);
+    }
+  };
+
   // Primer toque en la escena: considerar que el usuario "pegó" la escena al entorno
   const handleScenePointerDown = () => {
     if (!isPlaced) {
@@ -153,48 +174,154 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   // Renderizar pantalla de carga
   if (loadingState.isLoading) {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-        <div className="text-white text-center">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-bold mb-2">Iniciando Realidad Aumentada</h2>
-          <p className="text-gray-300 mb-4">{loadingState.currentAsset}</p>
-          <div className="w-64 h-2 bg-gray-700 rounded-full overflow-hidden mx-auto">
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center text-white max-w-sm mx-4">
+          <div className="relative mb-8">
+            <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Eye className="h-10 w-10 text-blue-300" />
+            </div>
+            <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-400 rounded-full animate-pulse" />
+          </div>
+
+          <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-blue-300 to-purple-300 bg-clip-text text-transparent">
+            Descubriendo {attraction.name}
+          </h2>
+          <p className="text-blue-200 mb-6 text-sm">{loadingState.currentAsset}</p>
+
+          <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-4">
             <div
-              className="h-full bg-blue-500 transition-all duration-300"
+              className="h-full bg-gradient-to-r from-blue-400 to-purple-400 transition-all duration-500 ease-out rounded-full"
               style={{ width: `${loadingState.progress}%` }}
             />
           </div>
+
+          <p className="text-xs text-blue-300">
+            Preparando experiencia de Realidad Aumentada...
+          </p>
         </div>
       </div>
     );
   }
 
-  // Renderizar pantalla de error
-  if (error) {
+  // Renderizar tutorial de introducción
+  if (showTutorial) {
+    const tutorialSteps = [
+      {
+        icon: <Camera className="h-12 w-12 text-blue-400" />,
+        title: "Bienvenido a AR",
+        description: "Descubre " + attraction.name + " de una manera completamente nueva con Realidad Aumentada.",
+        detail: "Verás información, modelos 3D y contenido multimedia superpuestos en el mundo real."
+      },
+      {
+        icon: <Hand className="h-12 w-12 text-purple-400" />,
+        title: "Interacción Intuitiva",
+        description: "Toca, pellizca y mueve tu dispositivo para explorar.",
+        detail: "Coloca contenido en tu entorno y descubre detalles ocultos tocando los elementos flotantes."
+      },
+      {
+        icon: <Eye className="h-12 w-12 text-green-400" />,
+        title: "Experiencia Inmersiva",
+        description: "Mira a través de tu cámara para ver el contenido AR.",
+        detail: hasCameraPermission
+          ? "Tu cámara está lista. Apunta a un espacio plano para comenzar."
+          : "Permite el acceso a la cámara para la mejor experiencia."
+      }
+    ];
+
+    const currentStep = tutorialSteps[tutorialStep];
+
     return (
-      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-4">
-        <div className="bg-red-500/20 border-2 border-red-500 rounded-lg p-6 max-w-md">
-          <div className="flex items-start gap-3 text-white">
-            <AlertTriangle className="h-6 w-6 flex-shrink-0 mt-1" />
-            <div>
-              <h2 className="text-xl font-bold mb-2">Error al iniciar AR</h2>
-              <p className="text-gray-200 mb-4">{error}</p>
-              <div className="space-y-2 text-sm text-gray-300">
-                <p>Para usar Realidad Aumentada necesitas:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Conexión segura (HTTPS)</li>
-                  <li>Navegador moderno (Chrome, Safari, Edge)</li>
-                  <li>Permisos de cámara activados</li>
-                  <li>Dispositivo con sensores de movimiento</li>
-                </ul>
-              </div>
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 max-w-md w-full">
+          <div className="text-center">
+            {/* Indicadores de paso */}
+            <div className="flex justify-center gap-2 mb-8">
+              {tutorialSteps.map((_, index) => (
+                <div
+                  key={index}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                    index === tutorialStep ? 'bg-white scale-125' : 'bg-white/40'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* Icono del paso actual */}
+            <div className="w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              {currentStep.icon}
+            </div>
+
+            {/* Contenido del paso */}
+            <h2 className="text-2xl font-bold text-white mb-3">{currentStep.title}</h2>
+            <p className="text-blue-100 mb-4 text-sm leading-relaxed">{currentStep.description}</p>
+            <p className="text-blue-200 mb-8 text-xs leading-relaxed">{currentStep.detail}</p>
+
+            {/* Botones de navegación */}
+            <div className="flex gap-3">
+              {tutorialStep > 0 && (
+                <button
+                  onClick={prevTutorialStep}
+                  className="flex-1 bg-white/10 text-white px-6 py-3 rounded-xl font-semibold hover:bg-white/20 transition-all duration-200"
+                >
+                  Anterior
+                </button>
+              )}
+
               <button
-                onClick={handleClose}
-                className="mt-6 bg-white text-red-500 px-6 py-3 rounded-lg font-semibold w-full hover:bg-gray-100 transition"
+                onClick={nextTutorialStep}
+                className="flex-1 bg-white text-blue-600 px-6 py-3 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200 transform hover:scale-105"
               >
-                Cerrar
+                {tutorialStep === tutorialSteps.length - 1 ? 'Comenzar' : 'Siguiente'}
               </button>
             </div>
+
+            {/* Botón de saltar */}
+            <button
+              onClick={startExperience}
+              className="mt-4 text-blue-200 text-sm hover:text-white transition-colors"
+            >
+              Saltar tutorial
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+    return (
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-red-900 via-pink-900 to-purple-900 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8 max-w-md w-full">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="h-8 w-8 text-red-300" />
+            </div>
+
+            <h2 className="text-xl font-bold text-white mb-3">No se pudo iniciar AR</h2>
+            <p className="text-gray-200 mb-6 text-sm leading-relaxed">{error}</p>
+
+            <div className="bg-white/5 rounded-xl p-4 mb-6">
+              <h3 className="text-white font-semibold mb-3 text-sm">Para usar Realidad Aumentada:</h3>
+              <div className="space-y-2 text-xs text-gray-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-400" />
+                  <span>Usa Chrome, Safari o Edge</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-400" />
+                  <span>Activa permisos de cámara</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-400" />
+                  <span>Dispositivo con sensores de movimiento</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClose}
+              className="w-full bg-white text-red-600 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all duration-200 transform hover:scale-105"
+            >
+              Entendido
+            </button>
           </div>
         </div>
       </div>
@@ -213,27 +340,27 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         playsInline
       />
 
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent">
-        <div className="flex items-center justify-between p-4">
+      {/* Header minimalista y elegante */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 via-black/40 to-transparent">
+        <div className="flex items-center justify-between p-6">
           <div className="text-white">
             <h2 className="text-lg font-bold">{attraction.name}</h2>
-            <p className="text-sm text-gray-300">Modo Realidad Aumentada</p>
+            <p className="text-sm text-blue-200">Realidad Aumentada</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={toggleFullscreen}
-              className="text-white hover:bg-white/20 rounded-full p-2 transition"
+              className="text-white hover:bg-white/20 rounded-full p-3 transition-all duration-200 hover:scale-110"
               aria-label="Pantalla completa"
             >
               <Maximize2 className="h-5 w-5" />
             </button>
             <button
               onClick={handleClose}
-              className="text-white hover:bg-white/20 rounded-full p-2 transition"
+              className="text-white hover:bg-red-500/20 rounded-full p-3 transition-all duration-200 hover:scale-110"
               aria-label="Cerrar AR"
             >
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -246,7 +373,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         style={{ background: 'transparent' }}
         onPointerDown={handleScenePointerDown}
       >
-        <ARScene 
+        <ARScene
           attraction={attraction}
           capabilities={capabilities!}
           showGrid={!isPlaced}
@@ -254,33 +381,50 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         />
       </Canvas>
 
-      {/* Controles e información */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+      {/* Controles e información mejorados */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-6">
         <div className="max-w-md mx-auto">
-          {/* Indicador de modo AR */}
-          <div className="flex items-center justify-center gap-2 text-white mb-3">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+          {/* Estado de AR */}
+          <div className="flex items-center justify-center gap-3 text-white mb-4">
+            <div className={`w-3 h-3 rounded-full ${hasCameraPermission ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`} />
             <span className="text-sm font-medium">
-              {capabilities?.arMode === 'immersive-ar' ? 'AR Inmersivo' : 'AR en pantalla'}
+              {hasCameraPermission ? 'AR con Cámara' : 'AR en Pantalla'}
             </span>
+            {capabilities?.arMode === 'immersive-ar' && (
+              <span className="text-xs bg-purple-500/20 text-purple-200 px-2 py-1 rounded-full">
+                Inmersivo
+              </span>
+            )}
           </div>
 
-          {/* Instrucciones */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 text-white text-sm">
-            <p className="font-medium mb-1">Instrucciones:</p>
-            <ul className="space-y-1 text-xs text-gray-200">
-              {!isPlaced && (
-                <li>• Toca una vez la escena para colocarla y ocultar la grilla</li>
-              )}
-              <li>• Mueve tu dispositivo para explorar en 360°</li>
-              <li>• Toca los elementos flotantes para ver más información</li>
-              <li>• Usa pellizco para acercar/alejar modelos 3D</li>
-            </ul>
+          {/* Guía visual de instrucciones */}
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 text-white">
+            {!isPlaced ? (
+              <div className="text-center">
+                <Hand className="h-8 w-8 text-blue-300 mx-auto mb-2" />
+                <p className="font-semibold text-sm mb-1">Coloca el contenido</p>
+                <p className="text-xs text-gray-300">Toca la pantalla para posicionar {attraction.name} en tu espacio</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="flex flex-col items-center">
+                  <RotateCcw className="h-6 w-6 text-green-300 mb-1" />
+                  <span className="text-xs text-gray-300">Mueve</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <Eye className="h-6 w-6 text-purple-300 mb-1" />
+                  <span className="text-xs text-gray-300">Explora</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {cameraError && (
-            <div className="mt-3 bg-red-500/80 text-white text-xs rounded-md px-3 py-2">
-              {cameraError}
+            <div className="mt-4 bg-yellow-500/20 border border-yellow-500/30 text-yellow-200 text-xs rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>{cameraError}</span>
+              </div>
             </div>
           )}
         </div>

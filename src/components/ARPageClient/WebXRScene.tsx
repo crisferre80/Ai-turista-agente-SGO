@@ -3,7 +3,7 @@
 import React, { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, ARButton, createXRStore } from '@react-three/xr';
-import { Environment } from '@react-three/drei';
+import { Environment, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { ARHitTest } from './ARHitTest';
 import ARScene from './ARScene';
@@ -206,20 +206,47 @@ function ARObjectModel({
   }
 
   // Modelo placeholder con información del atractivo
+  if (attraction.image_url && attraction.image_url.trim() !== '') {
+    return (
+      <group scale={[scale, scale, scale]}>
+        <mesh position={[0, 0.75, 0]}>
+          <planeGeometry args={[1.2, 1.6]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.2} />
+        </mesh>
+        <Html transform sprite position={[0, 0.75, 0]} distanceFactor={2}>
+          <div
+            style={{
+              width: 220,
+              height: 280,
+              borderRadius: 16,
+              border: '2px solid rgba(255,255,255,0.9)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+              backgroundImage: `url(${attraction.image_url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              overflow: 'hidden'
+            }}
+          />
+        </Html>
+      </group>
+    );
+  }
+
+  // Fallback mínimo si no hay imagen
   return (
     <group scale={[scale, scale, scale]}>
       {/* Modelo principal */}
       <mesh castShadow receiveShadow>
-        <boxGeometry args={[1, 1.5, 1]} />
+        <boxGeometry args={[0.35, 0.35, 0.35]} />
         <meshStandardMaterial 
-          color={isPlaced ? "#00ff88" : "#4A90E2"}
+          color="#1A3A6C"
           metalness={0.3}
           roughness={0.4}
         />
       </mesh>
       
       {/* Etiqueta con nombre */}
-      <mesh position={[0, 1, 0]}>
+      <mesh position={[0, 0.45, 0]}>
         <planeGeometry args={[1.5, 0.4]} />
         <meshBasicMaterial 
           color="#ffffff"
