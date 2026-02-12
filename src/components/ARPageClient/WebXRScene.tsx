@@ -51,28 +51,28 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   };
 
   return (
-    <div className="relative w-full h-full bg-black">
-      {/* Botón AR nativo de WebXR */}
+    <div className="relative w-full h-full bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+      {/* Header con información y botón cerrar */}
       <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-start">
-        <div className="bg-black/70 text-white p-2 rounded text-xs">
-          <div className="text-green-400">🟢 WebXR AR Real</div>
-          <div>Objetos: {placedObjects.length}</div>
+        <div className="bg-white/10 backdrop-blur-md text-white p-3 rounded-xl shadow-lg border border-white/20">
+          <div className="text-green-300 font-semibold text-sm">🟢 WebXR AR Real</div>
+          <div className="text-xs opacity-80">Objetos colocados: {placedObjects.length}</div>
         </div>
         
         <button
           onClick={onClose}
-          className="bg-red-500/80 hover:bg-red-600 text-white p-2 rounded-full"
+          className="bg-red-500/90 hover:bg-red-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 transform hover:scale-110 border border-red-400/50"
           aria-label="Cerrar AR"
         >
           ✕
         </button>
       </div>
       
-      {/* Botón de AR - se oculta automáticamente cuando no hay soporte */}
+      {/* Botón de AR mejorado */}
       <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50">
         <ARButton
           store={store}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-white/30 backdrop-blur-sm"
           onError={(error) => {
             console.error('WebXR AR Error:', error);
           }}
@@ -140,29 +140,26 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
             </group>
           ))}
 
-          {/* Componente de información AR */}
-          <ARInfoDisplay />
-
         </XR>
       </Canvas>
 
-      {/* Instrucciones */}
+      {/* Panel de instrucciones mejorado */}
       <div className="absolute bottom-24 left-4 right-4 z-40">
-        <div className="bg-black/80 text-white p-3 rounded-lg text-sm max-w-md mx-auto">
-          <p className="font-semibold mb-2">
+        <div className="bg-white/10 backdrop-blur-md text-white p-4 rounded-xl shadow-lg border border-white/20 max-w-md mx-auto">
+          <p className="font-bold mb-3 text-center text-lg">
             {isPlacing ? '🎯 Modo de colocación' : '✅ Objeto colocado'}
           </p>
           {isPlacing ? (
-            <ul className="space-y-1 text-xs">
-              <li>• Presiona &quot;Iniciar AR&quot; para comenzar</li>
-              <li>• Apunta la cámara hacia una superficie plana</li>
-              <li>• Toca la pantalla para colocar el objeto</li>
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-center"><span className="mr-2">📱</span> Presiona &quot;Iniciar AR&quot; para comenzar</li>
+              <li className="flex items-center"><span className="mr-2">🎯</span> Apunta la cámara hacia una superficie plana</li>
+              <li className="flex items-center"><span className="mr-2">👆</span> Toca la pantalla para colocar el objeto</li>
             </ul>
           ) : (
-            <ul className="space-y-1 text-xs">
-              <li>• Muévete alrededor para ver el objeto desde diferentes ángulos</li>
-              <li>• El objeto está anclado al mundo real</li>
-              <li>• Usa &quot;Reiniciar AR&quot; para colocar más objetos</li>
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-center"><span className="mr-2">🚶</span> Muévete alrededor para ver el objeto desde diferentes ángulos</li>
+              <li className="flex items-center"><span className="mr-2">📍</span> El objeto está anclado al mundo real</li>
+              <li className="flex items-center"><span className="mr-2">🔄</span> Usa &quot;Reiniciar AR&quot; para colocar más objetos</li>
             </ul>
           )}
         </div>
@@ -240,22 +237,6 @@ function LoadingModel() {
       <sphereGeometry args={[0.2, 16, 16]} />
       <meshBasicMaterial color="#666" wireframe />
     </mesh>
-  );
-}
-
-// Panel de información AR
-function ARInfoDisplay() {
-  return (
-    <group position={[0, 2, -2]}>
-      <mesh>
-        <planeGeometry args={[3, 1]} />
-        <meshBasicMaterial 
-          color="#000000"
-          transparent
-          opacity={0.8}
-        />
-      </mesh>
-    </group>
   );
 }
 

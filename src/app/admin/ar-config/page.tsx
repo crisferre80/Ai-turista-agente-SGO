@@ -678,46 +678,63 @@ export default function ARConfigPage() {
                         <option value="video">🎥 Video</option>
                       </select>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginBottom: '8px' }}>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={hotspot.position?.x ?? 0}
-                          onChange={(e) => updateHotspotPosition(hotspot.id, 'x', parseFloat(e.target.value))}
-                          placeholder="X"
-                          style={{
-                            padding: '4px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem'
-                          }}
-                        />
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={hotspot.position?.y ?? 0}
-                          onChange={(e) => updateHotspotPosition(hotspot.id, 'y', parseFloat(e.target.value))}
-                          placeholder="Y"
-                          style={{
-                            padding: '4px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem'
-                          }}
-                        />
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={hotspot.position?.z ?? 0}
-                          onChange={(e) => updateHotspotPosition(hotspot.id, 'z', parseFloat(e.target.value))}
-                          placeholder="Z"
-                          style={{
-                            padding: '4px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem'
-                          }}
-                        />
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ 
+                          display: 'block', 
+                          fontSize: '0.8rem', 
+                          fontWeight: 'bold', 
+                          marginBottom: '4px',
+                          color: '#333'
+                        }}>
+                          Posición:
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={hotspot.position?.x ?? 0}
+                            onChange={(e) => updateHotspotPosition(hotspot.id, 'x', parseFloat(e.target.value))}
+                            placeholder="X"
+                            style={{
+                              padding: '4px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={hotspot.position?.y ?? 0}
+                            onChange={(e) => updateHotspotPosition(hotspot.id, 'y', parseFloat(e.target.value))}
+                            placeholder="Y"
+                            style={{
+                              padding: '4px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={hotspot.position?.z ?? 0}
+                            onChange={(e) => updateHotspotPosition(hotspot.id, 'z', parseFloat(e.target.value))}
+                            placeholder="Z"
+                            style={{
+                              padding: '4px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
                       </div>
 
                       <textarea
