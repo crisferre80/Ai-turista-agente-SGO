@@ -1,8 +1,15 @@
 "use client";
+
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import UserReviewsGallery from './UserReviewsGallery';
 import { supabase } from '@/lib/supabase';
+import dynamic from 'next/dynamic';
+import type { ARData } from '@/types/ar';
+
+// Importar QR Scanner dinámicamente para evitar problemas de SSR
+const QRScanner = dynamic(() => import('./QRScanner'), { ssr: false });
 
 type PlaceSerializable = {
   id: string;
@@ -17,6 +24,10 @@ type PlaceSerializable = {
   website_url?: string;
   gallery_urls?: string[];
   video_urls?: string[];
+  has_ar_content?: boolean;
+  ar_model_url?: string;
+  ar_hotspots?: ARData;
+  qr_code?: string;
 };
 
 type Promotion = {
@@ -28,8 +39,10 @@ type Promotion = {
 };
 
 export default function PlaceDetailClient({ place, promotions = [] }: { place: PlaceSerializable; promotions?: Promotion[] }) {
+  const router = useRouter();
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [videoOpen, setVideoOpen] = useState<{ open: boolean; src?: string }>({ open: false });
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a very flexible reference to the map. We'll cast locally when needed.
   const mapRef = useRef<unknown>(null);
@@ -236,6 +249,52 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
     };
   }, [place.lat, place.lng, place.name]);
 
+  // Detectar parámetro openAR en la URL y navegar a página AR automáticamente
+  useEffect(() => {
+    if (typeof window !== 'undefined' && place.has_ar_content) {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('openAR') === 'true') {
+        router.push(`/ar/${place.id}`);
+      }
+    }
+  }, [place.has_ar_content, place.id, router]);
+
+  // Handlers para AR y QR
+  const handleOpenAR = () => {
+    if (place.has_ar_content) {
+      router.push(`/ar/${place.id}`);
+    }
+  };
+
+  const handleOpenQRScanner = () => {
+    setQrScannerOpen(true);
+  };
+
+  const handleQRScanSuccess = async (qrCode: string) => {
+    setQrScannerOpen(false);
+    
+    // Buscar atractivo por código QR
+    try {
+      const { data, error } = await supabase
+        .from('attractions')
+        .select('*')
+        .eq('qr_code', qrCode)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        // Redirigir directamente a la página AR
+        router.push(`/ar/${data.id}`);
+      } else {
+        alert('No se encontró un lugar con este código QR.');
+      }
+    } catch (error) {
+      console.error('Error buscando atractivo por QR:', error);
+      alert('Error al buscar el lugar. Intenta de nuevo.');
+    }
+  };
+
 
   return (
     <div style={{ padding: 6, maxWidth: 1000, margin: '0 auto' }}>
@@ -284,6 +343,14 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             to {
               opacity: 1;
               transform: translateY(0);
+            }
+          }
+          @keyframes pulse-ar-button {
+            0%, 100% {
+              box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            }
+            50% {
+              box-shadow: 0 4px 20px rgba(102, 126, 234, 0.7);
             }
           }
           .hero-section {
@@ -424,6 +491,64 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             <span style={{ fontSize: '1.1rem' }}>←</span>
             <span>Volver</span>
           </button>
+          
+          {/* Botones de AR y QR Scanner en la esquina superior derecha */}
+          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 2 }}>
+            {/* Botón Escanear QR */}
+            <button
+              onClick={handleOpenQRScanner}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px 14px',
+                background: 'rgba(255, 193, 7, 0.25)',
+                backdropFilter: 'blur(10px)',
+                color: 'white',
+                border: '1px solid rgba(255, 193, 7, 0.5)',
+                borderRadius: 20,
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(255, 193, 7, 0.3)',
+                gap: 6,
+              }}
+              className="btn-hover"
+              title="Escanear código QR"
+            >
+              <span style={{ fontSize: '1.2rem' }}>📷</span>
+              <span>QR</span>
+            </button>
+
+            {/* Botón Ver en AR - solo si tiene contenido AR */}
+            {place.has_ar_content && (
+              <button
+                onClick={handleOpenAR}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '8px 14px',
+                  background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%)',
+                  backdropFilter: 'blur(10px)',
+                  color: 'white',
+                  border: '1px solid rgba(102, 126, 234, 0.6)',
+                  borderRadius: 20,
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+                  gap: 6,
+                  animation: 'pulse-ar-button 2s infinite',
+                }}
+                className="btn-hover"
+                title="Ver en Realidad Aumentada"
+              >
+                <span style={{ fontSize: '1.2rem' }}>🥽</span>
+                <span>Ver en AR</span>
+              </button>
+            )}
+          </div>
           
           <div style={{ position: 'absolute', left: 24, bottom: 20, color: 'white', textShadow: '0 4px 20px rgba(0,0,0,0.8)', zIndex: 1 }} className="hero-content">
             <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.5px' }} className="hero-title">{place.name}</h1>
@@ -573,6 +698,18 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             <button onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
           </div>
         </div>
+      )}
+
+      {/* QR Scanner Modal */}
+      {qrScannerOpen && (
+        <QRScanner
+          onScanSuccess={handleQRScanSuccess}
+          onScanError={(error) => {
+            console.error('Error escaneando QR:', error);
+            alert(`Error al escanear: ${error}`);
+          }}
+          onClose={() => setQrScannerOpen(false)}
+        />
       )}
 
     </div>

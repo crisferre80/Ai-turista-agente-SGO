@@ -1,0 +1,273 @@
+'use client';
+
+import { useRef, useState, Suspense } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { 
+  PerspectiveCamera,
+  Environment,
+  Html,
+  useGLTF,
+  OrbitControls
+} from '@react-three/drei';
+import * as THREE from 'three';
+import type { ARData, ARHotspot } from '@/types/ar';
+
+type AttractionAR = {
+  id: string;
+  name: string;
+  description?: string;
+  lat: number;
+  lng: number;
+  image_url?: string;
+  ar_model_url?: string;
+  ar_hotspots?: ARData;
+  has_ar_content: boolean;
+  qr_code?: string;
+  category?: string;
+};
+
+type ARScenePageProps = {
+  attraction: AttractionAR;
+  showGrid?: boolean;
+  disableOrbitControls?: boolean;
+  anchorPosition?: [number, number, number];
+  isAnchored?: boolean;
+};
+
+export default function ARScene({ 
+  attraction, 
+  showGrid = true, 
+  disableOrbitControls = false,
+  anchorPosition = [0, 0, -3],
+  isAnchored = false
+}: ARScenePageProps) {
+  return (
+    <>
+      {/* Iluminación */}
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[5, 5, 5]} intensity={0.8} castShadow />
+      <pointLight position={[-5, 5, -5]} intensity={0.4} />
+
+      {/* Cámara con simulación AR */}
+      {isAnchored ? (
+        <ARCamera anchorTarget={anchorPosition} />
+      ) : (
+        <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
+      )}
+
+      {/* Controles de cámara (solo si no están desactivados) */}
+      {!disableOrbitControls && (
+        <OrbitControls
+          enablePan={true}
+          enableZoom={!isAnchored}
+          enableRotate={true}
+          maxDistance={10}
+          minDistance={isAnchored ? 0.5 : 1}
+          target={isAnchored ? anchorPosition : [0, 0, 0]}
+        />
+      )}
+
+      {/* Entorno */}
+      <Environment preset="city" />
+
+      {/* Modelo 3D principal */}
+      {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
+        <Suspense fallback={<LoadingModel position={anchorPosition} />}>
+          <MainModel modelUrl={attraction.ar_model_url} position={anchorPosition} isAnchored={isAnchored} />
+        </Suspense>
+      ) : (
+        <PlaceholderModel position={anchorPosition} isAnchored={isAnchored} />
+      )}
+
+      {/* Hotspots AR */}
+      {attraction.ar_hotspots?.hotspots?.map((hotspot) => {
+        // Ajustar posición del hotspot relativa al ancla
+        const hotspotPos = hotspot.position;
+        const adjustedPos: [number, number, number] = Array.isArray(hotspotPos)
+          ? [hotspotPos[0] + anchorPosition[0], hotspotPos[1] + anchorPosition[1], hotspotPos[2] + anchorPosition[2]]
+          : [
+              (hotspotPos.x ?? 0) + anchorPosition[0],
+              (hotspotPos.y ?? 0) + anchorPosition[1],
+              (hotspotPos.z ?? 0) + anchorPosition[2]
+            ];
+        
+        return (
+          <Suspense key={hotspot.id} fallback={null}>
+            <ARHotspotComponent hotspot={{...hotspot, position: adjustedPos}} />
+          </Suspense>
+        );
+      })}
+
+      {/* Grid de referencia (se oculta después de colocar) */}
+      {showGrid && (
+        <gridHelper args={[10, 10, '#00ff00', '#004400']} position={anchorPosition} />
+      )}
+    </>
+  );
+}
+
+// Cámara con simulación de movimiento AR
+function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) {
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+  const basePosition = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.6, 3));
+
+  useFrame((state) => {
+    if (!cameraRef.current) return;
+
+    const time = state.clock.getElapsedTime();
+    
+    // Simular pequeños movimientos como si fuera movimiento natural del usuario
+    const sway = Math.sin(time * 0.5) * 0.02;
+    const bob = Math.cos(time * 0.7) * 0.01;
+    const drift = Math.sin(time * 0.3) * 0.015;
+    
+    // Aplicar movimientos sutiles a la cámara
+    cameraRef.current.position.set(
+      basePosition.current.x + sway,
+      basePosition.current.y + bob,
+      basePosition.current.z + drift
+    );
+    
+    // Hacer que la cámara mire hacia el objeto anclado
+    cameraRef.current.lookAt(anchorTarget[0], anchorTarget[1], anchorTarget[2]);
+  });
+
+  return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
+}
+
+function MainModel({ modelUrl, position, isAnchored }: { 
+  modelUrl: string; 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
+  let gltfScene = null;
+  let error = null;
+  
+  try {
+    const gltf = useGLTF(modelUrl);
+    gltfScene = gltf.scene;
+  } catch (err) {
+    error = err;
+    console.error('❌ Error al cargar modelo 3D desde:', modelUrl, err);
+  }
+
+  if (error || !gltfScene) {
+    console.warn('⚠️ Usando modelo placeholder por fallo en la carga');
+    return <PlaceholderModel position={position} isAnchored={isAnchored} />;
+  }
+
+  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} />;
+}
+
+function StaticModel({ scene, position, isAnchored }: { 
+  scene: THREE.Group | THREE.Object3D; 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
+  const mesh = useRef<THREE.Mesh>(null);
+
+  useFrame((state, delta) => {
+    if (mesh.current && !isAnchored) {
+      // Solo rotar si no está anclado
+      mesh.current.rotation.y += delta * 0.15;
+    } else if (mesh.current && isAnchored) {
+      // Cuando está anclado, agregar un pequeño movimiento sutil
+      const time = state.clock.getElapsedTime();
+      mesh.current.rotation.y = Math.sin(time * 0.1) * 0.05; // Oscilación muy sutil
+    }
+  });
+
+  return (
+    <primitive
+      ref={mesh}
+      object={scene.clone()}
+      position={position}
+      scale={isAnchored ? 0.3 : 0.8} // Más pequeño cuando está anclado
+    />
+  );
+}
+
+function PlaceholderModel({ position, isAnchored }: { 
+  position: [number, number, number];
+  isAnchored: boolean;
+}) {
+  const mesh = useRef<THREE.Mesh>(null);
+
+  useFrame((state, delta) => {
+    if (mesh.current && !isAnchored) {
+      // Solo rotar si no está anclado
+      mesh.current.rotation.y += delta * 0.2;
+      mesh.current.rotation.x += delta * 0.1;
+    } else if (mesh.current && isAnchored) {
+      // Cuando está anclado, movimiento muy sutil
+      const time = state.clock.getElapsedTime();
+      mesh.current.rotation.y = Math.sin(time * 0.2) * 0.1; 
+      mesh.current.rotation.x = Math.cos(time * 0.15) * 0.05;
+    }
+  });
+
+  const size = isAnchored ? 0.3 : 0.6;
+  
+  return (
+    <mesh ref={mesh} position={position} castShadow>
+      <boxGeometry args={[size, size, size]} />
+      <meshStandardMaterial 
+        color={isAnchored ? "#00ff88" : "#4A90E2"} 
+        metalness={0.5} 
+        roughness={0.2}
+        emissive={isAnchored ? "#004420" : "#001122"}
+        emissiveIntensity={0.2}
+      />
+    </mesh>
+  );
+}
+
+function LoadingModel({ position }: { position: [number, number, number] }) {
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[0.5, 16, 16]} />
+      <meshBasicMaterial color="#666" wireframe />
+    </mesh>
+  );
+}
+
+function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const rawPosition = hotspot.position;
+  const position: [number, number, number] = Array.isArray(rawPosition)
+    ? (rawPosition as [number, number, number])
+    : [
+        (rawPosition as { x?: number })?.x ?? 0,
+        (rawPosition as { y?: number })?.y ?? 0,
+        (rawPosition as { z?: number })?.z ?? 0,
+      ];
+
+  if (hotspot.type === 'info') {
+    return (
+      <group position={position}>
+        <mesh onClick={() => setIsExpanded(!isExpanded)}>
+          <sphereGeometry args={[0.15, 16, 16]} />
+          <meshStandardMaterial color="#4CAF50" emissive="#4CAF50" emissiveIntensity={0.5} />
+        </mesh>
+        
+        <Html center distanceFactor={10}>
+          <div
+            className={`bg-white rounded-lg shadow-lg transition-all ${
+              isExpanded ? 'w-64' : 'w-auto'
+            }`}
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <div className="p-3 cursor-pointer">
+              <h3 className="font-bold text-sm text-gray-900">{hotspot.title}</h3>
+              {isExpanded && hotspot.description && (
+                <p className="text-xs text-gray-600 mt-2">{hotspot.description}</p>
+              )}
+            </div>
+          </div>
+        </Html>
+      </group>
+    );
+  }
+
+  return null;
+}
