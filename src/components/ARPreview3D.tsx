@@ -1864,10 +1864,12 @@ export default function ARPreview3D({
                   
                   <button
                     onClick={() => {
-                      // Reset de todas las posiciones de modelo
-                      setModelPosition({ x: 0, y: 0, z: 0 });
-                      setModelRotation({ x: 0, y: 0, z: 0 });
-                      setModelScale({ x: 1, y: 1, z: 1 });
+                      if (confirm('¿Estás seguro de que quieres resetear la posición, rotación y escala del modelo?')) {
+                        // Reset de todas las posiciones de modelo
+                        setModelPosition({ x: 0, y: 0, z: 0 });
+                        setModelRotation({ x: 0, y: 0, z: 0 });
+                        setModelScale({ x: 1, y: 1, z: 1 });
+                      }
                     }}
                     style={{
                       padding: '6px 12px',
