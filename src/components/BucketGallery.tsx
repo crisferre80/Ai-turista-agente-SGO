@@ -237,7 +237,7 @@ export default function BucketGallery({
                     onError={(e) => {
                       // Fallback for broken images
                       e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling!.style.display = 'flex';
+                      (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
                     }}
                   />
                 ) : null}
