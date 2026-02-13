@@ -53,6 +53,9 @@ export default function ARConfigPage() {
   const [primitives, setPrimitives] = useState<Primitive[]>([]);
   const [lightMode, setLightMode] = useState(false);
   const [qrCode, setQrCode] = useState('');
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [generatingQr, setGeneratingQr] = useState(false);
   
   // Estado para transformaciones del modelo 3D
   const [modelTransform, setModelTransform] = useState<{
@@ -421,23 +424,145 @@ export default function ARConfigPage() {
                       Modo ligero (sin modelo)
                     </label>
 
-                    {/* QR Code */}
+                    {/* QR Code + Generador */}
                     <div>
                       <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>
                         ID QR
                       </label>
-                      <input
-                        type="text"
-                        value={qrCode}
-                        onChange={(e) => setQrCode(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '6px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '0.8rem'
-                        }}
-                      />
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={qrCode}
+                          onChange={(e) => setQrCode(e.target.value)}
+                          style={{
+                            flex: 1,
+                            padding: '6px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '0.8rem'
+                          }}
+                        />
+
+                        <button
+                          onClick={async () => {
+                            // generar QR y abrir modal
+                            if (!selectedAttraction) return;
+                            try {
+                              setGeneratingQr(true);
+                              const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrCode || `AR_${selectedAttraction.id}`)}`;
+                              const QR = await import('qrcode');
+                              const dataUrl = await QR.toDataURL(url, { margin: 2, scale: 8 });
+                              setQrDataUrl(dataUrl);
+                              setQrModalOpen(true);
+                            } catch (err) {
+                              console.error('Error generando QR:', err);
+                              alert('No se pudo generar el código QR');
+                            } finally {
+                              setGeneratingQr(false);
+                            }
+                          }}
+                          style={{
+                            background: '#1976d2',
+                            color: 'white',
+                            border: 'none',
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem'
+                          }}
+                        >
+                          {generatingQr ? 'Generando...' : 'Generar QR'}
+                        </button>
+                      </div>
+
+                      {/* Modal del QR (simple) */}
+                      {qrModalOpen && (
+                        <div style={{
+                          position: 'fixed',
+                          inset: 0,
+                          background: 'rgba(0,0,0,0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 60
+                        }}>
+                          <div style={{
+                            width: 'min(520px, 95%)',
+                            background: 'white',
+                            borderRadius: '12px',
+                            padding: '20px',
+                            boxShadow: '0 8px 40px rgba(0,0,0,0.2)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                              <h3 style={{ margin: 0, fontSize: '1rem' }}>Código QR — {selectedAttraction?.name}</h3>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  onClick={() => { setQrModalOpen(false); setQrDataUrl(''); }}
+                                  style={{ background: 'transparent', border: '1px solid #ddd', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer' }}
+                                >Cerrar</button>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '16px', marginTop: '16px', alignItems: 'center' }}>
+                              <div style={{ background: '#fafafa', padding: '12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {qrDataUrl ? (
+                                  <img src={qrDataUrl} alt="QR" style={{ width: 220, height: 220, display: 'block' }} />
+                                ) : (
+                                  <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>Generando…</div>
+                                )}
+                              </div>
+
+                              <div style={{ flex: 1 }}>
+                                <p style={{ marginTop: 0 }}>
+                                  Escanea este código para abrir la experiencia AR en el dispositivo. Puedes descargarlo o imprimirlo.
+                                </p>
+
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                  <button
+                                    onClick={() => {
+                                      if (!qrDataUrl) return;
+                                      const a = document.createElement('a');
+                                      a.href = qrDataUrl;
+                                      a.download = `${selectedAttraction?.id || 'qr'}.png`;
+                                      a.click();
+                                    }}
+                                    style={{ background: '#4CAF50', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                                  >Descargar PNG</button>
+
+                                  <button
+                                    onClick={() => {
+                                      if (!qrDataUrl) return;
+                                      const w = window.open('');
+                                      if (!w) return alert('No se pudo abrir ventana de impresión');
+                                      w.document.write(`<img src="${qrDataUrl}" style="width:320px;height:320px;display:block;margin:auto;"/>`);
+                                      w.document.title = `${selectedAttraction?.name} - QR`;
+                                      w.document.close();
+                                      w.focus();
+                                      setTimeout(() => { w.print(); }, 200);
+                                    }}
+                                    style={{ background: '#1976d2', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                                  >Imprimir</button>
+
+                                  <button
+                                    onClick={() => {
+                                      // Abrir URL (prueba rápida)
+                                      if (!selectedAttraction) return;
+                                      const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrCode || `AR_${selectedAttraction.id}`)}`;
+                                      window.open(url, '_blank');
+                                    }}
+                                    style={{ background: '#eee', border: '1px solid #ddd', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                                  >Abrir en nueva pestaña</button>
+                                </div>
+
+                                <div style={{ marginTop: '12px', fontSize: '0.85rem', color: '#666' }}>
+                                  <strong>URL codificada:</strong>
+                                  <div style={{ wordBreak: 'break-all' }}>{`${window.location.origin}/ar/${selectedAttraction?.id}?qr=${encodeURIComponent(qrCode || `AR_${selectedAttraction?.id}`)}`}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Botón guardar */}

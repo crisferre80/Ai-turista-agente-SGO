@@ -5,7 +5,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
-import { Settings, Lightbulb, Camera, Trash2, Move } from 'lucide-react';
+import { Settings, Lightbulb, Camera, Trash2, Move, RotateCcw, Maximize2 } from 'lucide-react';
 
 interface Hotspot {
   id: string;
@@ -375,6 +375,7 @@ export default function ARPreview3D({
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
+  const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
   const [showTools, setShowTools] = useState(false);
   const [showLightControls, setShowLightControls] = useState(false);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
@@ -553,6 +554,9 @@ export default function ARPreview3D({
           maxDistance={20}
         />
 
+        {/* Gizmo mode toolbar (translate / rotate / scale) */}
+        <group position={[0, 0, 0]} />
+
         {/* Iluminación base muy ligera para evitar forzar la GPU */}
         <ambientLight intensity={0.8} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
@@ -580,10 +584,10 @@ export default function ARPreview3D({
           >
             {modelSelected ? (
               <TransformControls
-                mode="translate"
-                size={1.3}
+                mode={transformMode}
+                size={1.6}
                 space="world"
-                translationSnap={1}
+                // no snapping -> movimiento fluido
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -598,22 +602,19 @@ export default function ARPreview3D({
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;
                   if (!obj) return;
+
+                  // Actualizar siempre posición/rotación/escala para que los cambios sean fluidos
                   const { x, y, z } = obj.position;
                   setModelPosition({ x, y, z });
-                  setModelRotation({
-                    x: obj.rotation.x,
-                    y: obj.rotation.y,
-                    z: obj.rotation.z,
-                  });
-                  setModelScale({
-                    x: obj.scale.x,
-                    y: obj.scale.y,
-                    z: obj.scale.z,
-                  });
+                  setModelRotation({ x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z });
+                  setModelScale({ x: obj.scale.x, y: obj.scale.y, z: obj.scale.z });
                 }}
               >
                 <group
                   ref={modelGroupRef}
+                  position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                  rotation={[modelRotation.x, modelRotation.y, modelRotation.z]}
+                  scale={[modelScale.x, modelScale.y, modelScale.z]}
                   onClick={(e) => {
                     e.stopPropagation();
                     setModelSelected(true);
@@ -625,6 +626,9 @@ export default function ARPreview3D({
             ) : (
               <group
                 ref={modelGroupRef}
+                position={[modelPosition.x, modelPosition.y, modelPosition.z]}
+                rotation={[modelRotation.x, modelRotation.y, modelRotation.z]}
+                scale={[modelScale.x, modelScale.y, modelScale.z]}
                 onClick={(e) => {
                   e.stopPropagation();
                   setModelSelected(true);
@@ -644,9 +648,8 @@ export default function ARPreview3D({
             return (
               <TransformControls
                 key={primitive.id}
-                mode="translate"
+                mode={transformMode}
                 size={1.2}
-                translationSnap={1}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -661,8 +664,22 @@ export default function ARPreview3D({
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;
                   if (!obj) return;
-                  const { x, y, z } = obj.position;
-                  updatePrimitivePosition(primitive.id, { x, y, z });
+
+                  const pos = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+                  const rot = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+                  const scl = { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z };
+
+                  if (transformMode === 'translate') updatePrimitivePosition(primitive.id, pos);
+                  if (transformMode === 'rotate') {
+                    updateSelectedPrimitiveRotation('x', rot.x);
+                    updateSelectedPrimitiveRotation('y', rot.y);
+                    updateSelectedPrimitiveRotation('z', rot.z);
+                  }
+                  if (transformMode === 'scale') {
+                    updateSelectedPrimitiveScale('x', scl.x);
+                    updateSelectedPrimitiveScale('y', scl.y);
+                    updateSelectedPrimitiveScale('z', scl.z);
+                  }
                 }}
               >
                 <PrimitiveObject
@@ -692,9 +709,8 @@ export default function ARPreview3D({
             return (
               <TransformControls
                 key={hotspot.id}
-                mode="translate"
+                mode={transformMode}
                 size={1.0}
-                translationSnap={1}
                 onMouseDown={() => {
                   if (orbitRef.current) {
                     orbitRef.current.enabled = false;
@@ -709,8 +725,14 @@ export default function ARPreview3D({
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;
                   if (!obj) return;
-                  const { x, y, z } = obj.position;
-                  onHotspotPositionChange(hotspot.id, { x, y, z });
+
+                  const pos = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+                  const rot = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+                  const scl = { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z };
+
+                  if (transformMode === 'translate' && onHotspotPositionChange) onHotspotPositionChange(hotspot.id, pos);
+                  if (transformMode === 'rotate' && onHotspotRotationChange) onHotspotRotationChange(hotspot.id, rot);
+                  if (transformMode === 'scale' && onHotspotScaleChange) onHotspotScaleChange(hotspot.id, scl);
                 }}
               >
                 <HotspotMarker
@@ -804,6 +826,57 @@ export default function ARPreview3D({
             • <strong>Zoom:</strong> Rueda del mouse<br/>
             • <strong>Mover:</strong> Click der + arrastrar<br/>
             • <strong>Seleccionar:</strong> Click en objeto
+          </div>
+
+          {/* Gizmo mode buttons */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button
+              onClick={() => setTransformMode('translate')}
+              style={{
+                padding: '4px 8px',
+                background: transformMode === 'translate' ? '#2563eb' : 'transparent',
+                color: transformMode === 'translate' ? 'white' : '#ddd',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+              title="Mover (Translate)"
+            >
+              <Move size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Mover
+            </button>
+
+            <button
+              onClick={() => setTransformMode('rotate')}
+              style={{
+                padding: '4px 8px',
+                background: transformMode === 'rotate' ? '#2563eb' : 'transparent',
+                color: transformMode === 'rotate' ? 'white' : '#ddd',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+              title="Rotar (Rotate)"
+            >
+              <RotateCcw size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Rotar
+            </button>
+
+            <button
+              onClick={() => setTransformMode('scale')}
+              style={{
+                padding: '4px 8px',
+                background: transformMode === 'scale' ? '#2563eb' : 'transparent',
+                color: transformMode === 'scale' ? 'white' : '#ddd',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+              title="Escalar (Scale)"
+            >
+              <Maximize2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Escalar
+            </button>
           </div>
         </div>
 
