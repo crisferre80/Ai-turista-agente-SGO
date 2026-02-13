@@ -148,6 +148,7 @@ export function canonicalizeARDataForSave(raw: unknown): ARData {
   });
 
   const mt = normalized.modelTransform;
+  if (!mt) throw new Error('modelTransform is undefined');
   const mtPos = vecToObj(mt.position);
   const mtRot = vecToObj(mt.rotation);
   const mtScl = vecToObj(mt.scale);
