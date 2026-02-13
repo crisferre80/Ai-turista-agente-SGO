@@ -68,6 +68,10 @@ export default function ARConfigPage() {
     scale: { x: 1, y: 1, z: 1 }
   });
 
+  // Refs para garantizar que el guardado usa el último transform/primitives inmediatamente
+  const latestModelTransformRef = React.useRef(modelTransform);
+  const latestPrimitivesRef = React.useRef<Primitive[]>([]);
+
   useEffect(() => {
     loadAttractions();
   }, []);
@@ -89,17 +93,21 @@ export default function ARConfigPage() {
       
       setHotspots(savedHotspots);
       setPrimitives(savedPrimitives);
+      latestPrimitivesRef.current = savedPrimitives;
       
       // Cargar transformaciones del modelo si existen
       if (savedModelTransform) {
         setModelTransform(savedModelTransform);
+        latestModelTransformRef.current = savedModelTransform;
       } else {
         // Resetear a valores por defecto
-        setModelTransform({
+        const defaultTransform = {
           position: { x: 0, y: 0, z: 0 },
           rotation: { x: 0, y: 0, z: 0 },
           scale: { x: 1, y: 1, z: 1 }
-        });
+        };
+        setModelTransform(defaultTransform);
+        latestModelTransformRef.current = defaultTransform;
       }
     }
   }, [selectedAttraction]);
@@ -203,8 +211,8 @@ export default function ARConfigPage() {
 
       const arData = {
         hotspots,
-        primitives,
-        modelTransform
+        primitives: latestPrimitivesRef.current || primitives,
+        modelTransform: latestModelTransformRef.current || modelTransform
       };
 
       const { error } = await supabase
@@ -445,14 +453,39 @@ export default function ARConfigPage() {
 
                         <button
                           onClick={async () => {
-                            // generar QR y abrir modal
+                            // generar QR, persistir en DB y abrir modal
                             if (!selectedAttraction) return;
+
+                            const qrValue = (qrCode || `AR_${selectedAttraction.id}`).trim();
+
                             try {
                               setGeneratingQr(true);
-                              const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrCode || `AR_${selectedAttraction.id}`)}`;
+
+                              // 1) Generar data URL del QR
+                              const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrValue)}`;
                               const QR = await import('qrcode');
                               const dataUrl = await QR.toDataURL(url, { margin: 2, scale: 8 });
                               setQrDataUrl(dataUrl);
+
+                              // 2) Persistir qr_code en la DB (auto-save)
+                              const { error: dbError } = await supabase
+                                .from('attractions')
+                                .update({ qr_code: qrValue })
+                                .eq('id', selectedAttraction.id);
+
+                              if (dbError) {
+                                console.error('Error guardando QR en DB:', dbError);
+                                alert('Error guardando el código QR en la base de datos');
+                              } else {
+                                // actualizar estado local para reflejar el cambio inmediatamente
+                                setQrCode(qrValue);
+                                setSelectedAttraction({ ...selectedAttraction, qr_code: qrValue });
+
+                                // actualizar lista local (si existe)
+                                setAttractions(prev => prev.map(a => a.id === selectedAttraction.id ? { ...a, qr_code: qrValue } : a));
+                              }
+
+                              // 3) abrir modal
                               setQrModalOpen(true);
                             } catch (err) {
                               console.error('Error generando QR:', err);
@@ -471,7 +504,7 @@ export default function ARConfigPage() {
                             fontSize: '0.8rem'
                           }}
                         >
-                          {generatingQr ? 'Generando...' : 'Generar QR'}
+                          {generatingQr ? 'Generando...' : 'Generar & Guardar'}
                         </button>
                       </div>
 
@@ -660,8 +693,9 @@ export default function ARConfigPage() {
                     onModelTransformChange={(transform) => {
                       console.log('Actualizando transformación del modelo:', transform);
                       setModelTransform(transform);
+                      latestModelTransformRef.current = transform;
                     }}
-                    onPrimitivesChange={setPrimitives}
+                    onPrimitivesChange={(p) => { setPrimitives(p); latestPrimitivesRef.current = p; }}
                   />
                 </div>
                 

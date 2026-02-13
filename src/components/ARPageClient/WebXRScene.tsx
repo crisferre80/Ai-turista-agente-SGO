@@ -41,6 +41,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   
   const [isPlacing, setIsPlacing] = useState(true);
   const [countPulse, setCountPulse] = useState(false);
+  const [showPhonePreview, setShowPhonePreview] = useState(false);
   const store = createXRStore();
 
   // Pulse animation when a new object is placed
@@ -69,6 +70,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
         <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm border border-white/8 rounded-lg p-2 px-3 shadow-sm animate-header-in">
           <div className="flex items-center gap-3">
             {attraction.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={attraction.image_url} alt={attraction.name} className="w-10 h-10 rounded-md object-cover shadow" />
             ) : (
               <div className="w-10 h-10 rounded-md bg-gradient-to-br from-sky-600 to-indigo-600 flex items-center justify-center text-white font-semibold">AR</div>
@@ -92,13 +94,24 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          className="ml-4 bg-white/6 hover:bg-white/12 text-white p-2 rounded-lg transition-all duration-150 shadow-sm border border-white/6"
-          aria-label="Cerrar AR"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPhonePreview(true)}
+            className="bg-white/6 hover:bg-white/12 text-white p-2 rounded-lg transition-all duration-150 shadow-sm border border-white/6"
+            title="Vista previa móvil"
+            aria-label="Vista previa móvil"
+          >
+            <Camera className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={onClose}
+            className="ml-2 bg-white/6 hover:bg-white/12 text-white p-2 rounded-lg transition-all duration-150 shadow-sm border border-white/6"
+            aria-label="Cerrar AR"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       
       {/* AR action (primary) */}
@@ -198,7 +211,45 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
         </XR>
       </Canvas>
 
-      {/* Instruction panel — professional */}
+      {/* Phone preview modal */}
+      {showPhonePreview && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60">
+          <div className="w-[380px] max-w-full rounded-2xl shadow-2xl bg-gradient-to-b from-slate-900/90 to-black/80 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white font-semibold">Simulación móvil — {attraction.name}</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowPhonePreview(false)}
+                  className="bg-white/6 hover:bg-white/10 text-white p-1 rounded-md"
+                >Cerrar</button>
+              </div>
+            </div>
+
+            <div className="mx-auto bg-black rounded-xl w-[320px] h-[720px] overflow-hidden border border-white/10 shadow-lg" style={{ position: 'relative' }}>
+              {/* phone notch / speaker */}
+              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 40 }}>
+                <div className="w-36 h-2 rounded-full bg-black/40" />
+              </div>
+
+              <div style={{ width: '100%', height: '100%' }}>
+                <Canvas camera={{ position: [0, 1.6, 2.3], fov: 50 }} style={{ width: '100%', height: '100%' }}>
+                  <ambientLight intensity={0.6} />
+                  <directionalLight position={[3, 5, 2]} intensity={0.8} />
+                  <Suspense fallback={null}>
+                    {/* Reuse ARObjectModel so preview matches runtime */}
+                    <ARObjectModel attraction={attraction} scale={0.35} />
+                  </Suspense>
+                </Canvas>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-slate-300">
+              Esta vista simula el encuadre en un teléfono (FOV y escala aproximada). Usa esto para comprobar tamaño y encuadre antes de probar en dispositivo real.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="absolute bottom-28 left-4 right-4 z-40 pointer-events-none">
         <div className="pointer-events-auto max-w-2xl mx-auto bg-black/50 backdrop-blur-sm border border-white/8 rounded-2xl p-4 shadow-md text-white grid grid-cols-2 gap-4 animate-instructions">
           <div>

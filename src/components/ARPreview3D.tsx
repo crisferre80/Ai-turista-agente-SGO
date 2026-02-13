@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState, useEffect, Suspense } from 'react';
+import { useRef, useState, useEffect, Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move, RotateCcw, Maximize2 } from 'lucide-react';
 
@@ -131,14 +131,14 @@ function Model({ url }: { url: string }) {
 function HotspotMarker({ 
   hotspot, 
   isSelected, 
-  onSelect 
+  onSelect,
+  meshRef
 }: { 
   hotspot: Hotspot; 
   isSelected: boolean;
   onSelect: () => void;
+  meshRef?: React.Ref<THREE.Mesh>;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
   // Color según tipo
   const color = 
     hotspot.type === 'info' ? '#4CAF50' :
@@ -281,11 +281,13 @@ function Grid() {
 function PrimitiveObject({ 
   primitive, 
   isSelected, 
-  onClick 
+  onClick,
+  meshRef
 }: { 
   primitive: Primitive; 
   isSelected: boolean;
   onClick: () => void;
+  meshRef?: React.Ref<THREE.Mesh>;
 }) {
   const renderGeometry = () => {
     switch (primitive.type) {
@@ -306,6 +308,7 @@ function PrimitiveObject({
 
   return (
     <mesh
+      ref={meshRef}
       position={[primitive.position.x, primitive.position.y, primitive.position.z]}
       rotation={[primitive.rotation.x, primitive.rotation.y, primitive.rotation.z]}
       onClick={(e) => {
@@ -371,7 +374,7 @@ export default function ARPreview3D({
   onPrimitivesChange,
 }: ARPreview3DProps) {
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>(null);
-  const primitives = externalPrimitives || [];
+  const primitives = useMemo(() => externalPrimitives || [], [externalPrimitives]);
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
@@ -384,6 +387,11 @@ export default function ARPreview3D({
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
   const primitiveIdRef = useRef(0);
+  // Refs para TransformControls / selección
+  const transformRef = useRef<TransformControlsImpl | null>(null); // transform controls active instance
+  const selectedPrimitiveMeshRef = useRef<THREE.Mesh | null>(null);
+  const selectedHotspotMeshRef = useRef<THREE.Mesh | null>(null);
+
   const [modelPosition, setModelPosition] = useState<{ x: number; y: number; z: number }>({
     x: 0,
     y: 0,
@@ -411,6 +419,54 @@ export default function ARPreview3D({
     }
   }, [modelPosition, modelRotation, modelScale, onModelTransformChange]);
 
+  // Mantener TransformControls correctamente 'attached' al objeto seleccionado.
+  // Si el usuario selecciona el modelo/primitiva/hotspot, attach explícito para
+  // forzar que el gizmo siga la transform que proviene del estado.
+  useEffect(() => {
+    try {
+      if (modelSelected && modelGroupRef.current && transformRef.current) {
+        if (transformRef.current?.attach) {
+          transformRef.current.attach(modelGroupRef.current as unknown as THREE.Object3D);
+        }
+        if (transformRef.current?.updateMatrixWorld) {
+          transformRef.current.updateMatrixWorld();
+        }
+      }
+    } catch (err) {
+      console.warn('Error re-adjuntando TransformControls al modelo:', err);
+    }
+  }, [modelSelected, modelPosition, modelRotation, modelScale]);
+
+  useEffect(() => {
+    try {
+      if (selectedPrimitive && selectedPrimitiveMeshRef.current && transformRef.current) {
+        if (transformRef.current?.attach) {
+          transformRef.current.attach(selectedPrimitiveMeshRef.current as unknown as THREE.Object3D);
+        }
+        if (transformRef.current?.updateMatrixWorld) {
+          transformRef.current.updateMatrixWorld();
+        }
+      }
+    } catch (err) {
+      console.warn('Error re-adjuntando TransformControls a primitiva:', err);
+    }
+  }, [selectedPrimitive, primitives]);
+
+  useEffect(() => {
+    try {
+      if (selectedHotspot && selectedHotspotMeshRef.current && transformRef.current) {
+        if (transformRef.current?.attach) {
+          transformRef.current.attach(selectedHotspotMeshRef.current as unknown as THREE.Object3D);
+        }
+        if (transformRef.current?.updateMatrixWorld) {
+          transformRef.current.updateMatrixWorld();
+        }
+      }
+    } catch (err) {
+      console.warn('Error re-adjuntando TransformControls a hotspot:', err);
+    }
+  }, [selectedHotspot, hotspots]);
+
   const clearSelection = () => {
     setSelectedPrimitive(null);
     setSelectedHotspot(null);
@@ -435,7 +491,7 @@ export default function ARPreview3D({
 
   const removePrimitive = (id: string) => {
     if (!onPrimitivesChange) return;
-    const updated = primitives.filter(p => p.id !== id);
+    const updated = primitives.filter((p: Primitive) => p.id !== id);
     onPrimitivesChange(updated);
     if (selectedPrimitive === id) setSelectedPrimitive(null);
   };
@@ -460,7 +516,7 @@ export default function ARPreview3D({
   const updateSelectedPrimitivePosition = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
     if (!onPrimitivesChange) return;
-    const updated = primitives.map(p => 
+    const updated = primitives.map((p: Primitive) => 
       p.id === selectedPrimitive
         ? { ...p, position: { ...p.position, [axis]: value } }
         : p
@@ -471,7 +527,7 @@ export default function ARPreview3D({
   const updateSelectedPrimitiveScale = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
     if (!onPrimitivesChange) return;
-    const updated = primitives.map(p => 
+    const updated = primitives.map((p: Primitive) => 
       p.id === selectedPrimitive
         ? { ...p, scale: { ...p.scale, [axis]: value } }
         : p
@@ -482,7 +538,7 @@ export default function ARPreview3D({
   const updateSelectedPrimitiveRotation = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
     if (!onPrimitivesChange) return;
-    const updated = primitives.map(p => 
+    const updated = primitives.map((p: Primitive) => 
       p.id === selectedPrimitive
         ? { ...p, rotation: { ...p.rotation, [axis]: value } }
         : p
@@ -493,7 +549,7 @@ export default function ARPreview3D({
   const updateSelectedPrimitiveColor = (color: string) => {
     if (!selectedPrimitive) return;
     if (!onPrimitivesChange) return;
-    const updated = primitives.map(p => 
+    const updated = primitives.map((p: Primitive) => 
       p.id === selectedPrimitive
         ? { ...p, color }
         : p
@@ -503,7 +559,7 @@ export default function ARPreview3D({
 
   const updatePrimitivePosition = (id: string, position: { x: number; y: number; z: number }) => {
     if (!onPrimitivesChange) return;
-    const updated = primitives.map(p => 
+    const updated = primitives.map((p: Primitive) => 
       p.id === id
         ? { ...p, position }
         : p
@@ -584,6 +640,7 @@ export default function ARPreview3D({
           >
             {modelSelected ? (
               <TransformControls
+                ref={transformRef}
                 mode={transformMode}
                 size={1.6}
                 space="world"
@@ -641,12 +698,13 @@ export default function ARPreview3D({
         )}
 
         {/* Primitivas personalizadas con gizmo para la seleccionada */}
-        {primitives.map((primitive) => {
+        {primitives.map((primitive: Primitive) => {
           const isSelected = selectedPrimitive === primitive.id;
 
           if (isSelected) {
             return (
               <TransformControls
+                ref={transformRef}
                 key={primitive.id}
                 mode={transformMode}
                 size={1.2}
@@ -685,6 +743,7 @@ export default function ARPreview3D({
                 <PrimitiveObject
                   primitive={primitive}
                   isSelected
+                  meshRef={selectedPrimitiveMeshRef}
                   onClick={() => setSelectedPrimitive(primitive.id)}
                 />
               </TransformControls>
@@ -708,6 +767,7 @@ export default function ARPreview3D({
           if (isSelected && onHotspotPositionChange) {
             return (
               <TransformControls
+                ref={transformRef}
                 key={hotspot.id}
                 mode={transformMode}
                 size={1.0}
@@ -738,6 +798,7 @@ export default function ARPreview3D({
                 <HotspotMarker
                   hotspot={hotspot}
                   isSelected
+                  meshRef={selectedHotspotMeshRef}
                   onSelect={() => setSelectedHotspot(hotspot.id)}
                 />
               </TransformControls>
@@ -1089,7 +1150,7 @@ export default function ARPreview3D({
               </div>
               {primitives.length > 0 && (
                 <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
-                  {primitives.map((prim) => (
+                  {primitives.map((prim: Primitive) => (
                     <div
                       key={prim.id}
                       style={{
@@ -1126,7 +1187,7 @@ export default function ARPreview3D({
 
               {/* Propiedades de la primitiva seleccionada */}
               {selectedPrimitive && (() => {
-                const prim = primitives.find(p => p.id === selectedPrimitive);
+                const prim = primitives.find((p: Primitive) => p.id === selectedPrimitive);
                 if (!prim) return null;
                 return (
                   <div style={{
