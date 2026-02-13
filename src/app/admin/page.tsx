@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
 import EmailManagement from '@/components/EmailManagement';
+import BucketGallery from '@/components/BucketGallery';
 import { takePhoto } from '@/lib/photoService';
 import EmailManager from '@/email/EmailManager';
 import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
@@ -468,6 +469,37 @@ export default function AdminDashboard() {
 
         setNewBusiness(prev => ({ ...prev, image_url: url }));
         setActiveTab('negocios');
+    };
+
+    const handleSelectFiles = (fileUrls: string[]) => {
+        if (fileUrls.length === 0) return;
+
+        if (galleryTarget === 'place-main') {
+            // Para imagen principal, usar solo la primera
+            setNewPlace(prev => ({ ...prev, img: fileUrls[0] }));
+            setActiveTab('lugares');
+            return;
+        }
+
+        if (galleryTarget === 'place-gallery') {
+            // Para galería, agregar todas las seleccionadas
+            setNewPlace(prev => ({
+                ...prev,
+                gallery: [...new Set([...prev.gallery, ...fileUrls])] // Evitar duplicados
+            }));
+            setActiveTab('lugares');
+            return;
+        }
+
+        if (galleryTarget === 'business-main') {
+            // Para imagen principal de negocio, usar solo la primera
+            setNewBusiness(prev => ({ ...prev, image_url: fileUrls[0] }));
+            setActiveTab('negocios');
+            return;
+        }
+
+        // Fallback
+        alert(`Se seleccionaron ${fileUrls.length} archivo(s), pero el destino "${galleryTarget}" no está soportado para selección múltiple.`);
     };
 
     const handleDeleteImage = async (bucket: string, path: string) => {
@@ -1948,46 +1980,18 @@ export default function AdminDashboard() {
                         </div>
 
                         <div>
-                            <h4 style={{ margin: '0 0 12px 0', color: COLOR_BLUE }}>Imágenes ({galleryImagesFromStorage.length})</h4>
-                            {galleryImagesFromStorage.length === 0 ? (
-                                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No hay imágenes en esta carpeta.</div>
+                            <h4 style={{ margin: '0 0 12px 0', color: COLOR_BLUE }}>Imágenes del Bucket</h4>
+                            {selectedBucket ? (
+                                <BucketGallery
+                                    bucketName={selectedBucket}
+                                    maxSelection={20}
+                                    allowedTypes={['image/']}
+                                    onClose={() => {}}
+                                    onSelectFiles={handleSelectFiles}
+                                />
                             ) : (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px' }}>
-                                    {galleryImagesFromStorage.map(image => (
-                                        <div key={image.path} style={{ border: '1px solid #e2e8f0', borderRadius: 14, padding: 10, background: '#fff' }}>
-                                            <img
-                                                src={image.url}
-                                                alt={image.name}
-                                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: 10, marginBottom: 8 }}
-                                            />
-                                            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 8, wordBreak: 'break-word' }}>{image.name}</div>
-                                            <div style={{ display: 'flex', gap: '6px' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => applyGalleryImage(image.url)}
-                                                    style={{ ...btnPrimary, flex: 1, padding: '8px 10px', fontSize: '0.8rem' }}
-                                                >
-                                                    Usar
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteImage(selectedBucket, image.path)}
-                                                    style={{
-                                                        padding: '8px 10px',
-                                                        background: '#ef4444',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        borderRadius: '6px',
-                                                        fontSize: '0.8rem',
-                                                        fontWeight: 'bold',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    🗑️
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                                    Selecciona un bucket para ver las imágenes.
                                 </div>
                             )}
                         </div>

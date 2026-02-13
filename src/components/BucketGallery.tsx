@@ -27,6 +27,7 @@ interface BucketGalleryProps {
   onClose?: () => void;
   maxSelection?: number;
   allowedTypes?: string[]; // e.g., ['image/', 'model/']
+  onSelectFiles?: (fileUrls: string[]) => void; // Callback when files are selected for use
 }
 
  
@@ -34,7 +35,8 @@ export default function BucketGallery({
   bucketName,
   onClose,
   maxSelection = 10,
-  allowedTypes = ['image/']
+  allowedTypes = ['image/'],
+  onSelectFiles
 }: BucketGalleryProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +135,13 @@ export default function BucketGallery({
     }
   };
 
+  const selectFilesForUse = () => {
+    if (onSelectFiles && selectedFiles.size > 0) {
+      const fileUrls = Array.from(selectedFiles).map(fileName => getFileUrl(fileName));
+      onSelectFiles(fileUrls);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -175,6 +184,14 @@ export default function BucketGallery({
           </button>
           {selectedFiles.size > 0 && (
             <>
+              {onSelectFiles && (
+                <button
+                  onClick={selectFilesForUse}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm flex items-center gap-1"
+                >
+                  ✓ Usar
+                </button>
+              )}
               <button
                 onClick={downloadSelected}
                 className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm flex items-center gap-1"
