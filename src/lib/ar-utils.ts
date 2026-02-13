@@ -123,24 +123,38 @@ export function canonicalizeARDataForSave(raw: unknown): ARData {
   // Reuse normalize but also ensure primitive numbers and plain objects
   const normalized = normalizeARData(raw);
   // Force numeric casts
-  normalized.hotspots = normalized.hotspots.map(h => ({
-    ...h,
-    position: { x: Number(h.position.x), y: Number(h.position.y), z: Number(h.position.z) },
-    rotation: h.rotation ? { x: Number(h.rotation.x), y: Number(h.rotation.y), z: Number(h.rotation.z) } : undefined,
-    scale: h.scale ? { x: Number(h.scale.x), y: Number(h.scale.y), z: Number(h.scale.z) } : undefined
-  }));
+  normalized.hotspots = normalized.hotspots.map(h => {
+    const pos = vecToObj(h.position);
+    const rot = h.rotation ? vecToObj(h.rotation) : undefined;
+    const scl = h.scale ? vecToObj(h.scale) : undefined;
+    return {
+      ...h,
+      position: { x: Number(pos.x), y: Number(pos.y), z: Number(pos.z) },
+      rotation: rot ? { x: Number(rot.x), y: Number(rot.y), z: Number(rot.z) } : undefined,
+      scale: scl ? { x: Number(scl.x), y: Number(scl.y), z: Number(scl.z) } : undefined
+    };
+  });
 
-  normalized.primitives = normalized.primitives.map(p => ({
-    ...p,
-    position: { x: Number(p.position.x), y: Number(p.position.y), z: Number(p.position.z) },
-    rotation: { x: Number(p.rotation.x), y: Number(p.rotation.y), z: Number(p.rotation.z) },
-    scale: { x: Number(p.scale.x), y: Number(p.scale.y), z: Number(p.scale.z) }
-  }));
+  normalized.primitives = (normalized.primitives || []).map(p => {
+    const pos = vecToObj(p.position);
+    const rot = vecToObj(p.rotation);
+    const scl = vecToObj(p.scale);
+    return {
+      ...p,
+      position: { x: Number(pos.x), y: Number(pos.y), z: Number(pos.z) },
+      rotation: { x: Number(rot.x), y: Number(rot.y), z: Number(rot.z) },
+      scale: { x: Number(scl.x), y: Number(scl.y), z: Number(scl.z) }
+    };
+  });
 
+  const mt = normalized.modelTransform;
+  const mtPos = vecToObj(mt.position);
+  const mtRot = vecToObj(mt.rotation);
+  const mtScl = vecToObj(mt.scale);
   normalized.modelTransform = {
-    position: { x: Number(normalized.modelTransform.position.x), y: Number(normalized.modelTransform.position.y), z: Number(normalized.modelTransform.position.z) },
-    rotation: { x: Number(normalized.modelTransform.rotation.x), y: Number(normalized.modelTransform.rotation.y), z: Number(normalized.modelTransform.rotation.z) },
-    scale: { x: Number(normalized.modelTransform.scale.x), y: Number(normalized.modelTransform.scale.y), z: Number(normalized.modelTransform.scale.z) }
+    position: { x: Number(mtPos.x), y: Number(mtPos.y), z: Number(mtPos.z) },
+    rotation: { x: Number(mtRot.x), y: Number(mtRot.y), z: Number(mtRot.z) },
+    scale: { x: Number(mtScl.x), y: Number(mtScl.y), z: Number(mtScl.z) }
   };
 
   return normalized;
