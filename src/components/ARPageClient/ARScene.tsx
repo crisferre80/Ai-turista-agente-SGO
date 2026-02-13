@@ -7,7 +7,8 @@ import {
   Environment,
   Html,
   useGLTF,
-  OrbitControls
+  OrbitControls,
+  useTexture
 } from '@react-three/drei';
 import * as THREE from 'three';
 import type { ARData, ARHotspot } from '@/types/ar';
@@ -70,10 +71,16 @@ export default function ARScene({
       {/* Entorno */}
       <Environment preset="city" />
 
-      {/* Modelo 3D principal */}
+      {/* Modelo 3D principal (aplica transform guardado si existe) */}
       {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
         <Suspense fallback={<LoadingModel position={anchorPosition} isAnchored={isAnchored} />}>
-          <MainModel modelUrl={attraction.ar_model_url} imageUrl={attraction.image_url} position={anchorPosition} isAnchored={isAnchored} />
+          <MainModel
+            modelUrl={attraction.ar_model_url}
+            imageUrl={attraction.image_url}
+            position={anchorPosition}
+            isAnchored={isAnchored}
+            transform={attraction.ar_hotspots?.modelTransform}
+          />
         </Suspense>
       ) : (
         <FallbackVisual imageUrl={attraction.image_url} position={anchorPosition} isAnchored={isAnchored} />
@@ -95,6 +102,49 @@ export default function ARScene({
           <Suspense key={hotspot.id} fallback={null}>
             <ARHotspotComponent hotspot={{...hotspot, position: adjustedPos}} />
           </Suspense>
+        );
+      })}
+
+      {/* Renderizar primitivas definidas en el editor AR (si existen) */}
+      {attraction.ar_hotspots?.primitives?.map((prim) => {
+        const pos = prim.position || { x: 0, y: 0, z: 0 };
+        const rot = prim.rotation || { x: 0, y: 0, z: 0 };
+        const scl = prim.scale || { x: 1, y: 1, z: 1 };
+        const adjustedPos: [number, number, number] = [pos.x + anchorPosition[0], pos.y + anchorPosition[1], pos.z + anchorPosition[2]];
+
+        return (
+          <group key={prim.id} position={adjustedPos} rotation={[rot.x, rot.y, rot.z]} scale={[scl.x, scl.y, scl.z]}>
+            {prim.type === 'box' && (
+              <mesh>
+                <boxGeometry args={[1,1,1]} />
+                <meshStandardMaterial color={prim.color || '#667eea'} metalness={0.2} roughness={0.6} />
+              </mesh>
+            )}
+            {prim.type === 'sphere' && (
+              <mesh>
+                <sphereGeometry args={[0.5, 32, 32]} />
+                <meshStandardMaterial color={prim.color || '#667eea'} metalness={0.2} roughness={0.6} />
+              </mesh>
+            )}
+            {prim.type === 'cylinder' && (
+              <mesh>
+                <cylinderGeometry args={[0.5,0.5,1,32]} />
+                <meshStandardMaterial color={prim.color || '#667eea'} metalness={0.2} roughness={0.6} />
+              </mesh>
+            )}
+            {prim.type === 'cone' && (
+              <mesh>
+                <coneGeometry args={[0.5,1,32]} />
+                <meshStandardMaterial color={prim.color || '#667eea'} metalness={0.2} roughness={0.6} />
+              </mesh>
+            )}
+            {prim.type === 'plane' && (
+              <mesh>
+                <planeGeometry args={[1,1]} />
+                <meshStandardMaterial color={prim.color || '#667eea'} metalness={0.2} roughness={0.6} side={THREE.DoubleSide} />
+              </mesh>
+            )}
+          </group>
         );
       })}
 
@@ -135,11 +185,12 @@ function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) 
   return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
 }
 
-function MainModel({ modelUrl, imageUrl, position, isAnchored }: { 
+function MainModel({ modelUrl, imageUrl, position, isAnchored, transform }: { 
   modelUrl: string; 
   imageUrl?: string;
   position: [number, number, number];
   isAnchored: boolean;
+  transform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } } | null;
 }) {
   let gltfScene = null;
   let error = null;
@@ -157,13 +208,14 @@ function MainModel({ modelUrl, imageUrl, position, isAnchored }: {
     return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;
   }
 
-  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} />;
+  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} transform={transform} />;
 }
 
-function StaticModel({ scene, position, isAnchored }: { 
+function StaticModel({ scene, position, isAnchored, transform }: { 
   scene: THREE.Group | THREE.Object3D; 
   position: [number, number, number];
   isAnchored: boolean;
+  transform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } } | null;
 }) {
   const mesh = useRef<THREE.Mesh>(null);
 
@@ -178,12 +230,21 @@ function StaticModel({ scene, position, isAnchored }: {
     }
   });
 
+  // Aplicar transform si existe (transform es relativo al ancla)
+  const appliedPosition: [number, number, number] = transform?.position
+    ? [position[0] + transform.position.x, position[1] + transform.position.y, position[2] + transform.position.z]
+    : position;
+
+  const appliedScale = transform?.scale ? [transform.scale.x, transform.scale.y, transform.scale.z] : (isAnchored ? [0.3,0.3,0.3] : [0.8,0.8,0.8]);
+  const appliedRotation = transform?.rotation ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] : undefined;
+
   return (
     <primitive
       ref={mesh}
       object={scene.clone()}
-      position={position}
-      scale={isAnchored ? 0.3 : 0.8} // Más pequeño cuando está anclado
+      position={appliedPosition}
+      rotation={appliedRotation as any}
+      scale={appliedScale as any}
     />
   );
 }
@@ -293,6 +354,44 @@ function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
             </div>
           </div>
         </Html>
+      </group>
+    );
+  }
+
+  // Image hotspot: render as textured plane (works in immersive AR)
+  if ((hotspot as any).image_url) {
+    const imageUrl = (hotspot as any).image_url as string;
+    const tex = useTexture(imageUrl);
+    return (
+      <group position={position}>
+        <mesh>
+          <planeGeometry args={[1.6, 0.9]} />
+          <meshBasicMaterial map={tex} toneMapped={false} transparent />
+        </mesh>
+        <mesh position={[0, -0.55, 0]}> 
+          <planeGeometry args={[1.6, 0.18]} />
+          <meshBasicMaterial color="#000000" opacity={0.5} transparent />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Video hotspot: create a video texture if url provided
+  if (hotspot.type === 'video' && hotspot.video_url) {
+    const video = document.createElement('video');
+    video.src = hotspot.video_url;
+    video.crossOrigin = 'anonymous';
+    video.loop = true;
+    video.muted = true;
+    video.play().catch(() => {});
+    const texture = new THREE.VideoTexture(video);
+
+    return (
+      <group position={position}>
+        <mesh>
+          <planeGeometry args={[1.6, 0.9]} />
+          <meshBasicMaterial map={texture} toneMapped={false} />
+        </mesh>
       </group>
     );
   }

@@ -60,6 +60,20 @@ export type ARHotspot =
 // Estructura de datos AR en la base de datos
 export interface ARData {
   hotspots: ARHotspot[];
+  // Primitivas y transform del modelo (opcional, guardado por el panel AR)
+  primitives?: Array<{
+    id: string;
+    type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane';
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+    color?: string;
+  }>;
+  modelTransform?: {
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  };
 }
 
 // Datos completos de un atractivo con AR

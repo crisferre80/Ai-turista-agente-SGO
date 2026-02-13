@@ -365,6 +365,7 @@ export default function ARPreview3D({
   onHotspotPositionChange,
   onHotspotScaleChange,
   onHotspotRotationChange,
+  onModelTransformChange,
   lightMode = false,
   primitives: externalPrimitives,
   onPrimitivesChange,
@@ -397,6 +398,17 @@ export default function ARPreview3D({
     y: 1,
     z: 1,
   });
+
+  // Persistir transform del modelo hacia el padre cuando cambie (evita "reseteo")
+  useEffect(() => {
+    if (typeof onModelTransformChange === 'function') {
+      onModelTransformChange({
+        position: modelPosition,
+        rotation: modelRotation,
+        scale: modelScale,
+      });
+    }
+  }, [modelPosition, modelRotation, modelScale, onModelTransformChange]);
 
   const clearSelection = () => {
     setSelectedPrimitive(null);

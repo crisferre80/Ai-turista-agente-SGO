@@ -9,6 +9,9 @@ import { ARHitTest } from './ARHitTest';
 import ARScene from './ARScene';
 import type { ARData } from '@/types/ar';
 
+// Icons for improved UI
+import { X, Play, RefreshCw, MapPin, Camera, CheckCircle, RotateCcw } from 'lucide-react';
+
 type Attraction = {
   id: string;
   name: string;
@@ -37,7 +40,16 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   }>>([]);
   
   const [isPlacing, setIsPlacing] = useState(true);
+  const [countPulse, setCountPulse] = useState(false);
   const store = createXRStore();
+
+  // Pulse animation when a new object is placed
+  React.useEffect(() => {
+    if (placedObjects.length === 0) return;
+    setCountPulse(true);
+    const t = setTimeout(() => setCountPulse(false), 450);
+    return () => clearTimeout(t);
+  }, [placedObjects.length]);
 
   const handlePlace = (result: { position: THREE.Vector3; rotation: THREE.Quaternion }) => {
     console.log('📍 Colocando objeto en posición real:', result.position.toArray());
@@ -52,33 +64,76 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
-      {/* Header con información y botón cerrar */}
-      <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-start">
-        <div className="bg-white/10 backdrop-blur-md text-white p-3 rounded-xl shadow-lg border border-white/20">
-          <div className="text-green-300 font-semibold text-sm">🟢 WebXR AR Real</div>
-          <div className="text-xs opacity-80">Objetos colocados: {placedObjects.length}</div>
+      {/* Header — compacto y profesional */}
+      <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between">
+        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm border border-white/8 rounded-lg p-2 px-3 shadow-sm animate-header-in">
+          <div className="flex items-center gap-3">
+            {attraction.image_url ? (
+              <img src={attraction.image_url} alt={attraction.name} className="w-10 h-10 rounded-md object-cover shadow" />
+            ) : (
+              <div className="w-10 h-10 rounded-md bg-gradient-to-br from-sky-600 to-indigo-600 flex items-center justify-center text-white font-semibold">AR</div>
+            )}
+            <div className="text-sm tracking-tight leading-5">
+              <div className="text-white font-semibold text-base leading-5">{attraction.name}</div>
+              <div className="text-[11px] text-sky-200 tracking-wide">Realidad aumentada · WebXR</div>
+            </div>
+          </div>
+
+          <div className="ml-4 flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 bg-white/5 px-2 py-1 rounded-full text-xs text-sky-200 tracking-wide">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <span className="font-medium">Listo</span>
+            </div>
+
+            <div className={`inline-flex items-center gap-2 bg-white/5 px-2 py-1 rounded-full text-xs text-neutral-200 tracking-wide transition-transform duration-300 ${countPulse ? 'pulse-count' : ''}`}>
+              <span className="font-semibold text-sm">{placedObjects.length}</span>
+              <span className="opacity-70 text-[11px]">colocados</span>
+            </div>
+          </div>
         </div>
-        
+
         <button
           onClick={onClose}
-          className="bg-red-500/90 hover:bg-red-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 transform hover:scale-110 border border-red-400/50"
+          className="ml-4 bg-white/6 hover:bg-white/12 text-white p-2 rounded-lg transition-all duration-150 shadow-sm border border-white/6"
           aria-label="Cerrar AR"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       </div>
       
-      {/* Botón de AR mejorado */}
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50">
+      {/* AR action (primary) */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-3">
         <ARButton
           store={store}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-white/30 backdrop-blur-sm"
+          className="flex items-center gap-3 bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-semibold py-3 px-5 rounded-full shadow-xl transition-all duration-200 transform hover:scale-102 border border-white/10 animate-ar-button"
           onError={(error) => {
             console.error('WebXR AR Error:', error);
           }}
         >
-          {isPlacing ? '🎯 Iniciar AR' : '🔄 Reiniciar AR'}
+          {isPlacing ? (
+            <>
+              <Play className="h-4 w-4" />
+              <span className="uppercase tracking-wide text-sm">Iniciar AR</span>
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4" />
+              <span className="uppercase tracking-wide text-sm">Reiniciar AR</span>
+            </>
+          )}
         </ARButton>
+
+        {/* Secondary quick actions */}
+        <button
+          onClick={() => {
+            setPlacedObjects([]);
+            setIsPlacing(true);
+          }}
+          className="bg-black/50 text-white px-3 py-2 rounded-lg border border-white/6 shadow-sm text-sm hover:bg-black/60 transition"
+          title="Reiniciar colocaciones"
+        >
+          <RotateCcw className="h-4 w-4 mr-2 inline-block" />Reset
+        </button>
       </div>
 
       {/* Canvas WebXR */}
@@ -143,27 +198,53 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
         </XR>
       </Canvas>
 
-      {/* Panel de instrucciones mejorado */}
-      <div className="absolute bottom-24 left-4 right-4 z-40">
-        <div className="bg-white/10 backdrop-blur-md text-white p-4 rounded-xl shadow-lg border border-white/20 max-w-md mx-auto">
-          <p className="font-bold mb-3 text-center text-lg">
-            {isPlacing ? '🎯 Modo de colocación' : '✅ Objeto colocado'}
-          </p>
-          {isPlacing ? (
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center"><span className="mr-2">📱</span> Presiona &quot;Iniciar AR&quot; para comenzar</li>
-              <li className="flex items-center"><span className="mr-2">🎯</span> Apunta la cámara hacia una superficie plana</li>
-              <li className="flex items-center"><span className="mr-2">👆</span> Toca la pantalla para colocar el objeto</li>
-            </ul>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center"><span className="mr-2">🚶</span> Muévete alrededor para ver el objeto desde diferentes ángulos</li>
-              <li className="flex items-center"><span className="mr-2">📍</span> El objeto está anclado al mundo real</li>
-              <li className="flex items-center"><span className="mr-2">🔄</span> Usa &quot;Reiniciar AR&quot; para colocar más objetos</li>
-            </ul>
-          )}
+      {/* Instruction panel — professional */}
+      <div className="absolute bottom-28 left-4 right-4 z-40 pointer-events-none">
+        <div className="pointer-events-auto max-w-2xl mx-auto bg-black/50 backdrop-blur-sm border border-white/8 rounded-2xl p-4 shadow-md text-white grid grid-cols-2 gap-4 animate-instructions">
+          <div>
+            <div className="text-sm font-semibold">{isPlacing ? 'Modo colocación' : 'Objeto anclado'}</div>
+            <div className="text-[12px] text-slate-300 mt-1">{isPlacing ? 'Sigue las instrucciones para colocar el objeto en el mundo real.' : 'El objeto está fijo. Muévete para explorarlo.'}</div>
+          </div>
+
+          <div className="flex flex-col gap-2 justify-center">
+            {isPlacing ? (
+              <div className="flex flex-col gap-2 text-sm">
+                <div className="flex items-center gap-2"><Camera className="h-4 w-4 text-sky-300" /> <span>Apunta la cámara</span></div>
+                <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-emerald-300" /> <span>Busca una superficie plana</span></div>
+                <div className="flex items-center gap-2"><Play className="h-4 w-4 text-slate-200" /> <span>Toca para colocar</span></div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 text-sm">
+                <div className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-emerald-300" /> <span>Objeto anclado</span></div>
+                <div className="flex items-center gap-2"><RotateCcw className="h-4 w-4 text-sky-300" /> <span>Reinicia para colocar más</span></div>
+                <div className="flex items-center gap-2"><Camera className="h-4 w-4 text-slate-200" /> <span>Mueve tu dispositivo para ver ángulos</span></div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Animations & custom keyframes for this component */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          @keyframes pulseCount { 0%{ transform: scale(1); } 50%{ transform: scale(1.12); } 100%{ transform: scale(1); } }
+          @keyframes floatSubtle { 0%{ transform: translateY(0); } 50%{ transform: translateY(-3px); } 100%{ transform: translateY(0); } }
+
+          .animate-header-in { animation: popIn 420ms cubic-bezier(.2,.9,.2,1) both; }
+          .animate-ar-button { animation: popIn 380ms cubic-bezier(.2,.9,.2,1) both; }
+          .animate-instructions { animation: fadeInUp 480ms cubic-bezier(.22,.9,.1,1) both; }
+          .pulse-count { animation: pulseCount 420ms cubic-bezier(.2,.9,.2,1) both; }
+
+          /* soft floating on large screens to add life (reduced motion respects user pref) */
+          @media (prefers-reduced-motion: no-preference) {
+            .animate-ar-button:hover { transform: translateY(-4px) scale(1.02); transition: transform 180ms ease; }
+            .animate-ar-button { will-change: transform; }
+            .float-subtle { animation: floatSubtle 4s ease-in-out infinite; }
+          }
+        `
+      }} />
     </div>
   );
 }
