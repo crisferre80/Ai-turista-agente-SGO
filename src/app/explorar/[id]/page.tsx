@@ -83,7 +83,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         video_urls: a.video_urls || undefined,
         has_ar_content: a.has_ar_content ?? false,
         ar_model_url: a.ar_model_url || undefined,
-        ar_hotspots: a.ar_hotspots || undefined,
+        ar_hotspots: (await import('@/lib/ar-utils')).normalizeARData(a.ar_hotspots),
         qr_code: a.qr_code || undefined,
       };
     }

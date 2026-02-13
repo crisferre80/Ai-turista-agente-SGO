@@ -7,16 +7,10 @@ import type { OrbitControls as OrbitControlsImpl, TransformControls as Transform
 import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move, RotateCcw, Maximize2 } from 'lucide-react';
 
-interface Hotspot {
-  id: string;
-  position: { x: number; y: number; z: number };
-  rotation?: { x: number; y: number; z: number };
-  scale?: { x: number; y: number; z: number };
-  title: string;
-  description: string;
-  type: 'info' | 'image' | 'video';
-  content_url?: string;
-}
+import type { ARHotspot } from '@/types/ar';
+
+// Reuse shared ARHotspot type from global types to avoid mismatches across app
+type Hotspot = ARHotspot;
 
 interface Primitive {
   id: string;
@@ -139,14 +133,22 @@ function HotspotMarker({
   onSelect: () => void;
   meshRef?: React.Ref<THREE.Mesh>;
 }) {
+  // Normalizar posición (aceptar array o objeto)
+  const pos: { x: number; y: number; z: number } = Array.isArray(hotspot.position)
+    ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
+    : hotspot.position as { x: number; y: number; z: number };
+
   // Color según tipo
-  const color = 
-    hotspot.type === 'info' ? '#4CAF50' :
-    hotspot.type === 'image' ? '#2196F3' :
-    '#FF9800';
+  const color = (() => {
+    switch (hotspot.type) {
+      case 'info': return '#4CAF50';
+      case 'image': return '#2196F3';
+      default: return '#FF9800';
+    }
+  })();
 
   return (
-    <group position={[hotspot.position.x, hotspot.position.y, hotspot.position.z]}>
+    <group position={[pos.x, pos.y, pos.z]}>
       <Sphere 
         ref={meshRef}
         args={[isSelected ? 0.15 : 0.1, 16, 16]}
@@ -171,7 +173,7 @@ function HotspotMarker({
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        {hotspot.title}
+        {('title' in hotspot && hotspot.title) || ''}
       </Text>
 
       {/* Línea hacia abajo */}
@@ -185,13 +187,18 @@ function HotspotMarker({
 
 // Billboard 3D para mostrar imagen asociada a un hotspot con perspectiva real
 function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
-  const texture = useTexture(hotspot.content_url || '');
+  // Prefer explicit typed fields (image_url). Support legacy content_url for safety.
+  const imageUrl = ('image_url' in hotspot && hotspot.image_url) || ((hotspot as unknown as Record<string, unknown>).content_url as string) || '';
+  const texture = useTexture(imageUrl || '');
 
   // Elevamos un poco el contenido sobre el marcador
   const yOffset = 0.8;
+  const pos = Array.isArray(hotspot.position)
+    ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
+    : (hotspot.position as { x: number; y: number; z: number });
 
   return (
-    <group position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}>
+    <group position={[pos.x, pos.y + yOffset, pos.z]}>
       {/* Fondo ligeramente más grande para hacer de marco */}
       <mesh position={[0, 0, -0.001]}>
         <planeGeometry args={[1.7, 0.9]} />
@@ -199,7 +206,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
       </mesh>
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshBasicMaterial map={Array.isArray(texture) ? texture[0] : texture as THREE.Texture} toneMapped={false} />
       </mesh>
       <Text
         position={[0, -0.55, 0]}
@@ -210,7 +217,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        {hotspot.title}
+        {('title' in hotspot && hotspot.title) || ''}
       </Text>
     </group>
   );
@@ -219,9 +226,12 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
 // Billboard 3D simple para vídeos (placeholder)
 function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
   const yOffset = 0.8;
+  const pos = Array.isArray(hotspot.position)
+    ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
+    : hotspot.position as { x: number; y: number; z: number };
 
   return (
-    <group position={[hotspot.position.x, hotspot.position.y + yOffset, hotspot.position.z]}>
+    <group position={[pos.x, pos.y + yOffset, pos.z]}>
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
         <meshBasicMaterial color="#7c3aed" opacity={0.9} transparent />
@@ -246,7 +256,7 @@ function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        {hotspot.title}
+        {('title' in hotspot && hotspot.title) || ''}
       </Text>
     </group>
   );
@@ -254,13 +264,12 @@ function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
 
 // Selector de billboard según tipo de hotspot
 function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
-  if (!hotspot.content_url) return null;
-
-  if (hotspot.type === 'image') {
+  // Select correct field per hotspot type (image_url/video_url). If no media, skip.
+  if (hotspot.type === 'image' && ('image_url' in hotspot) && hotspot.image_url) {
     return <HotspotImageBillboard hotspot={hotspot} />;
   }
 
-  if (hotspot.type === 'video') {
+  if (hotspot.type === 'video' && ('video_url' in hotspot) && hotspot.video_url) {
     return <HotspotVideoBillboard hotspot={hotspot} />;
   }
 
@@ -384,6 +393,7 @@ export default function ARPreview3D({
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
+  const [showPhonePreview, setShowPhonePreview] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
   const primitiveIdRef = useRef(0);
@@ -864,6 +874,23 @@ export default function ARPreview3D({
         )}
 
         {/* Controles e información */}
+
+        {/* Phone preview overlay (small phone simulator near the canvas) */}
+        {showPhonePreview && modelUrl && (
+          <div style={{ position: 'absolute', top: 14, right: 14, width: 220, height: 440, zIndex: 40, borderRadius: 18, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ width: '100%', height: '100%', background: '#000' }}>
+              <Canvas camera={{ position: [0, 1.6, 2.3], fov: 50 }} style={{ width: '100%', height: '100%' }}>
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[3, 5, 2]} intensity={0.8} />
+                <Suspense fallback={null}>
+                  <group position={[modelPosition.x, modelPosition.y, modelPosition.z]} rotation={[modelRotation.x, modelRotation.y, modelRotation.z]} scale={[modelScale.x, modelScale.y, modelScale.z]}>
+                    <Model url={modelUrl as string} />
+                  </group>
+                </Suspense>
+              </Canvas>
+            </div>
+          </div>
+        )}
         <div style={{
           position: 'absolute',
           top: 10,
@@ -890,7 +917,7 @@ export default function ARPreview3D({
           </div>
 
           {/* Gizmo mode buttons */}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
             <button
               onClick={() => setTransformMode('translate')}
               style={{
@@ -937,6 +964,24 @@ export default function ARPreview3D({
               title="Escalar (Scale)"
             >
               <Maximize2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Escalar
+            </button>
+
+            {/* Mobile-preview quick toggle */}
+            <button
+              onClick={() => setShowPhonePreview(prev => !prev)}
+              title="Vista previa móvil"
+              style={{
+                marginLeft: 6,
+                padding: '4px 8px',
+                background: showPhonePreview ? '#10B981' : 'transparent',
+                color: showPhonePreview ? '#012' : '#ddd',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+            >
+              📱 Preview
             </button>
           </div>
         </div>
@@ -985,13 +1030,18 @@ export default function ARPreview3D({
             {(() => {
               const hotspot = hotspots.find(h => h.id === selectedHotspot);
               if (!hotspot) return null;
+
+              const pos = Array.isArray(hotspot.position)
+                ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
+                : hotspot.position;
+
               return (
                 <>
                   <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                    {hotspot.title}
+                    {('title' in hotspot && hotspot.title) ? hotspot.title : '(sin título)'}
                   </div>
                   <div style={{ fontSize: '0.75rem', marginBottom: '6px', opacity: 0.8 }}>
-                    {hotspot.description}
+                    {('description' in hotspot && hotspot.description) ? hotspot.description : ''}
                   </div>
                   <div style={{ 
                     display: 'flex', 
@@ -1002,9 +1052,9 @@ export default function ARPreview3D({
                     padding: '6px',
                     borderRadius: '4px'
                   }}>
-                    <span>X: {hotspot.position.x.toFixed(2)}</span>
-                    <span>Y: {hotspot.position.y.toFixed(2)}</span>
-                    <span>Z: {hotspot.position.z.toFixed(2)}</span>
+                    <span>X: {pos.x.toFixed(2)}</span>
+                    <span>Y: {pos.y.toFixed(2)}</span>
+                    <span>Z: {pos.z.toFixed(2)}</span>
                   </div>
                 </>
               );
@@ -1588,7 +1638,7 @@ export default function ARPreview3D({
                           onClick={() => setSelectedHotspot(hotspot.id)}
                           style={{ cursor: 'pointer', flex: 1 }}
                         >
-                          {hotspot.title || '(sin título)'}
+                          {('title' in hotspot && hotspot.title) ? hotspot.title : '(sin título)'}
                         </span>
                         <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
                           {hotspot.type}
@@ -1611,28 +1661,34 @@ export default function ARPreview3D({
                         {/* Controles de Posición */}
                         <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
                         <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                          {(['x','y','z'] as const).map(axis => (
-                            <input
-                              key={axis}
-                              type="number"
-                              step="0.1"
-                              value={hs.position[axis].toFixed(2)}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value) || 0;
-                                if (!onHotspotPositionChange) return;
-                                const newPos = { ...hs.position, [axis]: v };
-                                onHotspotPositionChange(hs.id, newPos);
-                              }}
-                              style={{
-                                width: '33%',
-                                padding: '3px 4px',
-                                borderRadius: '4px',
-                                border: '1px solid #555',
-                                background: '#111',
-                                color: 'white'
-                              }}
-                            />
-                          ))}
+                          {(() => {
+                            const posObj = Array.isArray(hs.position)
+                              ? { x: hs.position[0] ?? 0, y: hs.position[1] ?? 0, z: hs.position[2] ?? 0 }
+                              : (hs.position as { x: number; y: number; z: number });
+
+                            return (['x','y','z'] as const).map(axis => (
+                              <input
+                                key={axis}
+                                type="number"
+                                step="0.1"
+                                value={posObj[axis].toFixed(2)}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value) || 0;
+                                  if (!onHotspotPositionChange) return;
+                                  const newPos = { ...posObj, [axis]: v };
+                                  onHotspotPositionChange(hs.id, newPos);
+                                }}
+                                style={{
+                                  width: '33%',
+                                  padding: '3px 4px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #555',
+                                  background: '#111',
+                                  color: 'white'
+                                }}
+                              />
+                            ));
+                          })()}
                         </div>
 
                         {/* Controles de Escala */}
@@ -1640,29 +1696,35 @@ export default function ARPreview3D({
                           <>
                             <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala Hotspot (X, Y, Z)</div>
                             <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                              {(['x','y','z'] as const).map(axis => (
-                                <input
-                                  key={axis}
-                                  type="number"
-                                  step="0.1"
-                                  min="0.1"
-                                  value={hs.scale![axis].toFixed(2)}
-                                  onChange={(e) => {
-                                    const v = parseFloat(e.target.value) || 0.1;
-                                    if (!onHotspotScaleChange) return;
-                                    const newScale = { ...hs.scale!, [axis]: v };
-                                    onHotspotScaleChange(hs.id, newScale);
-                                  }}
-                                  style={{
-                                    width: '33%',
-                                    padding: '3px 4px',
-                                    borderRadius: '4px',
-                                    border: '1px solid #555',
-                                    background: '#111',
-                                    color: 'white'
-                                  }}
-                                />
-                              ))}
+                              {(() => {
+                                const sclObj = Array.isArray(hs.scale)
+                                  ? { x: hs.scale[0] ?? 1, y: hs.scale[1] ?? 1, z: hs.scale[2] ?? 1 }
+                                  : hs.scale as { x: number; y: number; z: number };
+
+                                return (['x','y','z'] as const).map(axis => (
+                                  <input
+                                    key={axis}
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    value={sclObj[axis].toFixed(2)}
+                                    onChange={(e) => {
+                                      const v = parseFloat(e.target.value) || 0.1;
+                                      if (!onHotspotScaleChange) return;
+                                      const newScl = { ...sclObj, [axis]: v };
+                                      onHotspotScaleChange(hs.id, newScl);
+                                    }}
+                                    style={{
+                                      width: '33%',
+                                      padding: '3px 4px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #555',
+                                      background: '#111',
+                                      color: 'white'
+                                    }}
+                                  />
+                                ));
+                              })()}
                             </div>
                           </>
                         )}
@@ -1672,29 +1734,35 @@ export default function ARPreview3D({
                           <>
                             <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación Hotspot (X, Y, Z) [grados]</div>
                             <div style={{ display: 'flex', gap: '4px' }}>
-                              {(['x','y','z'] as const).map(axis => (
-                                <input
-                                  key={axis}
-                                  type="number"
-                                  step="5"
-                                  value={((hs.rotation![axis] * 180) / Math.PI).toFixed(1)}
-                                  onChange={(e) => {
-                                    const degrees = parseFloat(e.target.value) || 0;
-                                    const radians = (degrees * Math.PI) / 180;
-                                    if (!onHotspotRotationChange) return;
-                                    const newRotation = { ...hs.rotation!, [axis]: radians };
-                                    onHotspotRotationChange(hs.id, newRotation);
-                                  }}
-                                  style={{
-                                    width: '33%',
-                                    padding: '3px 4px',
-                                    borderRadius: '4px',
-                                    border: '1px solid #555',
-                                    background: '#111',
-                                    color: 'white'
-                                  }}
-                                />
-                              ))}
+                              {(() => {
+                                const rotObj = Array.isArray(hs.rotation)
+                                  ? { x: hs.rotation[0] ?? 0, y: hs.rotation[1] ?? 0, z: hs.rotation[2] ?? 0 }
+                                  : hs.rotation as { x: number; y: number; z: number };
+
+                                return (['x','y','z'] as const).map(axis => 
+                                  <input
+                                    key={axis}
+                                    type="number"
+                                    step="5"
+                                    value={((rotObj[axis] * 180) / Math.PI).toFixed(1)}
+                                    onChange={(e) => {
+                                      const degrees = parseFloat(e.target.value) || 0;
+                                      const radians = (degrees * Math.PI) / 180;
+                                      if (!onHotspotRotationChange) return;
+                                      const newRotation = { ...rotObj, [axis]: radians };
+                                      onHotspotRotationChange(hs.id, newRotation);
+                                    }}
+                                    style={{
+                                      width: '33%',
+                                      padding: '3px 4px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #555',
+                                      background: '#111',
+                                      color: 'white'
+                                    }}
+                                  />
+                                );
+                              })()}
                             </div>
                           </>
                         )}

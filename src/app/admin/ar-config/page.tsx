@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { normalizeARData, canonicalizeARDataForSave } from '@/lib/ar-utils';
+import type { ARHotspot, ARHotspotType } from '@/types/ar';
 import { Upload, Plus, Trash2, Image as ImageIcon, Box } from 'lucide-react';
 
 // Importar vista previa AR dinámicamente
@@ -16,19 +18,19 @@ interface Attraction {
   category?: string;
   has_ar_content?: boolean;
   ar_model_url?: string;
-  ar_hotspots?: { hotspots: Hotspot[] };
+  ar_hotspots?: { hotspots: ARHotspot[] };
   qr_code?: string;
 }
 
 interface Hotspot {
   id: string;
+  type: ARHotspotType;
   position: { x: number; y: number; z: number };
-  title: string;
-  description: string;
-  type: 'info' | 'image' | 'video';
-  content_url?: string;
-  scale?: { x: number; y: number; z: number };
   rotation?: { x: number; y: number; z: number };
+  scale?: { x: number; y: number; z: number };
+  title?: string;
+  description?: string;
+  content_url?: string; // para imagen/video/audio/3d
 }
 
 interface Primitive {
@@ -82,25 +84,40 @@ export default function ARConfigPage() {
       setModelUrl(selectedAttraction.ar_model_url || '');
       setQrCode(selectedAttraction.qr_code || `AR_${selectedAttraction.id}`);
       
-      const arData = selectedAttraction.ar_hotspots as { 
-        hotspots?: Hotspot[]; 
-        primitives?: Primitive[]; 
-        modelTransform?: typeof modelTransform 
-      } | null;
-      const savedHotspots = arData?.hotspots || [];
-      const savedPrimitives = arData?.primitives || [];
-      const savedModelTransform = arData?.modelTransform;
-      
-      setHotspots(savedHotspots);
+      // Normalizar formatos legacy/array/object y garantizar campos
+      const arDataRaw = selectedAttraction.ar_hotspots;
+      const arData = normalizeARData(arDataRaw);
+      const savedHotspots = arData.hotspots || [];
+      const savedPrimitives = (arData.primitives || []).map(p => ({
+        ...p,
+        position: { x: Number(p.position.x), y: Number(p.position.y), z: Number(p.position.z) },
+        rotation: { x: Number(p.rotation.x), y: Number(p.rotation.y), z: Number(p.rotation.z) },
+        scale: { x: Number(p.scale.x), y: Number(p.scale.y), z: Number(p.scale.z) },
+        color: p.color || '#667eea'
+      }));
+      const savedModelTransform = arData.modelTransform;
+
+      // Asegurar que el estado local usa el formato {x,y,z}
+      const hotspotsForState = savedHotspots.map((h) => ({
+        id: h.id,
+        type: h.type,
+        position: Array.isArray(h.position) ? { x: h.position[0] ?? 0, y: h.position[1] ?? 0, z: h.position[2] ?? 0 } : h.position,
+        rotation: h.rotation ? (Array.isArray(h.rotation) ? { x: h.rotation[0] ?? 0, y: h.rotation[1] ?? 0, z: h.rotation[2] ?? 0 } : h.rotation) : undefined,
+        scale: h.scale ? (Array.isArray(h.scale) ? { x: h.scale[0] ?? 1, y: h.scale[1] ?? 1, z: h.scale[2] ?? 1 } : h.scale) : undefined,
+        title: 'title' in h ? h.title : undefined,
+        description: 'description' in h ? h.description : undefined,
+        content_url: ('image_url' in h && h.image_url) || ('video_url' in h && h.video_url) || ('audio_url' in h && h.audio_url) || ('model_url' in h && h.model_url) || undefined
+      }));
+
+      setHotspots(hotspotsForState);
       setPrimitives(savedPrimitives);
       latestPrimitivesRef.current = savedPrimitives;
-      
+
       // Cargar transformaciones del modelo si existen
       if (savedModelTransform) {
         setModelTransform(savedModelTransform);
         latestModelTransformRef.current = savedModelTransform;
       } else {
-        // Resetear a valores por defecto
         const defaultTransform = {
           position: { x: 0, y: 0, z: 0 },
           rotation: { x: 0, y: 0, z: 0 },
@@ -209,11 +226,13 @@ export default function ARConfigPage() {
     try {
       setSaving(true);
 
-      const arData = {
+      // Antes de persistir, canonicalizar/normalizar el JSON para evitar formatos legacy
+      const rawArData = {
         hotspots,
         primitives: latestPrimitivesRef.current || primitives,
         modelTransform: latestModelTransformRef.current || modelTransform
       };
+      const arData = canonicalizeARDataForSave(rawArData);
 
       const { error } = await supabase
         .from('attractions')
@@ -673,7 +692,26 @@ export default function ARConfigPage() {
                   <ARPreview3D
                     modelUrl={modelUrl || undefined}
                     lightMode={lightMode}
-                    hotspots={hotspots}
+                    hotspots={hotspots.map(h => {
+                      const base = {
+                        id: h.id,
+                        position: h.position,
+                        rotation: h.rotation,
+                        scale: h.scale
+                      };
+                      switch (h.type) {
+                        case 'video':
+                          return { ...base, type: 'video', video_url: h.content_url || '', title: h.title || '' } as ARHotspot;
+                        case '3d_model':
+                          return { ...base, type: '3d_model', model_url: h.content_url || '' } as ARHotspot;
+                        case 'audio':
+                          return { ...base, type: 'audio', audio_url: h.content_url || '', title: h.title || '' } as ARHotspot;
+                        case 'image':
+                          return { ...base, type: 'image', image_url: h.content_url || '', title: h.title, description: h.description } as ARHotspot;
+                        default:
+                          return { ...base, type: 'info', title: h.title || '', description: h.description || '', image_url: h.content_url } as ARHotspot;
+                      }
+                    })}
                     primitives={primitives}
                     onHotspotPositionChange={(id, position) => {
                       setHotspots(prev => prev.map(h => 

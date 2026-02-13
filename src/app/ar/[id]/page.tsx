@@ -2,6 +2,7 @@ import React from 'react';
 import { supabase } from '@/lib/supabase';
 import { notFound } from 'next/navigation';
 import type { ARData } from '@/types/ar';
+import { normalizeARData } from '@/lib/ar-utils';
 import WebXRInitializer from '@/components/WebXRInitializer';
 
 type ARPageProps = {
@@ -36,6 +37,7 @@ export default async function ARPage({ params }: ARPageProps) {
     notFound();
   }
 
+
   const attractionData: Attraction = {
     id: String(attraction.id),
     name: String(attraction.name || ''),
@@ -46,7 +48,7 @@ export default async function ARPage({ params }: ARPageProps) {
     lng: attraction.lng ?? undefined,
     has_ar_content: attraction.has_ar_content ?? false,
     ar_model_url: attraction.ar_model_url || undefined,
-    ar_hotspots: attraction.ar_hotspots || undefined,
+    ar_hotspots: normalizeARData(attraction.ar_hotspots),
     qr_code: attraction.qr_code || undefined,
   };
 

@@ -7,8 +7,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
-import { X, AlertTriangle, Maximize2, Camera, Eye, Hand, RotateCcw, CheckCircle } from 'lucide-react';
+import { X, AlertTriangle, Maximize2, Camera, Eye, Hand, CheckCircle } from 'lucide-react';
 import type { ARViewerProps, WebXRCapabilities, ARLoadingState } from '@/types/ar';
 import { detectWebXRCapabilities, meetsARRequirements, isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARScene';
@@ -351,7 +352,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3 text-white">
             {attraction.image_url && (
-              <img src={attraction.image_url} alt={attraction.name} className="w-10 h-10 rounded-lg object-cover shadow-md" />
+              <Image src={attraction.image_url} alt={attraction.name} width={40} height={40} className="w-10 h-10 rounded-lg object-cover shadow-md" />
             )}
             <div>
               <h2 className="text-sm font-semibold">{attraction.name}</h2>

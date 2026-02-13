@@ -95,7 +95,7 @@ export default function UserReviewsGallery({ placeId, isBusiness }: { placeId?: 
           </div>
         )}
         {showModal && (
-          // @ts-ignore - dynamic modal component
+          // @ts-expect-error - dynamic modal component
           <UserReviewModal isOpen={true} onClose={() => { setShowModal(false); fetchReviews(); }} attractionId={!isBusiness ? placeId : undefined} businessId={isBusiness ? placeId : undefined} locationName={reviews[0]?.location_name || ''} />
         )}
       </div>

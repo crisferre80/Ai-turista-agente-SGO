@@ -3,7 +3,7 @@
  */
 
 // Tipo de hotspot AR (punto de interés en la escena)
-export type ARHotspotType = 'info' | 'video' | '3d_model' | 'audio';
+export type ARHotspotType = 'info' | 'image' | 'video' | '3d_model' | 'audio';
 
 // Vector 3D para posiciones, rotaciones y escalas
 // Permite tanto formato array como objeto para compatibilidad
@@ -24,6 +24,14 @@ export interface ARInfoHotspot extends ARHotspotBase {
   title: string;
   description: string;
   image_url?: string;
+}
+
+// Hotspot de imagen (billboard)
+export interface ARImageHotspot extends ARHotspotBase {
+  type: 'image';
+  image_url: string;
+  title?: string;
+  description?: string;
 }
 
 // Hotspot de video
@@ -53,6 +61,7 @@ export interface ARAudioHotspot extends ARHotspotBase {
 // Union de todos los tipos de hotspots
 export type ARHotspot = 
   | ARInfoHotspot 
+  | ARImageHotspot
   | ARVideoHotspot 
   | AR3DModelHotspot 
   | ARAudioHotspot;
