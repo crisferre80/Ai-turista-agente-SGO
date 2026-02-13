@@ -164,6 +164,11 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
     }
   };
 
+  // Reinicia la colocación del contenido AR sin cerrar el visor
+  const resetPlacement = () => {
+    setIsPlaced(false);
+  };
+
   // Primer toque en la escena: considerar que el usuario "pegó" la escena al entorno
   const handleScenePointerDown = () => {
     if (!isPlaced) {
@@ -250,78 +255,76 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   if (showTutorial) {
     const tutorialSteps = [
       {
-        icon: <Camera className="h-12 w-12 text-blue-400" />,
+        icon: <Camera className="h-10 w-10 text-blue-400" />,
         title: "Bienvenido a AR",
-        description: "Descubre " + attraction.name + " de una manera completamente nueva con Realidad Aumentada.",
-        detail: "Verás información, modelos 3D y contenido multimedia superpuestos en el mundo real."
+        description: "Descubre " + attraction.name + " con Realidad Aumentada.",
+        detail: "Modelos 3D, multimedia y datos superpuestos en el mundo real."
       },
       {
-        icon: <Hand className="h-12 w-12 text-purple-400" />,
-        title: "Interacción Intuitiva",
+        icon: <Hand className="h-10 w-10 text-purple-400" />,
+        title: "Toca para interactuar",
         description: "Toca, pellizca y mueve tu dispositivo para explorar.",
-        detail: "Coloca contenido en tu entorno y descubre detalles ocultos tocando los elementos flotantes."
+        detail: "Coloca contenido y descubre información sobre los elementos." 
       },
       {
-        icon: <Eye className="h-12 w-12 text-green-400" />,
-        title: "Experiencia Inmersiva",
-        description: "Mira a través de tu cámara para ver el contenido AR.",
+        icon: <Eye className="h-10 w-10 text-green-400" />,
+        title: "Mira y explora",
+        description: "Apunta tu cámara para ver el contenido AR.",
         detail: hasCameraPermission
-          ? "Tu cámara está lista. Apunta a un espacio plano para comenzar."
-          : "Permite el acceso a la cámara para la mejor experiencia."
+          ? "Cámara lista — busca una superficie plana para colocar el objeto."
+          : "Permite acceso a la cámara para una experiencia completa."
       }
     ];
 
     const currentStep = tutorialSteps[tutorialStep];
 
     return (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 flex items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 max-w-md w-full">
-          <div className="text-center">
-            {/* Indicadores de paso */}
-            <div className="flex justify-center gap-2 mb-8">
-              {tutorialSteps.map((_, index) => (
-                <div
-                  key={index}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    index === tutorialStep ? 'bg-white scale-125' : 'bg-white/40'
-                  }`}
-                />
-              ))}
-            </div>
+      <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-700 via-purple-700 to-indigo-800 flex items-center justify-center p-4">
+        <div className="bg-white/6 backdrop-blur-sm border border-white/10 rounded-2xl p-6 max-w-sm w-full space-y-4">
+          <div className="flex justify-center gap-3">
+            {tutorialSteps.map((_, index) => (
+              <div
+                key={index}
+                className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                  index === tutorialStep ? 'bg-white scale-110' : 'bg-white/30'
+                }`}
+              />
+            ))}
+          </div>
 
-            {/* Icono del paso actual */}
-            <div className="w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-white/8 rounded-2xl flex items-center justify-center">
               {currentStep.icon}
             </div>
-
-            {/* Contenido del paso */}
-            <h2 className="text-2xl font-bold text-white mb-3">{currentStep.title}</h2>
-            <p className="text-blue-100 mb-4 text-sm leading-relaxed">{currentStep.description}</p>
-            <p className="text-blue-200 mb-8 text-xs leading-relaxed">{currentStep.detail}</p>
-
-            {/* Botones de navegación */}
-            <div className="flex gap-3">
-              {tutorialStep > 0 && (
-                <button
-                  onClick={prevTutorialStep}
-                  className="flex-1 bg-white/10 text-white px-6 py-3 rounded-xl font-semibold hover:bg-white/20 transition-all duration-200"
-                >
-                  Anterior
-                </button>
-              )}
-
-              <button
-                onClick={nextTutorialStep}
-                className="flex-1 bg-white text-blue-600 px-6 py-3 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200 transform hover:scale-105"
-              >
-                {tutorialStep === tutorialSteps.length - 1 ? 'Comenzar' : 'Siguiente'}
-              </button>
+            <div className="text-left">
+              <h3 className="text-lg font-semibold text-white">{currentStep.title}</h3>
+              <p className="text-xs text-blue-100 mt-1">{currentStep.description}</p>
+              <p className="text-[11px] text-blue-200 mt-1">{currentStep.detail}</p>
             </div>
+          </div>
 
-            {/* Botón de saltar */}
+          <div className="flex gap-2">
+            {tutorialStep > 0 && (
+              <button
+                onClick={prevTutorialStep}
+                className="flex-1 bg-white/8 text-white px-4 py-2 rounded-lg text-sm hover:bg-white/12 transition"
+              >
+                Anterior
+              </button>
+            )}
+
+            <button
+              onClick={nextTutorialStep}
+              className="flex-1 bg-white text-sky-600 px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-95 transition"
+            >
+              {tutorialStep === tutorialSteps.length - 1 ? 'Comenzar' : 'Siguiente'}
+            </button>
+          </div>
+
+          <div className="flex justify-center">
             <button
               onClick={startExperience}
-              className="mt-4 text-blue-200 text-sm hover:text-white transition-colors"
+              className="text-blue-200 text-xs hover:text-white transition-colors"
             >
               Saltar tutorial
             </button>
@@ -343,27 +346,33 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         playsInline
       />
 
-      {/* Header minimalista y elegante */}
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 via-black/40 to-transparent">
-        <div className="flex items-center justify-between p-6">
-          <div className="text-white">
-            <h2 className="text-lg font-bold">{attraction.name}</h2>
-            <p className="text-sm text-blue-200">Realidad Aumentada</p>
+      {/* Header compacto */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 via-black/30 to-transparent">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3 text-white">
+            {attraction.image_url && (
+              <img src={attraction.image_url} alt={attraction.name} className="w-10 h-10 rounded-lg object-cover shadow-md" />
+            )}
+            <div>
+              <h2 className="text-sm font-semibold">{attraction.name}</h2>
+              <p className="text-[11px] text-blue-200">Realidad Aumentada</p>
+            </div>
           </div>
+
           <div className="flex gap-2">
             <button
               onClick={toggleFullscreen}
-              className="text-white hover:bg-white/20 rounded-full p-3 transition-all duration-200 hover:scale-110"
+              className="text-white bg-white/6 hover:bg-white/12 rounded-lg p-2 transition-all duration-150"
               aria-label="Pantalla completa"
             >
-              <Maximize2 className="h-5 w-5" />
+              <Maximize2 className="h-4 w-4" />
             </button>
             <button
               onClick={handleClose}
-              className="text-white hover:bg-red-500/20 rounded-full p-3 transition-all duration-200 hover:scale-110"
+              className="text-white bg-red-600/10 hover:bg-red-600/20 rounded-lg p-2 transition-all duration-150"
               aria-label="Cerrar AR"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -384,53 +393,49 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
         />
       </Canvas>
 
-      {/* Controles e información mejorados */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-6">
-        <div className="max-w-md mx-auto">
-          {/* Estado de AR */}
-          <div className="flex items-center justify-center gap-3 text-white mb-4">
+      {/* Controles compactos (tarjeta flotante) */}
+      <div className="absolute bottom-6 left-1/2 z-20 transform -translate-x-1/2 w-[94%] max-w-lg">
+        <div className="bg-black/60 backdrop-blur-md border border-white/6 rounded-2xl p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-white">
             <div className={`w-3 h-3 rounded-full ${hasCameraPermission ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`} />
-            <span className="text-sm font-medium">
-              {hasCameraPermission ? 'AR con Cámara' : 'AR en Pantalla'}
-            </span>
-            {capabilities?.arMode === 'immersive-ar' && (
-              <span className="text-xs bg-purple-500/20 text-purple-200 px-2 py-1 rounded-full">
-                Inmersivo
-              </span>
-            )}
-          </div>
-
-          {/* Guía visual de instrucciones */}
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 text-white">
-            {!isPlaced ? (
-              <div className="text-center">
-                <Hand className="h-8 w-8 text-blue-300 mx-auto mb-2" />
-                <p className="font-semibold text-sm mb-1">Coloca el contenido</p>
-                <p className="text-xs text-gray-300">Toca la pantalla para posicionar {attraction.name} en tu espacio</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="flex flex-col items-center">
-                  <RotateCcw className="h-6 w-6 text-green-300 mb-1" />
-                  <span className="text-xs text-gray-300">Mueve</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <Eye className="h-6 w-6 text-purple-300 mb-1" />
-                  <span className="text-xs text-gray-300">Explora</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {cameraError && (
-            <div className="mt-4 bg-yellow-500/20 border border-yellow-500/30 text-yellow-200 text-xs rounded-xl px-4 py-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <span>{cameraError}</span>
-              </div>
+            <div className="text-xs">
+              <div className="font-semibold">{hasCameraPermission ? 'AR con cámara' : 'AR en pantalla'}</div>
+              {capabilities?.arMode === 'immersive-ar' && (
+                <div className="text-[11px] text-purple-200 bg-purple-500/10 px-2 py-0.5 rounded-full inline-block mt-1">Inmersivo</div>
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPlaced(prev => !prev)}
+              title={isPlaced ? 'Anclar/Desanclar' : 'Anclar objeto'}
+              className="bg-white/6 text-white px-3 py-2 rounded-lg text-sm hover:bg-white/10 transition"
+            >
+              {isPlaced ? 'Anclado' : 'Colocar'}
+            </button>
+
+            <button
+              onClick={resetPlacement}
+              title="Reiniciar AR"
+              className="bg-sky-500/90 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:opacity-95 transition"
+            >
+              Reiniciar AR
+            </button>
+
+            <button
+              onClick={handleClose}
+              title="Cerrar"
+              className="bg-white/6 text-white px-3 py-2 rounded-lg text-sm hover:bg-white/10 transition"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
+
+        {cameraError && (
+          <div className="mt-3 text-center text-xs text-yellow-200">{cameraError}</div>
+        )}
       </div>
     </div>
   );
