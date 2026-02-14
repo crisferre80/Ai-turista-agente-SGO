@@ -181,6 +181,54 @@ function HotspotMarker({
   );
 }
 
+// Phone-friendly model viewer: centra el modelo en frente de la cámara,
+// ajusta escala para que quepa en pantalla y posiciona la base en Y=0.
+function PhoneModel({ url, modelTransform }: { url: string; modelTransform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } }) {
+  const [gltf, setGltf] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const groupRef = useRef<THREE.Group | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    loadGLTF(url).then((res: any) => {
+      if (!mounted) return;
+      setGltf(res.scene);
+    }).catch((err) => {
+      console.error('PhoneModel loadGLTF error', err);
+      setError('No se pudo cargar modelo');
+    });
+    return () => { mounted = false; };
+  }, [url]);
+
+  if (error) return null;
+  if (!gltf) return null;
+
+  // Calcular bounding box y escala para la vista móvil
+  const box = new THREE.Box3().setFromObject(gltf);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  // Queremos que el mayor lado ocupe ~0.8m en la vista móvil
+  const desired = 0.8;
+  const fitScale = maxDim > 0 ? desired / maxDim : 1;
+
+  const userScale = modelTransform?.scale?.x ?? 1;
+  const finalScale = fitScale * userScale;
+
+  // Posicionar la base del modelo en y=0
+  const bboxMin = box.min.clone().multiplyScalar(finalScale);
+  const baseOffsetY = bboxMin.y;
+
+  // Posicionar frente de la cámara a -1.0m
+  const userPos = modelTransform?.position ?? { x: 0, y: 0, z: 0 };
+  const userRot = modelTransform?.rotation ?? { x: 0, y: 0, z: 0 };
+
+  return (
+    <group ref={groupRef} position={[userPos.x, -baseOffsetY + userPos.y, -1.0 + userPos.z]} rotation={[userRot.x, userRot.y, userRot.z]} scale={[finalScale, finalScale, finalScale]}>
+      <primitive object={gltf} />
+    </group>
+  );
+}
+
 // Billboard 3D para mostrar imagen asociada a un hotspot con perspectiva real
 function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
   // Prefer explicit typed fields (image_url). Support legacy content_url for safety.
@@ -945,13 +993,11 @@ export default function ARPreview3D({
         {showPhonePreview && modelUrl && (
           <div style={{ position: 'absolute', top: 14, right: 14, width: 220, height: 440, zIndex: 40, borderRadius: 18, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ width: '100%', height: '100%', background: '#000' }}>
-              <Canvas camera={{ position: [0, 1.6, 2.3], fov: 50 }} style={{ width: '100%', height: '100%' }}>
+              <Canvas camera={{ position: [0, 0, 0], fov: 50 }} style={{ width: '100%', height: '100%' }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[3, 5, 2]} intensity={0.8} />
                 <Suspense fallback={null}>
-                  <group position={[modelPosition.x, modelPosition.y, modelPosition.z]} rotation={[modelRotation.x, modelRotation.y, modelRotation.z]} scale={[modelScale.x, modelScale.y, modelScale.z]}>
-                    <Model url={modelUrl as string} />
-                  </group>
+                  <PhoneModel url={modelUrl as string} modelTransform={{ position: modelPosition, rotation: modelRotation, scale: modelScale }} />
                 </Suspense>
               </Canvas>
             </div>
