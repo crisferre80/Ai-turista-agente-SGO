@@ -5,10 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
-import EmailManagement from '@/components/EmailManagement';
-import BucketGallery from '@/components/BucketGallery';
 import { takePhoto } from '@/lib/photoService';
-import EmailManager from '@/email/EmailManager';
 import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 
 // Tipos básicos usados en este panel
@@ -117,7 +114,6 @@ export default function AdminDashboard() {
     const [selectedBucket, setSelectedBucket] = useState('');
     const [selectedFolderPath, setSelectedFolderPath] = useState('');
     const [galleryFolders, setGalleryFolders] = useState<string[]>([]);
-    const [galleryImagesFromStorage, setGalleryImagesFromStorage] = useState<BucketImageItem[]>([]);
     const [galleryTarget, setGalleryTarget] = useState<GalleryTarget>('place-main');
     const [galleryLoading, setGalleryLoading] = useState(false);
     const [galleryError, setGalleryError] = useState('');
@@ -142,7 +138,7 @@ export default function AdminDashboard() {
     }, [router]);
 
     // Función para asegurar autenticación antes de operaciones de escritura
-    const ensureAuthenticated = async () => {
+    const ensureAuthenticated = useCallback(async () => {
         const { data: { user }, error } = await supabase.auth.getUser();
         if (error || !user) {
             // Intentar refrescar la sesión
@@ -154,11 +150,37 @@ export default function AdminDashboard() {
             }
         }
         return true;
-    };
+    }, [router]);
 
     useEffect(() => {
         checkAuth();
     }, [checkAuth]);
+
+    // Al volver desde /admin/image-manager en modo "nuevo atractivo",
+    // leer las imágenes seleccionadas desde localStorage y aplicarlas al formulario.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const mainImage = window.localStorage.getItem('pendingNewPlaceMainImage');
+        const galleryImagesRaw = window.localStorage.getItem('pendingNewPlaceGalleryImages');
+
+        if (mainImage) {
+            setNewPlace(prev => ({ ...prev, img: mainImage }));
+            window.localStorage.removeItem('pendingNewPlaceMainImage');
+        }
+
+        if (galleryImagesRaw) {
+            try {
+                const galleryImages = JSON.parse(galleryImagesRaw) as string[];
+                if (Array.isArray(galleryImages) && galleryImages.length > 0) {
+                    setNewPlace(prev => ({ ...prev, gallery: [...prev.gallery, ...galleryImages] }));
+                }
+            } catch {
+                // Ignorar errores de parseo
+            }
+            window.localStorage.removeItem('pendingNewPlaceGalleryImages');
+        }
+    }, []);
 
     const fetchData = async () => {
         setLoading(true);
@@ -218,99 +240,6 @@ export default function AdminDashboard() {
             setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
         }
     };
-
-    const loadStorageBuckets = useCallback(async () => {
-        console.log('🔍 loadStorageBuckets: Iniciando carga de buckets...');
-        setGalleryLoading(true);
-        setGalleryError('');
-        try {
-            // Verificar y refrescar autenticación antes de acceder a Storage
-            await ensureAuthenticated();
-
-            console.log('🔍 loadStorageBuckets: Autenticación verificada, listando buckets...');
-            const { data, error } = await supabase.storage.listBuckets();
-            if (error) {
-                // Si es error de autenticación, intentar refrescar sesión
-                if (error.message.includes('JWT') || error.message.includes('auth') || error.message === 'Failed to fetch') {
-                    console.log('Error de autenticación detectado en listBuckets, intentando refrescar sesión...');
-                    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-                    if (refreshError) {
-                        throw new Error(`Sesión expirada: ${refreshError.message}`);
-                    }
-                    if (refreshData.user) {
-                        // Reintentar la operación después de refrescar
-                        const { data: retryData, error: retryError } = await supabase.storage.listBuckets();
-                        if (retryError) throw retryError;
-                        const buckets = (retryData || []).map(bucket => ({
-                            id: bucket.id,
-                            name: bucket.name,
-                            public: !!bucket.public
-                        }));
-                        console.log('🔍 loadStorageBuckets: Buckets cargados (retry):', buckets);
-                        setStorageBuckets(buckets);
-                        if (buckets.length > 0) {
-                            const initialBucket = selectedBucket || buckets[0].name;
-                            setSelectedBucket(initialBucket);
-                            await loadStoragePath(initialBucket, '');
-                        }
-                        setGalleryLoading(false);
-                        return;
-                    }
-                }
-                throw error;
-            }
-
-            const buckets = (data || []).map(bucket => ({
-                id: bucket.id,
-                name: bucket.name,
-                public: !!bucket.public
-            }));
-
-            console.log('🔍 loadStorageBuckets: Buckets cargados:', buckets);
-
-            // Si no se cargaron buckets (posible problema de permisos), usar buckets conocidos
-            if (buckets.length === 0) {
-                console.log('🔍 loadStorageBuckets: No se cargaron buckets, usando fallback conocidos...');
-                const knownBuckets = [
-                    { id: 'images', name: 'images', public: true },
-                    { id: 'audios', name: 'audios', public: true },
-                    { id: 'email-images', name: 'email-images', public: true },
-                    { id: 'ar-content', name: 'ar-content', public: true }
-                ];
-                setStorageBuckets(knownBuckets);
-                setSelectedBucket('images');
-                await loadStoragePath('images', '');
-                setGalleryLoading(false);
-                return;
-            }
-
-            setStorageBuckets(buckets);
-
-            if (buckets.length > 0) {
-                const initialBucket = selectedBucket || buckets[0].name;
-                setSelectedBucket(initialBucket);
-                await loadStoragePath(initialBucket, '');
-            } else {
-                setGalleryFolders([]);
-                setGalleryImagesFromStorage([]);
-            }
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Error desconocido';
-            console.error('❌ loadStorageBuckets: Error:', msg);
-            const fallbackBuckets = [
-                { id: 'images', name: 'images', public: true },
-                { id: 'audios', name: 'audios', public: true },
-                { id: 'email-images', name: 'email-images', public: true },
-                { id: 'ar-content', name: 'ar-content', public: true }
-            ];
-
-            setStorageBuckets(fallbackBuckets);
-            setSelectedBucket('images');
-            await loadStoragePath('images', '', includeSubfolders);
-            setGalleryError(`No se pudieron listar buckets con el rol actual (${msg}). Se cargó fallback.`);
-        }
-        setGalleryLoading(false);
-    }, [selectedBucket, includeSubfolders]);
 
     const loadStoragePath = useCallback(async (bucketName: string, folderPath: string, recursive = includeSubfolders) => {
         if (!bucketName) return;
@@ -437,86 +366,107 @@ export default function AdminDashboard() {
             setSelectedBucket(bucketName);
             setSelectedFolderPath(normalizedFolderPath);
             setGalleryFolders(normalizedFolders);
-            setGalleryImagesFromStorage(images);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Error desconocido';
             console.error('❌ loadStoragePath: Error:', msg);
             setGalleryError(msg);
             setGalleryFolders([]);
-            setGalleryImagesFromStorage([]);
         }
 
         setGalleryLoading(false);
-    }, [includeSubfolders]);
+    }, [includeSubfolders, ensureAuthenticated]);
 
-    const applyGalleryImage = (url: string) => {
-        if (!url) return;
-
-        if (galleryTarget === 'place-main') {
-            setNewPlace(prev => ({ ...prev, img: url }));
-            setActiveTab('lugares');
-            return;
-        }
-
-        if (galleryTarget === 'place-gallery') {
-            setNewPlace(prev => ({
-                ...prev,
-                gallery: prev.gallery.includes(url) ? prev.gallery : [...prev.gallery, url]
-            }));
-            setActiveTab('lugares');
-            return;
-        }
-
-        setNewBusiness(prev => ({ ...prev, image_url: url }));
-        setActiveTab('negocios');
-    };
-
-    const handleSelectFiles = (fileUrls: string[]) => {
-        if (fileUrls.length === 0) return;
-
-        if (galleryTarget === 'place-main') {
-            // Para imagen principal, usar solo la primera
-            setNewPlace(prev => ({ ...prev, img: fileUrls[0] }));
-            setActiveTab('lugares');
-            return;
-        }
-
-        if (galleryTarget === 'place-gallery') {
-            // Para galería, agregar todas las seleccionadas
-            setNewPlace(prev => ({
-                ...prev,
-                gallery: [...new Set([...prev.gallery, ...fileUrls])] // Evitar duplicados
-            }));
-            setActiveTab('lugares');
-            return;
-        }
-
-        if (galleryTarget === 'business-main') {
-            // Para imagen principal de negocio, usar solo la primera
-            setNewBusiness(prev => ({ ...prev, image_url: fileUrls[0] }));
-            setActiveTab('negocios');
-            return;
-        }
-
-        // Fallback
-        alert(`Se seleccionaron ${fileUrls.length} archivo(s), pero el destino "${galleryTarget}" no está soportado para selección múltiple.`);
-    };
-
-    const handleDeleteImage = async (bucket: string, path: string) => {
-        if (!confirm(`¿Eliminar la imagen "${path}"? Esta acción no se puede deshacer.`)) return;
-
+    const loadStorageBuckets = useCallback(async () => {
+        console.log('🔍 loadStorageBuckets: Iniciando carga de buckets...');
+        setGalleryLoading(true);
+        setGalleryError('');
         try {
+            // Verificar y refrescar autenticación antes de acceder a Storage
             await ensureAuthenticated();
-            const { error } = await supabase.storage.from(bucket).remove([path]);
-            if (error) throw error;
 
-            // Recargar la galería después de eliminar
-            loadStoragePath(selectedBucket, selectedFolderPath, includeSubfolders);
+            console.log('🔍 loadStorageBuckets: Autenticación verificada, listando buckets...');
+            const { data, error } = await supabase.storage.listBuckets();
+            if (error) {
+                // Si es error de autenticación, intentar refrescar sesión
+                if (error.message.includes('JWT') || error.message.includes('auth') || error.message === 'Failed to fetch') {
+                    console.log('Error de autenticación detectado en listBuckets, intentando refrescar sesión...');
+                    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+                    if (refreshError) {
+                        throw new Error(`Sesión expirada: ${refreshError.message}`);
+                    }
+                    if (refreshData.user) {
+                        // Reintentar la operación después de refrescar
+                        const { data: retryData, error: retryError } = await supabase.storage.listBuckets();
+                        if (retryError) throw retryError;
+                        const buckets = (retryData || []).map(bucket => ({
+                            id: bucket.id,
+                            name: bucket.name,
+                            public: !!bucket.public
+                        }));
+                        console.log('🔍 loadStorageBuckets: Buckets cargados (retry):', buckets);
+                        setStorageBuckets(buckets);
+                        if (buckets.length > 0) {
+                            const initialBucket = selectedBucket || buckets[0].name;
+                            setSelectedBucket(initialBucket);
+                            await loadStoragePath(initialBucket, '');
+                        }
+                        setGalleryLoading(false);
+                        return;
+                    }
+                }
+                throw error;
+            }
+
+            const buckets = (data || []).map(bucket => ({
+                id: bucket.id,
+                name: bucket.name,
+                public: !!bucket.public
+            }));
+
+            console.log('🔍 loadStorageBuckets: Buckets cargados:', buckets);
+
+            // Si no se cargaron buckets (posible problema de permisos), usar buckets conocidos
+            if (buckets.length === 0) {
+                console.log('🔍 loadStorageBuckets: No se cargaron buckets, usando fallback conocidos...');
+                const knownBuckets = [
+                    { id: 'images', name: 'images', public: true },
+                    { id: 'audios', name: 'audios', public: true },
+                    { id: 'email-images', name: 'email-images', public: true },
+                    { id: 'ar-content', name: 'ar-content', public: true }
+                ];
+                setStorageBuckets(knownBuckets);
+                setSelectedBucket('images');
+                await loadStoragePath('images', '');
+                setGalleryLoading(false);
+                return;
+            }
+
+            setStorageBuckets(buckets);
+
+            if (buckets.length > 0) {
+                const initialBucket = selectedBucket || buckets[0].name;
+                setSelectedBucket(initialBucket);
+                await loadStoragePath(initialBucket, '');
+            } else {
+                setGalleryFolders([]);
+            }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Error desconocido';
-            alert(`Error al eliminar imagen: ${msg}`);
+            console.error('❌ loadStorageBuckets: Error:', msg);
+            const fallbackBuckets = [
+                { id: 'images', name: 'images', public: true },
+                { id: 'audios', name: 'audios', public: true },
+                { id: 'email-images', name: 'email-images', public: true },
+                { id: 'ar-content', name: 'ar-content', public: true }
+            ];
+
+            setStorageBuckets(fallbackBuckets);
+            setSelectedBucket('images');
+            await loadStoragePath('images', '', includeSubfolders);
+            setGalleryError(`No se pudieron listar buckets con el rol actual (${msg}). Se cargó fallback.`);
         }
-    };
+        setGalleryLoading(false);
+    }, [selectedBucket, includeSubfolders, ensureAuthenticated, loadStoragePath]);
 
     const openGalleryForTarget = (target: GalleryTarget, preferredBucket = 'images') => {
         setGalleryTarget(target);
@@ -1222,7 +1172,7 @@ export default function AdminDashboard() {
                     >🏠 Volver al Sitio</button>
                     <button onClick={() => { setActiveTab('lugares'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'lugares')}>📍 Atractivos</button>
                     <button onClick={() => { router.push('/admin/ar-config'); }} style={tabStyle(false)}>🥽 Config AR</button>
-                    <button onClick={() => { setActiveTab('galeria'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'galeria')}>🗂️ Galería</button>
+                    <button onClick={() => { router.push('/admin/image-manager'); setIsMobileMenuOpen(false); }} style={tabStyle(false)}>🗂️ Galería</button>
                     <button onClick={() => { setActiveTab('carrusel'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'carrusel')}>📸 Carrusel</button>
                     <button onClick={() => { setActiveTab('videos'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'videos')}>🎥 Videos</button>
                     <button onClick={() => { setActiveTab('negocios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'negocios')}>🏢 Negocios</button>
@@ -1302,7 +1252,7 @@ export default function AdminDashboard() {
                                         <button type="button" onClick={() => captureImage('place')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
                                         <button
                                             type="button"
-                                            onClick={() => openGalleryForTarget('place-main')}
+                                            onClick={() => router.push('/admin/image-manager?mode=place-main-new')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
                                             🗂️ Galería
@@ -1316,7 +1266,7 @@ export default function AdminDashboard() {
                                         <button type="button" onClick={() => captureImage('gallery')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Galería</button>
                                         <button
                                             type="button"
-                                            onClick={() => openGalleryForTarget('place-gallery')}
+                                            onClick={() => router.push('/admin/image-manager?mode=place-gallery-new')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
                                             🗂️ Buckets
@@ -1460,8 +1410,7 @@ export default function AdminDashboard() {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    startEditing(p);
-                                                    openGalleryForTarget('place-gallery');
+                                                    router.push(`/admin/image-manager?mode=place-gallery&attractionId=${p.id}`);
                                                 }}
                                                 style={{ ...btnAction, color: '#1A3A6C' }}
                                             >
@@ -1726,7 +1675,7 @@ export default function AdminDashboard() {
                                         <button type="button" onClick={() => captureImage('business')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
                                         <button
                                             type="button"
-                                            onClick={() => openGalleryForTarget('business-main')}
+                                            onClick={() => router.push('/admin/image-manager')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
                                             🗂️ Galería
@@ -1831,7 +1780,7 @@ export default function AdminDashboard() {
                                         <button
                                             onClick={() => {
                                                 setNewBusiness({ id: b.id || '', name: b.name, category: b.category, contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 });
-                                                openGalleryForTarget('business-main');
+                                                router.push('/admin/image-manager');
                                             }}
                                             style={btnAction}
                                         >
@@ -1849,151 +1798,28 @@ export default function AdminDashboard() {
                 {activeTab === 'galeria' && (
                     <div style={cardStyle}>
                         <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '20px', fontWeight: 'bold' }}>
-                            🗂️ Galería de Buckets y Subcarpetas
+                            🖼️ Gestor de Imágenes
                         </h3>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                            <div>
-                                <label style={labelStyle}>Bucket</label>
-                                <select
-                                    style={inputStyle}
-                                    value={selectedBucket}
-                                    onChange={(e) => {
-                                        const nextBucket = e.target.value;
-                                        setSelectedBucket(nextBucket);
-                                        loadStoragePath(nextBucket, '');
-                                    }}
-                                >
-                                    {storageBuckets.map(bucket => (
-                                        <option key={bucket.id} value={bucket.name}>
-                                            {bucket.name} {bucket.public ? '(público)' : '(privado)'}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label style={labelStyle}>Destino de selección</label>
-                                <select
-                                    style={inputStyle}
-                                    value={galleryTarget}
-                                    onChange={(e) => setGalleryTarget(e.target.value as GalleryTarget)}
-                                >
-                                    <option value="place-main">Atractivo: imagen principal</option>
-                                    <option value="place-gallery">Atractivo: galería</option>
-                                    <option value="business-main">Negocio: imagen principal</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
+                        <div style={{ padding: '30px', background: '#f8fafc', borderRadius: '24px', border: `2px solid ${COLOR_GOLD}22`, textAlign: 'center' }}>
+                            <p style={{ marginBottom: '16px', color: '#64748b', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                                Ahora toda la gestión de imágenes (buckets, subcarpetas, selección y asignación a atractivos o negocios)
+                                se realiza desde el nuevo panel dedicado.
+                            </p>
+                            <p style={{ marginBottom: '24px', color: '#475569', fontSize: '0.9rem' }}>
+                                Haz clic en el botón de abajo para abrir el gestor moderno de imágenes.
+                            </p>
                             <button
-                                type="button"
-                                onClick={() => loadStoragePath(selectedBucket, '', includeSubfolders)}
-                                style={{ ...btnAction, background: '#1A3A6C', color: 'white', borderColor: 'transparent' }}
+                                onClick={() => router.push('/admin/image-manager')}
+                                style={{
+                                    ...btnPrimary,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}
                             >
-                                Raíz
+                                🖼️ Abrir Gestor de Imágenes
                             </button>
-                            {selectedFolderPath && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const parent = selectedFolderPath.split('/').slice(0, -1).join('/');
-                                        loadStoragePath(selectedBucket, parent, includeSubfolders);
-                                    }}
-                                    style={{ ...btnAction, background: '#64748b', color: 'white', borderColor: 'transparent' }}
-                                >
-                                    ⬆ Subir carpeta
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => loadStoragePath(selectedBucket, selectedFolderPath, includeSubfolders)}
-                                style={{ ...btnAction, background: '#20B2AA', color: 'white', borderColor: 'transparent' }}
-                            >
-                                🔄 Recargar
-                            </button>
-                            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                                Ruta: /{selectedFolderPath || ''}
-                            </span>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: '0.85rem', color: '#334155', fontWeight: 700 }}>
-                                <input
-                                    type="checkbox"
-                                    checked={includeSubfolders}
-                                    onChange={(e) => {
-                                        const nextValue = e.target.checked;
-                                        setIncludeSubfolders(nextValue);
-                                        if (selectedBucket) {
-                                            loadStoragePath(selectedBucket, selectedFolderPath, nextValue);
-                                        }
-                                    }}
-                                />
-                                Incluir subcarpetas en el grid
-                            </label>
-                        </div>
-
-                        {galleryError && (
-                            <div style={{ marginBottom: '16px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 12, padding: '10px 12px', fontWeight: 600 }}>
-                                Error de galería: {galleryError}
-                            </div>
-                        )}
-
-                        {galleryLoading && (
-                            <div style={{ marginBottom: '16px', color: '#334155', fontWeight: 700 }}>Cargando buckets/archivos...</div>
-                        )}
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <h4 style={{ margin: '0 0 10px 0', color: COLOR_BLUE }}>Subcarpetas</h4>
-                            {selectedBucket === 'images' && (
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                                    {['avatars', 'carousel', 'uploads', 'user-reviews'].map(folder => (
-                                        <button
-                                            key={`quick-${folder}`}
-                                            type="button"
-                                            onClick={() => loadStoragePath('images', folder, includeSubfolders)}
-                                            style={{ ...btnAction, background: '#dbeafe', color: '#1e3a8a', borderColor: 'transparent' }}
-                                        >
-                                            ⚡ {folder}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                            {galleryFolders.length === 0 ? (
-                                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No hay subcarpetas en esta ruta.</div>
-                            ) : (
-                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                    {galleryFolders.map(folder => {
-                                        const nextPath = selectedFolderPath ? `${selectedFolderPath}/${folder}` : folder;
-                                        return (
-                                            <button
-                                                key={folder}
-                                                type="button"
-                                                onClick={() => loadStoragePath(selectedBucket, nextPath, includeSubfolders)}
-                                                style={{ ...btnAction, background: '#e2e8f0' }}
-                                            >
-                                                📁 {folder}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-
-                        <div>
-                            <h4 style={{ margin: '0 0 12px 0', color: COLOR_BLUE }}>Imágenes del Bucket</h4>
-                            {selectedBucket ? (
-                                <BucketGallery
-                                    bucketName={selectedBucket}
-                                    maxSelection={20}
-                                    allowedTypes={['image/']}
-                                    onClose={() => {}}
-                                    onSelectFiles={handleSelectFiles}
-                                />
-                            ) : (
-                                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                                    Selecciona un bucket para ver las imágenes.
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}

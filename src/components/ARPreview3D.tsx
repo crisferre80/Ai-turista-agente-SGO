@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { Settings, Lightbulb, Camera, Trash2, Move, RotateCcw, Maximize2 } from 'lucide-react';
 
 import type { ARHotspot } from '@/types/ar';
+import { loadGLTF } from '@/lib/model-loader';
 
 // Reuse shared ARHotspot type from global types to avoid mismatches across app
 type Hotspot = ARHotspot;
@@ -31,6 +32,11 @@ interface Light {
 
 interface ARPreview3DProps {
   modelUrl?: string;
+  modelTransform?: {
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  };
   hotspots: Hotspot[];
   onHotspotPositionChange?: (id: string, position: { x: number; y: number; z: number }) => void;
   onHotspotScaleChange?: (id: string, scale: { x: number; y: number; z: number }) => void;
@@ -54,38 +60,28 @@ function Model({ url }: { url: string }) {
     setError(null);
     
     // Cargar modelo GLTF/GLB
-    import('three/examples/jsm/loaders/GLTFLoader.js').then(({ GLTFLoader }) => {
-      const gltfLoader = new GLTFLoader();
-      gltfLoader.load(
-        url,
-        (gltf) => {
-          // Centrar y escalar el modelo
-          const box = new THREE.Box3().setFromObject(gltf.scene);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          
-          // Escalar si es muy grande
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = maxDim > 3 ? 3 / maxDim : 1;
-          
-          gltf.scene.scale.setScalar(scale);
-          gltf.scene.position.sub(center.multiplyScalar(scale));
-          
-          setModel(gltf.scene);
-          setLoading(false);
-          setError(null);
-        },
-        (progress) => {
-          console.log('Cargando modelo:', (progress.loaded / progress.total * 100).toFixed(0) + '%');
-        },
-        (err) => {
-          console.error('Error cargando modelo:', err);
-          setError('No se pudo cargar el modelo 3D');
-          setLoading(false);
-        }
-      );
-    }).catch(() => {
-      setError('Error al inicializar el cargador');
+    loadGLTF(url).then((gltf: any) => {
+      try {
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = maxDim > 3 ? 3 / maxDim : 1;
+
+        gltf.scene.scale.setScalar(scale);
+        gltf.scene.position.sub(center.multiplyScalar(scale));
+
+        setModel(gltf.scene);
+        setLoading(false);
+        setError(null);
+      } catch (err) {
+        console.error('Error procesando glTF:', err);
+        setError('Error procesando modelo 3D');
+        setLoading(false);
+      }
+    }).catch((err) => {
+      console.error('Error cargando modelo (loadGLTF):', err);
+      setError('No se pudo cargar el modelo 3D');
       setLoading(false);
     });
   }, [url]);
@@ -189,7 +185,7 @@ function HotspotMarker({
 function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
   // Prefer explicit typed fields (image_url). Support legacy content_url for safety.
   const imageUrl = ('image_url' in hotspot && hotspot.image_url) || ((hotspot as unknown as Record<string, unknown>).content_url as string) || '';
-  const texture = useTexture(imageUrl || '');
+  const texture = imageUrl ? useTexture(imageUrl) : null;
 
   // Elevamos un poco el contenido sobre el marcador
   const yOffset = 0.8;
@@ -206,7 +202,10 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
       </mesh>
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
-        <meshBasicMaterial map={Array.isArray(texture) ? texture[0] : texture as THREE.Texture} toneMapped={false} />
+        <meshBasicMaterial
+          map={texture ? (Array.isArray(texture) ? texture[0] : (texture as THREE.Texture)) : undefined}
+          toneMapped={false}
+        />
       </mesh>
       <Text
         position={[0, -0.55, 0]}
@@ -373,6 +372,7 @@ function CustomLight({ light }: { light: Light }) {
 
 export default function ARPreview3D({ 
   modelUrl, 
+  modelTransform,
   hotspots, 
   onHotspotPositionChange,
   onHotspotScaleChange,
@@ -396,9 +396,29 @@ export default function ARPreview3D({
   const [showPhonePreview, setShowPhonePreview] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
+  const isTransformingRef = useRef(false);
+  const isApplyingExternalTransformRef = useRef(false);
+  const lastEmittedModelTransformRef = useRef<{
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  } | null>(null);
   const primitiveIdRef = useRef(0);
+  // Inicializar contador de IDs de primitivas basado en las primitivas externas
+  useEffect(() => {
+    try {
+      const maxId = primitives.reduce((acc, p) => {
+        const m = String(p.id).match(/^primitive-(\d+)$/);
+        const n = m ? parseInt(m[1], 10) : 0;
+        return Math.max(acc, n);
+      }, 0);
+      primitiveIdRef.current = Math.max(primitiveIdRef.current, maxId);
+    } catch (e) {
+      // noop
+    }
+  }, [primitives]);
   // Refs para TransformControls / selección
-  const transformRef = useRef<TransformControlsImpl | null>(null); // transform controls active instance
+  const transformRefs = useRef<Record<string, TransformControlsImpl | null>>({}); // refs por instancia de TransformControls
   const selectedPrimitiveMeshRef = useRef<THREE.Mesh | null>(null);
   const selectedHotspotMeshRef = useRef<THREE.Mesh | null>(null);
 
@@ -418,66 +438,137 @@ export default function ARPreview3D({
     z: 1,
   });
 
-  // Persistir transform del modelo hacia el padre cuando cambie (evita "reseteo")
+  const syncModelStateFromGroup = () => {
+    const obj = modelGroupRef.current;
+    if (!obj) return;
+
+    const eps = 1e-6;
+    const nextPos = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+    const nextRot = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+    const nextScl = { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z };
+
+    const posChanged =
+      Math.abs(modelPosition.x - nextPos.x) > eps ||
+      Math.abs(modelPosition.y - nextPos.y) > eps ||
+      Math.abs(modelPosition.z - nextPos.z) > eps;
+    const rotChanged =
+      Math.abs(modelRotation.x - nextRot.x) > eps ||
+      Math.abs(modelRotation.y - nextRot.y) > eps ||
+      Math.abs(modelRotation.z - nextRot.z) > eps;
+    const sclChanged =
+      Math.abs(modelScale.x - nextScl.x) > eps ||
+      Math.abs(modelScale.y - nextScl.y) > eps ||
+      Math.abs(modelScale.z - nextScl.z) > eps;
+
+    if (posChanged) setModelPosition(nextPos);
+    if (rotChanged) setModelRotation(nextRot);
+    if (sclChanged) setModelScale(nextScl);
+  };
+
+  // Sincronizar transform guardado (desde el padre) hacia el canvas.
+  // Esto permite que, al recargar o al cambiar de atractivo, el modelo
+  // aparezca con la transformación persistida.
   useEffect(() => {
-    if (typeof onModelTransformChange === 'function') {
-      onModelTransformChange({
+    if (!modelTransform) return;
+    if (isTransformingRef.current) return;
+
+    const eps = 1e-6;
+    const needsUpdate =
+      Math.abs(modelPosition.x - modelTransform.position.x) > eps ||
+      Math.abs(modelPosition.y - modelTransform.position.y) > eps ||
+      Math.abs(modelPosition.z - modelTransform.position.z) > eps ||
+      Math.abs(modelRotation.x - modelTransform.rotation.x) > eps ||
+      Math.abs(modelRotation.y - modelTransform.rotation.y) > eps ||
+      Math.abs(modelRotation.z - modelTransform.rotation.z) > eps ||
+      Math.abs(modelScale.x - modelTransform.scale.x) > eps ||
+      Math.abs(modelScale.y - modelTransform.scale.y) > eps ||
+      Math.abs(modelScale.z - modelTransform.scale.z) > eps;
+
+    if (!needsUpdate) return;
+
+    // Marcar que este cambio viene de afuera para no re-emitirlo al padre.
+    isApplyingExternalTransformRef.current = true;
+
+    setModelPosition({ ...modelTransform.position });
+    setModelRotation({ ...modelTransform.rotation });
+    setModelScale({ ...modelTransform.scale });
+
+    if (modelGroupRef.current) {
+      modelGroupRef.current.position.set(
+        modelTransform.position.x,
+        modelTransform.position.y,
+        modelTransform.position.z
+      );
+      modelGroupRef.current.rotation.set(
+        modelTransform.rotation.x,
+        modelTransform.rotation.y,
+        modelTransform.rotation.z
+      );
+      modelGroupRef.current.scale.set(
+        modelTransform.scale.x,
+        modelTransform.scale.y,
+        modelTransform.scale.z
+      );
+    }
+  }, [modelTransform]);
+
+  // Guardar la referencia al callback externo para evitar re-ejecuciones
+  // del efecto cuando la identidad del callback cambia en el padre.
+  const onModelTransformChangeRef = useRef<typeof onModelTransformChange | null>(onModelTransformChange ?? null);
+  useEffect(() => {
+    onModelTransformChangeRef.current = onModelTransformChange ?? null;
+  }, [onModelTransformChange]);
+
+  // Persistir transform del modelo hacia el padre cuando cambien las transformaciones.
+  // No incluimos la referencia al callback en las dependencias para evitar
+  // bucles por cambios de identidad del handler en el componente padre.
+  useEffect(() => {
+    const fn = onModelTransformChangeRef.current;
+    if (typeof fn === 'function') {
+      if (isApplyingExternalTransformRef.current) {
+        isApplyingExternalTransformRef.current = false;
+        return;
+      }
+
+      const eps = 1e-6;
+      const next = {
         position: modelPosition,
         rotation: modelRotation,
         scale: modelScale,
-      });
-    }
-  }, [modelPosition, modelRotation, modelScale, onModelTransformChange]);
+      };
 
-  // Mantener TransformControls correctamente 'attached' al objeto seleccionado.
-  // Si el usuario selecciona el modelo/primitiva/hotspot, attach explícito para
-  // forzar que el gizmo siga la transform que proviene del estado.
-  useEffect(() => {
-    try {
-      if (modelSelected && modelGroupRef.current && transformRef.current) {
-        if (transformRef.current?.attach) {
-          transformRef.current.attach(modelGroupRef.current as unknown as THREE.Object3D);
-        }
-        if (transformRef.current?.updateMatrixWorld) {
-          transformRef.current.updateMatrixWorld();
-        }
-      }
-    } catch (err) {
-      console.warn('Error re-adjuntando TransformControls al modelo:', err);
-    }
-  }, [modelSelected, modelPosition, modelRotation, modelScale]);
+      const prev = lastEmittedModelTransformRef.current;
+      const sameAsPrev =
+        !!prev &&
+        Math.abs(prev.position.x - next.position.x) <= eps &&
+        Math.abs(prev.position.y - next.position.y) <= eps &&
+        Math.abs(prev.position.z - next.position.z) <= eps &&
+        Math.abs(prev.rotation.x - next.rotation.x) <= eps &&
+        Math.abs(prev.rotation.y - next.rotation.y) <= eps &&
+        Math.abs(prev.rotation.z - next.rotation.z) <= eps &&
+        Math.abs(prev.scale.x - next.scale.x) <= eps &&
+        Math.abs(prev.scale.y - next.scale.y) <= eps &&
+        Math.abs(prev.scale.z - next.scale.z) <= eps;
 
-  useEffect(() => {
-    try {
-      if (selectedPrimitive && selectedPrimitiveMeshRef.current && transformRef.current) {
-        if (transformRef.current?.attach) {
-          transformRef.current.attach(selectedPrimitiveMeshRef.current as unknown as THREE.Object3D);
-        }
-        if (transformRef.current?.updateMatrixWorld) {
-          transformRef.current.updateMatrixWorld();
-        }
-      }
-    } catch (err) {
-      console.warn('Error re-adjuntando TransformControls a primitiva:', err);
+      if (sameAsPrev) return;
+      lastEmittedModelTransformRef.current = {
+        position: { ...next.position },
+        rotation: { ...next.rotation },
+        scale: { ...next.scale },
+      };
+      fn(next);
     }
-  }, [selectedPrimitive, primitives]);
+  }, [modelPosition, modelRotation, modelScale]);
 
-  useEffect(() => {
-    try {
-      if (selectedHotspot && selectedHotspotMeshRef.current && transformRef.current) {
-        if (transformRef.current?.attach) {
-          transformRef.current.attach(selectedHotspotMeshRef.current as unknown as THREE.Object3D);
-        }
-        if (transformRef.current?.updateMatrixWorld) {
-          transformRef.current.updateMatrixWorld();
-        }
-      }
-    } catch (err) {
-      console.warn('Error re-adjuntando TransformControls a hotspot:', err);
-    }
-  }, [selectedHotspot, hotspots]);
+  // Ahora cada TransformControls se instancia con su propio ref (transformRefs.current[id])
+  // y se monta directamente alrededor del objeto seleccionado, por lo que no necesitamos
+  // re-adjuntar manualmente en efectos. Esto evita condiciones de carrera donde un
+  // único control era re-adjuntado a múltiples objetos.
 
   const clearSelection = () => {
+    // Antes de limpiar selección (por ejemplo, click en la grilla),
+    // asegurar que el estado se queda con el último transform real.
+    syncModelStateFromGroup();
     setSelectedPrimitive(null);
     setSelectedHotspot(null);
     setModelSelected(false);
@@ -650,27 +741,24 @@ export default function ARPreview3D({
           >
             {modelSelected ? (
               <TransformControls
-                ref={transformRef}
+                ref={(el) => { transformRefs.current['model'] = el; }}
                 mode={transformMode}
                 size={1.6}
                 space="world"
-                // no snapping -> movimiento fluido
                 onMouseDown={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = false;
-                  }
+                  isTransformingRef.current = true;
+                  if (orbitRef.current) orbitRef.current.enabled = false;
                 }}
                 onMouseUp={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = true;
-                  }
+                  if (orbitRef.current) orbitRef.current.enabled = true;
+                  isTransformingRef.current = false;
+                  syncModelStateFromGroup();
                 }}
                 onObjectChange={(event) => {
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;
                   if (!obj) return;
 
-                  // Actualizar siempre posición/rotación/escala para que los cambios sean fluidos
                   const { x, y, z } = obj.position;
                   setModelPosition({ x, y, z });
                   setModelRotation({ x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z });
@@ -682,10 +770,7 @@ export default function ARPreview3D({
                   position={[modelPosition.x, modelPosition.y, modelPosition.z]}
                   rotation={[modelRotation.x, modelRotation.y, modelRotation.z]}
                   scale={[modelScale.x, modelScale.y, modelScale.z]}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModelSelected(true);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setModelSelected(true); }}
                 >
                   <Model url={modelUrl} />
                 </group>
@@ -696,10 +781,7 @@ export default function ARPreview3D({
                 position={[modelPosition.x, modelPosition.y, modelPosition.z]}
                 rotation={[modelRotation.x, modelRotation.y, modelRotation.z]}
                 scale={[modelScale.x, modelScale.y, modelScale.z]}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setModelSelected(true);
-                }}
+                onClick={(e) => { e.stopPropagation(); setModelSelected(true); }}
               >
                 <Model url={modelUrl} />
               </group>
@@ -711,23 +793,15 @@ export default function ARPreview3D({
         {primitives.map((primitive: Primitive) => {
           const isSelected = selectedPrimitive === primitive.id;
 
-          if (isSelected) {
+            if (isSelected) {
             return (
               <TransformControls
-                ref={transformRef}
+                ref={(el) => { transformRefs.current[primitive.id] = el; }}
                 key={primitive.id}
                 mode={transformMode}
                 size={1.2}
-                onMouseDown={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = false;
-                  }
-                }}
-                onMouseUp={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = true;
-                  }
-                }}
+                onMouseDown={() => { if (orbitRef.current) orbitRef.current.enabled = false; }}
+                onMouseUp={() => { if (orbitRef.current) orbitRef.current.enabled = true; }}
                 onObjectChange={(event) => {
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;
@@ -774,23 +848,15 @@ export default function ARPreview3D({
         {hotspots.map((hotspot) => {
           const isSelected = selectedHotspot === hotspot.id;
 
-          if (isSelected && onHotspotPositionChange) {
+            if (isSelected && onHotspotPositionChange) {
             return (
               <TransformControls
-                ref={transformRef}
+                ref={(el) => { transformRefs.current[hotspot.id] = el; }}
                 key={hotspot.id}
                 mode={transformMode}
                 size={1.0}
-                onMouseDown={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = false;
-                  }
-                }}
-                onMouseUp={() => {
-                  if (orbitRef.current) {
-                    orbitRef.current.enabled = true;
-                  }
-                }}
+                onMouseDown={() => { if (orbitRef.current) orbitRef.current.enabled = false; }}
+                onMouseUp={() => { if (orbitRef.current) orbitRef.current.enabled = true; }}
                 onObjectChange={(event) => {
                   const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
                   const obj = target?.object;

@@ -6,14 +6,17 @@
  */
 
 import { useRef, useState, Suspense } from 'react';
+import { useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { 
   OrbitControls, 
   PerspectiveCamera,
   Environment,
   Html,
-  useGLTF
 } from '@react-three/drei';
+import { useModel } from '@/lib/model-loader';
+import { supabase } from '@/lib/supabase';
+import { loadARModelFromScene } from '@/lib/ar-scene-persistence';
 import * as THREE from 'three';
 import type { AttractionWithAR, WebXRCapabilities, ARHotspot } from '@/types/ar';
 
@@ -25,6 +28,23 @@ interface ARSceneProps {
 }
 
 export default function ARScene({ attraction, disableOrbitControls = false, showGrid = true }: ARSceneProps) {
+  const [modelTransform, setModelTransform] = useState<any>(attraction.ar_hotspots?.modelTransform ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { transform } = await loadARModelFromScene({ supabase, attractionId: attraction.id });
+        if (!cancelled && transform) setModelTransform(transform);
+      } catch {
+        // noop
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attraction.id]);
+
   return (
     <>
       {/* Iluminación */}
@@ -52,7 +72,7 @@ export default function ARScene({ attraction, disableOrbitControls = false, show
       {/* Modelo 3D principal si está disponible */}
       {attraction.ar_model_url && (
         <Suspense fallback={<LoadingModel />}>
-          <MainModel modelUrl={attraction.ar_model_url} />
+          <MainModel modelUrl={attraction.ar_model_url} transform={modelTransform} />
         </Suspense>
       )}
 
@@ -74,29 +94,21 @@ export default function ARScene({ attraction, disableOrbitControls = false, show
 /**
  * Componente de modelo 3D principal
  */
-function MainModel({ modelUrl }: { modelUrl: string }) {
-  let gltfScene = null;
-  
-  // Intentar cargar modelo GLTF/GLB
-  try {
-    const gltf = useGLTF(modelUrl);
-    gltfScene = gltf.scene;
-  } catch (error) {
-    console.error('Error al cargar modelo 3D:', error);
-    return <PlaceholderModel />;
-  }
+function MainModel({ modelUrl, transform }: { modelUrl: string; transform?: { position?: any; rotation?: any; scale?: any } | null }) {
+  const gltf = useModel(modelUrl);
+  const gltfScene = gltf.scene;
 
   if (!gltfScene) {
     return <PlaceholderModel />;
   }
 
-  return <AnimatedModel scene={gltfScene} />;
+  return <AnimatedModel scene={gltfScene} transform={transform} />;
 }
 
 /**
  * Subcomponente para animar el modelo (evita uso condicional de hooks)
  */
-function AnimatedModel({ scene }: { scene: THREE.Group | THREE.Object3D }) {
+function AnimatedModel({ scene, transform }: { scene: THREE.Group | THREE.Object3D; transform?: { position?: any; rotation?: any; scale?: any } | null }) {
   const mesh = useRef<THREE.Mesh>(null);
 
   // Animar rotación suave
@@ -110,8 +122,9 @@ function AnimatedModel({ scene }: { scene: THREE.Group | THREE.Object3D }) {
     <primitive
       ref={mesh}
       object={scene.clone()}
-      position={[0, 0, -5]}
-      scale={1}
+      position={transform?.position ? [0 + transform.position.x, 0 + transform.position.y, -5 + transform.position.z] : [0, 0, -5]}
+      rotation={transform?.rotation ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] : undefined}
+      scale={transform?.scale ? [transform.scale.x, transform.scale.y, transform.scale.z] : 1}
     />
   );
 }
@@ -364,15 +377,8 @@ function ModelHotspot({
   scale: [number, number, number];
   rotation: [number, number, number];
 }) {
-  let gltfScene = null;
-  
-  try {
-    const gltf = useGLTF(modelUrl);
-    gltfScene = gltf.scene;
-  } catch (error) {
-    console.error('Error al cargar modelo hotspot:', error);
-    return null;
-  }
+  const gltf = useModel(modelUrl);
+  const gltfScene = gltf.scene;
 
   if (!gltfScene) {
     return null;

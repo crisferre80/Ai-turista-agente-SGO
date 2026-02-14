@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   /* REFERENCIA.PNG Color Palette */
   --color-dark-header: #0e1f1d;

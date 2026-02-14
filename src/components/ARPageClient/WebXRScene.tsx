@@ -10,7 +10,7 @@ import ARScene from './ARScene';
 import type { ARData } from '@/types/ar';
 
 // Icons for improved UI
-import { X, Play, RefreshCw, MapPin, Camera, CheckCircle, RotateCcw } from 'lucide-react';
+import { X, Play, MapPin, Camera, CheckCircle, RotateCcw } from 'lucide-react';
 
 type Attraction = {
   id: string;
@@ -33,33 +33,30 @@ interface WebXRSceneProps {
 
 // Componente principal de la escena WebXR
 export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
-  const [placedObjects, setPlacedObjects] = useState<Array<{
+  const [placedObject, setPlacedObject] = useState<{
     position: THREE.Vector3;
     rotation: THREE.Quaternion;
-    id: string;
-  }>>([]);
+  } | null>(null);
   
-  const [isPlacing, setIsPlacing] = useState(true);
-  const [countPulse, setCountPulse] = useState(false);
   const store = createXRStore();
 
-  // Pulse animation when a new object is placed
-  React.useEffect(() => {
-    if (placedObjects.length === 0) return;
-    setCountPulse(true);
-    const t = setTimeout(() => setCountPulse(false), 450);
-    return () => clearTimeout(t);
-  }, [placedObjects.length]);
-
   const handlePlace = (result: { position: THREE.Vector3; rotation: THREE.Quaternion }) => {
+    // Solo permitir una colocación
+    if (placedObject) return;
+    
     console.log('📍 Colocando objeto en posición real:', result.position.toArray());
     
-    setPlacedObjects(prev => [...prev, {
-      ...result,
-      id: `placed_${Date.now()}`
-    }]);
+    setPlacedObject({
+      position: result.position.clone(),
+      rotation: result.rotation.clone()
+    });
     
-    setIsPlacing(false);
+    // mark search complete
+  };
+
+  const handleReset = () => {
+    setPlacedObject(null);
+    // reset search state handled by UI when placedObject is null
   };
 
   return (
@@ -81,15 +78,17 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           </div>
 
           <div className="ml-4 flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 bg-white/5 px-2 py-1 rounded-full text-xs text-sky-200 tracking-wide">
-              <CheckCircle className="h-4 w-4 text-green-400" />
-              <span className="font-medium">Listo</span>
-            </div>
-
-            <div className={`inline-flex items-center gap-2 bg-white/5 px-2 py-1 rounded-full text-xs text-neutral-200 tracking-wide transition-transform duration-300 ${countPulse ? 'pulse-count' : ''}`}>
-              <span className="font-semibold text-sm">{placedObjects.length}</span>
-              <span className="opacity-70 text-[11px]">colocados</span>
-            </div>
+            {placedObject ? (
+              <div className="inline-flex items-center gap-2 bg-green-500/20 px-2 py-1 rounded-full text-xs text-green-300 tracking-wide">
+                <CheckCircle className="h-4 w-4 text-green-400" />
+                <span className="font-medium">Anclado</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 bg-yellow-500/20 px-2 py-1 rounded-full text-xs text-yellow-300 tracking-wide">
+                <Camera className="h-4 w-4 text-yellow-400" />
+                <span className="font-medium">Buscando superficie...</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -113,30 +112,20 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
             console.error('WebXR AR Error:', error);
           }}
         >
-          {isPlacing ? (
-            <>
-              <Play className="h-4 w-4" />
-              <span className="uppercase tracking-wide text-sm">Iniciar AR</span>
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4" />
-              <span className="uppercase tracking-wide text-sm">Reiniciar AR</span>
-            </>
-          )}
+          <Play className="h-4 w-4" />
+          <span className="uppercase tracking-wide text-sm">Iniciar AR</span>
         </ARButton>
 
-        {/* Secondary quick actions */}
-        <button
-          onClick={() => {
-            setPlacedObjects([]);
-            setIsPlacing(true);
-          }}
-          className="bg-black/50 text-white px-3 py-2 rounded-lg border border-white/6 shadow-sm text-sm hover:bg-black/60 transition"
-          title="Reiniciar colocaciones"
-        >
-          <RotateCcw className="h-4 w-4 mr-2 inline-block" />Reset
-        </button>
+        {/* Reset button - solo visible si ya se colocó el objeto */}
+        {placedObject && (
+          <button
+            onClick={handleReset}
+            className="bg-black/50 text-white px-3 py-2 rounded-lg border border-white/6 shadow-sm text-sm hover:bg-black/60 transition"
+            title="Reiniciar colocación"
+          >
+            <RotateCcw className="h-4 w-4 mr-2 inline-block" />Reiniciar
+          </button>
+        )}
       </div>
 
       {/* Canvas WebXR */}
@@ -172,21 +161,27 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           <Environment preset="city" />
 
           {/* Hit Testing - permite colocar objetos en superficies reales */}
-          <ARHitTest onPlace={handlePlace} showReticle={isPlacing}>
-            <Suspense fallback={<LoadingModel />}>
-              <ARObjectModel 
-                attraction={attraction}
-                scale={0.3}
-              />
-            </Suspense>
+          <ARHitTest 
+            onPlace={handlePlace} 
+            showReticle={!placedObject}
+            singlePlacement={true}
+            autoPlace={false}
+          >
+            {!placedObject && (
+              <Suspense fallback={<LoadingModel />}>
+                <ARObjectModel 
+                  attraction={attraction}
+                  scale={0.3}
+                />
+              </Suspense>
+            )}
           </ARHitTest>
 
-          {/* Objetos ya colocados en el mundo */}
-          {placedObjects.map((obj) => (
+          {/* Objeto ya colocado en el mundo - SOLO UNO */}
+          {placedObject && (
             <group
-              key={obj.id}
-              position={obj.position}
-              quaternion={obj.rotation}
+              position={placedObject.position}
+              quaternion={placedObject.rotation}
             >
               <Suspense fallback={null}>
                 <ARObjectModel 
@@ -196,7 +191,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
                 />
               </Suspense>
             </group>
-          ))}
+          )}
 
         </XR>
       </Canvas>
@@ -204,24 +199,32 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
 
 
       <div className="absolute bottom-28 left-4 right-4 z-40 pointer-events-none">
-        <div className="pointer-events-auto max-w-2xl mx-auto bg-black/50 backdrop-blur-sm border border-white/8 rounded-2xl p-4 shadow-md text-white grid grid-cols-2 gap-4 animate-instructions">
-          <div>
-            <div className="text-sm font-semibold">{isPlacing ? 'Modo colocación' : 'Objeto anclado'}</div>
-            <div className="text-[12px] text-slate-300 mt-1">{isPlacing ? 'Sigue las instrucciones para colocar el objeto en el mundo real.' : 'El objeto está fijo. Muévete para explorarlo.'}</div>
-          </div>
-
-          <div className="flex flex-col gap-2 justify-center">
-            {isPlacing ? (
-              <div className="flex flex-col gap-2 text-sm">
-                <div className="flex items-center gap-2"><Camera className="h-4 w-4 text-sky-300" /> <span>Apunta la cámara</span></div>
-                <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-emerald-300" /> <span>Busca una superficie plana</span></div>
-                <div className="flex items-center gap-2"><Play className="h-4 w-4 text-slate-200" /> <span>Toca para colocar</span></div>
+        <div className="pointer-events-auto max-w-2xl mx-auto bg-black/50 backdrop-blur-sm border border-white/8 rounded-2xl p-4 shadow-md text-white animate-instructions">
+          <div className="text-center">
+            {!placedObject ? (
+              <div>
+                <div className="text-sm font-semibold mb-2">Buscando superficie...</div>
+                <div className="text-[12px] text-slate-300">Apunta tu cámara a una superficie plana como el suelo o una mesa</div>
+                <div className="flex items-center justify-center gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Camera className="h-3 w-3 text-sky-300" />
+                    <span>Apunta la cámara</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3 w-3 text-emerald-300" />
+                    <span>Toca para colocar</span>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-2 text-sm">
-                <div className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-emerald-300" /> <span>Objeto anclado</span></div>
-                <div className="flex items-center gap-2"><RotateCcw className="h-4 w-4 text-sky-300" /> <span>Reinicia para colocar más</span></div>
-                <div className="flex items-center gap-2"><Camera className="h-4 w-4 text-slate-200" /> <span>Mueve tu dispositivo para ver ángulos</span></div>
+              <div>
+                <div className="text-sm font-semibold mb-2 flex items-center justify-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-400" />
+                  Objeto anclado exitosamente
+                </div>
+                <div className="text-[12px] text-slate-300">
+                  Muévete alrededor para explorar el objeto desde diferentes ángulos
+                </div>
               </div>
             )}
           </div>

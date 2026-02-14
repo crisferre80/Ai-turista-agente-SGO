@@ -1,15 +1,17 @@
 'use client';
 
-import { useRef, useState, Suspense } from 'react';
+import { useRef, useState, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { 
+import {
   PerspectiveCamera,
   Environment,
   Html,
-  useGLTF,
   OrbitControls,
   useTexture
 } from '@react-three/drei';
+import { useModel } from '@/lib/model-loader';
+import { supabase } from '@/lib/supabase';
+import { loadARModelFromScene } from '@/lib/ar-scene-persistence';
 import * as THREE from 'three';
 import type { ARData, ARHotspot } from '@/types/ar';
 
@@ -42,6 +44,27 @@ export default function ARScene({
   anchorPosition = [0, 0, -3],
   isAnchored = false
 }: ARScenePageProps) {
+  const [modelTransform, setModelTransform] = useState(
+    (attraction.ar_hotspots?.modelTransform as any) ?? null
+  );
+
+  // Preferir el esquema nuevo si existe (scenes/scene_entities)
+  // Esto permite que el runtime aplique las transformaciones persistidas.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { transform } = await loadARModelFromScene({ supabase, attractionId: attraction.id });
+        if (!cancelled && transform) setModelTransform(transform);
+      } catch {
+        // noop
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attraction.id]);
+
   return (
     <>
       {/* Iluminación */}
@@ -79,7 +102,7 @@ export default function ARScene({
             imageUrl={attraction.image_url}
             position={anchorPosition}
             isAnchored={isAnchored}
-            transform={attraction.ar_hotspots?.modelTransform}
+            transform={modelTransform}
           />
         </Suspense>
       ) : (
@@ -195,16 +218,15 @@ function MainModel({ modelUrl, imageUrl, position, isAnchored, transform }: {
   let gltfScene = null;
   let error = null;
   
+  // useModel delega en useGLTF internamente y requiere Suspense en el árbol padre
   try {
-    const gltf = useGLTF(modelUrl);
-    gltfScene = gltf.scene;
+    const gltf = useModel(modelUrl as string) as any;
+    gltfScene = gltf?.scene ?? null;
   } catch (err) {
-    error = err;
-    console.error('❌ Error al cargar modelo 3D desde:', modelUrl, err);
+    console.error('❌ Error al obtener modelo con useModel:', err);
   }
 
-  if (error || !gltfScene) {
-    console.warn('⚠️ Usando modelo placeholder por fallo en la carga');
+  if (!gltfScene) {
     return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;
   }
 
@@ -361,12 +383,16 @@ function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
   // Image hotspot: render as textured plane (works in immersive AR)
   if ((hotspot as any).image_url) {
     const imageUrl = (hotspot as any).image_url as string;
-    const tex = useTexture(imageUrl);
+    const tex = imageUrl ? useTexture(imageUrl) : null;
     return (
       <group position={position}>
         <mesh>
           <planeGeometry args={[1.6, 0.9]} />
-          <meshBasicMaterial map={tex} toneMapped={false} transparent />
+          <meshBasicMaterial
+            map={tex ? (Array.isArray(tex) ? tex[0] : (tex as THREE.Texture)) : undefined}
+            toneMapped={false}
+            transparent
+          />
         </mesh>
         <mesh position={[0, -0.55, 0]}> 
           <planeGeometry args={[1.6, 0.18]} />

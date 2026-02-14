@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { normalizeARData, canonicalizeARDataForSave } from '@/lib/ar-utils';
+import { loadARModelFromScene, saveARModelToScene } from '@/lib/ar-scene-persistence';
 import type { ARHotspot, ARHotspotType } from '@/types/ar';
 import { Upload, Plus, Trash2, Image as ImageIcon, Box } from 'lucide-react';
 
@@ -74,6 +75,15 @@ export default function ARConfigPage() {
   const latestModelTransformRef = React.useRef(modelTransform);
   const latestPrimitivesRef = React.useRef<Primitive[]>([]);
 
+  // Mantener refs sincronizadas con el estado actual para que el guardado use valores recientes
+  useEffect(() => {
+    latestModelTransformRef.current = modelTransform;
+  }, [modelTransform]);
+
+  useEffect(() => {
+    latestPrimitivesRef.current = primitives;
+  }, [primitives]);
+
   useEffect(() => {
     loadAttractions();
   }, []);
@@ -126,6 +136,29 @@ export default function ARConfigPage() {
         setModelTransform(defaultTransform);
         latestModelTransformRef.current = defaultTransform;
       }
+
+      // Preferir el transform/model guardado en el esquema normalizado (scenes/scene_entities)
+      // para que el editor y la vista previa reflejen lo que quedó en la BD nueva.
+      (async () => {
+        try {
+          const { transform, modelUrl: modelUrlFromScene } = await loadARModelFromScene({
+            supabase,
+            attractionId: selectedAttraction.id,
+          });
+
+          if (transform) {
+            setModelTransform(transform);
+            latestModelTransformRef.current = transform;
+          }
+
+          // Si por alguna razón el legacy está vacío pero existe en scenes, lo usamos.
+          if ((!selectedAttraction.ar_model_url || selectedAttraction.ar_model_url.trim() === '') && modelUrlFromScene) {
+            setModelUrl(modelUrlFromScene);
+          }
+        } catch {
+          // noop: si falla lectura, seguimos con legacy
+        }
+      })();
     }
   }, [selectedAttraction]);
 
@@ -234,6 +267,18 @@ export default function ARConfigPage() {
       };
       const arData = canonicalizeARDataForSave(rawArData);
 
+      // Persistir modelo 3D en el esquema normalizado (scenes/assets/scene_entities)
+      // Mantiene attractions.ar_model_url como compatibilidad temporal.
+      if (arEnabled && modelUrl && modelUrl.trim() !== '') {
+        await saveARModelToScene({
+          supabase,
+          attractionId: selectedAttraction.id,
+          modelUrl,
+          transform: (latestModelTransformRef.current || modelTransform),
+          sceneName: selectedAttraction.name,
+        });
+      }
+
       const { error } = await supabase
         .from('attractions')
         .update({
@@ -250,7 +295,21 @@ export default function ARConfigPage() {
       loadAttractions();
     } catch (error) {
       console.error('Error guardando configuración AR:', error);
-      alert('❌ Error al guardar la configuración');
+      if (error && typeof error === 'object') {
+        const err = error as {
+          message?: string;
+          details?: string;
+          hint?: string;
+          code?: string;
+        };
+        console.error('Detalle error AR:', {
+          message: err.message,
+          details: err.details,
+          hint: err.hint,
+          code: err.code,
+        });
+      }
+      alert('❌ Error al guardar la configuración. Revisa la consola para el detalle.');
     } finally {
       setSaving(false);
     }
@@ -691,6 +750,7 @@ export default function ARConfigPage() {
                 }}>
                   <ARPreview3D
                     modelUrl={modelUrl || undefined}
+                    modelTransform={modelTransform}
                     lightMode={lightMode}
                     hotspots={hotspots.map(h => {
                       const base = {

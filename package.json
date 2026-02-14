@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "powershell -ExecutionPolicy Bypass -Command \"& { $p = Get-Process -Id (Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue).OwningProcess -ErrorAction SilentlyContinue; if($p){ Write-Host 'Terminando proceso en puerto 3000...' -ForegroundColor Yellow; Stop-Process $p.Id -Force; Start-Sleep -Milliseconds 500 } }\" && npm run dev",
+    "kill-port": "powershell -ExecutionPolicy Bypass -File ./kill-port-3000.ps1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -56,9 +58,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.182.0",
+    "autoprefixer": "^10.4.24",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "playwright": "^1.57.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }
 }
