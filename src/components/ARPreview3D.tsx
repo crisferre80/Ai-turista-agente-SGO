@@ -201,7 +201,37 @@ function PhoneModel({ url, modelTransform }: PhoneModelProps) {
     let mounted = true;
     loadGLTF(url).then((res: any) => {
       if (!mounted) return;
-      setGltf(res.scene);
+      const scene = res.scene;
+
+      try {
+        // Calcular bounding box y escala de ajuste (similar a Model)
+        const box = new THREE.Box3().setFromObject(scene);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const desired = 0.8;
+        const fitScale = maxDim > 0 ? desired / maxDim : 1;
+        const userScale = modelTransform?.scale?.x ?? 1;
+        const finalScale = fitScale * userScale;
+
+        scene.scale.setScalar(finalScale);
+
+        // Recalcular bbox tras escalar
+        const box2 = new THREE.Box3().setFromObject(scene);
+        const center = box2.getCenter(new THREE.Vector3());
+
+        // Ajustar para centrar en X/Z pero mantener la base en Y=0
+        scene.position.x -= center.x;
+        scene.position.z -= center.z;
+
+        // Llevar la base del modelo a Y=0
+        const minY = box2.min.y * finalScale;
+        scene.position.y -= minY;
+      } catch (err) {
+        // si algo falla en centrar, seguir igualmente con el scene sin ajustes
+        console.warn('PhoneModel centering failed', err);
+      }
+
+      setGltf(scene);
     }).catch((err) => {
       console.error('PhoneModel loadGLTF error', err);
       setError('No se pudo cargar modelo');
