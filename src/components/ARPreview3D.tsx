@@ -183,7 +183,16 @@ function HotspotMarker({
 
 // Phone-friendly model viewer: centra el modelo en frente de la cámara,
 // ajusta escala para que quepa en pantalla y posiciona la base en Y=0.
-function PhoneModel({ url, modelTransform }: { url: string; modelTransform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } }) {
+type PhoneModelProps = {
+  url: string;
+  modelTransform?: {
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  };
+};
+
+function PhoneModel({ url, modelTransform }: PhoneModelProps) {
   const [gltf, setGltf] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
