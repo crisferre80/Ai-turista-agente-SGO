@@ -156,7 +156,8 @@ export default function ARConfigPage() {
       }
 
       // Cargar calibración de preview móvil si existe, sino resetear a defaults
-      const savedPhoneRaw = arData && (arData as Record<string, unknown>)['phonePreview'];
+      // Convertir a `unknown` primero para evitar error de TS al castear directamente
+      const savedPhoneRaw = arData && ((arData as unknown) as Record<string, unknown>)['phonePreview'];
       const defaultPhonePreview = { cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 };
       let newPhonePreview = defaultPhonePreview;
       

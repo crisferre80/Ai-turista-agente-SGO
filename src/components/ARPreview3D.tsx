@@ -712,10 +712,15 @@ export default function ARPreview3D({
       const received = lastReceivedPhonePreviewRef.current;
       
       // No emitir si estos valores son los que acabamos de recibir del padre
-      if (received &&
-          Math.abs(received.cameraDistance - next.cameraDistance) <= eps &&
-          Math.abs(received.yOffset - next.yOffset) <= eps &&
-          Math.abs(received.previewScale - next.previewScale) <= eps) {
+      if (
+        received &&
+        typeof received.cameraDistance === 'number' &&
+        typeof received.yOffset === 'number' &&
+        typeof received.previewScale === 'number' &&
+        Math.abs(received.cameraDistance - next.cameraDistance) <= eps &&
+        Math.abs(received.yOffset - next.yOffset) <= eps &&
+        Math.abs(received.previewScale - next.previewScale) <= eps
+      ) {
         return;
       }
       
