@@ -266,6 +266,17 @@ function ARObjectModel({
   scale?: number;
   isPlaced?: boolean;
 }) {
+  // Extraer phonePreview de la BD si existe
+  const arHotspots = attraction.ar_hotspots as Record<string, unknown> | undefined;
+  const phonePreviewRaw = arHotspots?.phonePreview as Record<string, unknown> | undefined;
+  const phonePreview = phonePreviewRaw
+    ? {
+        cameraDistance: Number(phonePreviewRaw.cameraDistance ?? 1.0),
+        yOffset: Number(phonePreviewRaw.yOffset ?? 0),
+        previewScale: Number(phonePreviewRaw.previewScale ?? 1.0)
+      }
+    : undefined;
+
   // Si hay modelo 3D, usar ARScene existente
   if (attraction.ar_model_url) {
     return (
@@ -288,6 +299,7 @@ function ARObjectModel({
           disableOrbitControls={true}
           anchorPosition={[0, 0, 0]}
           isAnchored={isPlaced}
+          phonePreview={phonePreview}
         />
       </group>
     );

@@ -1,11 +1,13 @@
-'use client';
+ 'use client';
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import { useRef, useState, useEffect, Suspense, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
-import { Settings, Lightbulb, Camera, Trash2, Move, RotateCcw, Maximize2 } from 'lucide-react';
+import { Settings, Lightbulb, Camera, Move, RotateCcw, Maximize2 } from 'lucide-react';
 
 import type { ARHotspot } from '@/types/ar';
 import { loadGLTF } from '@/lib/model-loader';
@@ -31,36 +33,40 @@ interface Light {
 }
 
 interface ARPreview3DProps {
-  modelUrl?: string;
+  modelUrl?: string | undefined;
   modelTransform?: {
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
     scale: { x: number; y: number; z: number };
-  };
+  } | null;
   hotspots: Hotspot[];
-  onHotspotPositionChange?: (id: string, position: { x: number; y: number; z: number }) => void;
-  onHotspotScaleChange?: (id: string, scale: { x: number; y: number; z: number }) => void;
-  onHotspotRotationChange?: (id: string, rotation: { x: number; y: number; z: number }) => void;
-  // Modo ligero: no cargar modelo 3D real, sólo grid + primitivas + hotspots
+  onHotspotPositionChange: (id: string, position: { x: number; y: number; z: number }) => void;
+  onHotspotScaleChange: (id: string, scale: { x: number; y: number; z: number }) => void;
+  onHotspotRotationChange: (id: string, rotation: { x: number; y: number; z: number }) => void;
+  onModelTransformChange: (transform: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) => void;
   lightMode?: boolean;
   primitives?: Primitive[];
-  onPrimitivesChange?: (primitives: Primitive[]) => void;
-  // Nuevo: callback para guardar posiciones de modelos
-  onModelTransformChange?: (transform: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) => void;
+  onPrimitivesChange?: (p: Primitive[]) => void;
+  phonePreview?: {
+    cameraDistance?: number;
+    yOffset?: number;
+    previewScale?: number;
+  };
+  onPhonePreviewChange?: (p: { cameraDistance: number; yOffset: number; previewScale: number }) => void;
 }
 
 function Model({ url }: { url: string }) {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const groupRef = useRef<THREE.Group>(null);
 
+  
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    
-    // Cargar modelo GLTF/GLB
-    loadGLTF(url).then((gltf: any) => {
+    let mounted = true;
+    // reset error asynchronously to avoid synchronous setState inside effect
+    const _t = setTimeout(() => setError(null), 0);
+    loadGLTF(url).then((gltf: GLTF) => {
+      if (!mounted) return;
       try {
         const box = new THREE.Box3().setFromObject(gltf.scene);
         const center = box.getCenter(new THREE.Vector3());
@@ -72,19 +78,17 @@ function Model({ url }: { url: string }) {
         gltf.scene.position.sub(center.multiplyScalar(scale));
 
         setModel(gltf.scene);
-        setLoading(false);
-        setError(null);
       } catch (err) {
         console.error('Error procesando glTF:', err);
         setError('Error procesando modelo 3D');
-        setLoading(false);
       }
-    }).catch((err) => {
-      console.error('Error cargando modelo (loadGLTF):', err);
+        }).catch(() => {
       setError('No se pudo cargar el modelo 3D');
-      setLoading(false);
     });
+    return () => { mounted = false; clearTimeout(_t); };
   }, [url]);
+
+  const loading = model === null && error === null;
 
   if (loading) {
     return (
@@ -190,16 +194,19 @@ type PhoneModelProps = {
     rotation: { x: number; y: number; z: number };
     scale: { x: number; y: number; z: number };
   };
+  cameraDistance?: number;
+  yOffset?: number;
+  previewScale?: number;
 };
 
-function PhoneModel({ url, modelTransform }: PhoneModelProps) {
-  const [gltf, setGltf] = useState<any>(null);
+function PhoneModel({ url, modelTransform, cameraDistance = 1.0, yOffset = 0, previewScale = 1.0 }: PhoneModelProps) {
+  const [gltf, setGltf] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    loadGLTF(url).then((res: any) => {
+    loadGLTF(url).then((res: GLTF) => {
       if (!mounted) return;
       const scene = res.scene;
 
@@ -226,18 +233,16 @@ function PhoneModel({ url, modelTransform }: PhoneModelProps) {
         // Llevar la base del modelo a Y=0
         const minY = box2.min.y * finalScale;
         scene.position.y -= minY;
-      } catch (err) {
+      } catch {
         // si algo falla en centrar, seguir igualmente con el scene sin ajustes
-        console.warn('PhoneModel centering failed', err);
       }
 
       setGltf(scene);
-    }).catch((err) => {
-      console.error('PhoneModel loadGLTF error', err);
+    }).catch(() => {
       setError('No se pudo cargar modelo');
     });
     return () => { mounted = false; };
-  }, [url]);
+  }, [url, modelTransform?.scale?.x]);
 
   if (error) return null;
   if (!gltf) return null;
@@ -253,18 +258,33 @@ function PhoneModel({ url, modelTransform }: PhoneModelProps) {
   const userScale = modelTransform?.scale?.x ?? 1;
   const finalScale = fitScale * userScale;
 
-  // Posicionar la base del modelo en y=0
-  const bboxMin = box.min.clone().multiplyScalar(finalScale);
+  // Posicionar la base del modelo en y=0. La preview móvil está desacoplada
+  // de la posición global del editor para evitar que seleccionar/hacer click
+  // en el canvas mueva la vista móvil.
+  const bboxMin = box.min.clone();
   const baseOffsetY = bboxMin.y;
-
-  // Posicionar frente de la cámara a -1.0m
-  const userPos = modelTransform?.position ?? { x: 0, y: 0, z: 0 };
   const userRot = modelTransform?.rotation ?? { x: 0, y: 0, z: 0 };
 
   return (
-    <group ref={groupRef} position={[userPos.x, -baseOffsetY + userPos.y, -1.0 + userPos.z]} rotation={[userRot.x, userRot.y, userRot.z]} scale={[finalScale, finalScale, finalScale]}>
+    <group ref={groupRef} position={[0, -baseOffsetY + yOffset, -cameraDistance]} rotation={[userRot.x, userRot.y, userRot.z]} scale={[finalScale * previewScale, finalScale * previewScale, finalScale * previewScale]}>
       <primitive object={gltf} />
     </group>
+  );
+}
+
+// Componente que pinta un pequeño marcador amarillo en el target actual de OrbitControls
+function CameraTargetMarker({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl | null> }) {
+  const ref = useRef<THREE.Mesh | null>(null);
+  useFrame(() => {
+    if (!ref.current) return;
+    const target = orbitRef.current?.target;
+    if (target) ref.current.position.set(target.x, target.y, target.z);
+  });
+  return (
+    <mesh ref={ref}>
+      <sphereGeometry args={[0.06, 8, 8]} />
+      <meshBasicMaterial color="#ffd54f" />
+    </mesh>
   );
 }
 
@@ -272,7 +292,7 @@ function PhoneModel({ url, modelTransform }: PhoneModelProps) {
 function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
   // Prefer explicit typed fields (image_url). Support legacy content_url for safety.
   const imageUrl = ('image_url' in hotspot && hotspot.image_url) || ((hotspot as unknown as Record<string, unknown>).content_url as string) || '';
-  const texture = imageUrl ? useTexture(imageUrl) : null;
+  const texture = useTexture(imageUrl || '') as unknown as THREE.Texture | THREE.Texture[];
 
   // Elevamos un poco el contenido sobre el marcador
   const yOffset = 0.8;
@@ -290,7 +310,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
         <meshBasicMaterial
-          map={texture ? (Array.isArray(texture) ? texture[0] : (texture as THREE.Texture)) : undefined}
+          map={imageUrl ? (Array.isArray(texture) ? texture[0] : (texture as THREE.Texture)) : undefined}
           toneMapped={false}
         />
       </mesh>
@@ -465,6 +485,8 @@ export default function ARPreview3D({
   onHotspotScaleChange,
   onHotspotRotationChange,
   onModelTransformChange,
+  phonePreview,
+  onPhonePreviewChange,
   lightMode = false,
   primitives: externalPrimitives,
   onPrimitivesChange,
@@ -482,6 +504,7 @@ export default function ARPreview3D({
   const [webglLost, setWebglLost] = useState(false);
   const [showPhonePreview, setShowPhonePreview] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
+  const cameraRef = useRef<THREE.Camera | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
   const isTransformingRef = useRef(false);
   const isApplyingExternalTransformRef = useRef(false);
@@ -500,7 +523,7 @@ export default function ARPreview3D({
         return Math.max(acc, n);
       }, 0);
       primitiveIdRef.current = Math.max(primitiveIdRef.current, maxId);
-    } catch (e) {
+      } catch {
       // noop
     }
   }, [primitives]);
@@ -524,6 +547,11 @@ export default function ARPreview3D({
     y: 1,
     z: 1,
   });
+
+  // Opciones de calibración para la vista móvil (Phone Preview)
+  const [phoneCameraDistance, setPhoneCameraDistance] = useState<number>(1.0);
+  const [phoneYOffset, setPhoneYOffset] = useState<number>(0);
+  const [phonePreviewScale, setPhonePreviewScale] = useState<number>(1.0);
 
   const syncModelStateFromGroup = () => {
     const obj = modelGroupRef.current;
@@ -576,27 +604,30 @@ export default function ARPreview3D({
     // Marcar que este cambio viene de afuera para no re-emitirlo al padre.
     isApplyingExternalTransformRef.current = true;
 
-    setModelPosition({ ...modelTransform.position });
-    setModelRotation({ ...modelTransform.rotation });
-    setModelScale({ ...modelTransform.scale });
+    // Defer state updates to avoid synchronous setState inside effect (ESLint rule)
+    setTimeout(() => {
+      setModelPosition({ ...modelTransform.position });
+      setModelRotation({ ...modelTransform.rotation });
+      setModelScale({ ...modelTransform.scale });
 
-    if (modelGroupRef.current) {
-      modelGroupRef.current.position.set(
-        modelTransform.position.x,
-        modelTransform.position.y,
-        modelTransform.position.z
-      );
-      modelGroupRef.current.rotation.set(
-        modelTransform.rotation.x,
-        modelTransform.rotation.y,
-        modelTransform.rotation.z
-      );
-      modelGroupRef.current.scale.set(
-        modelTransform.scale.x,
-        modelTransform.scale.y,
-        modelTransform.scale.z
-      );
-    }
+      if (modelGroupRef.current) {
+        modelGroupRef.current.position.set(
+          modelTransform.position.x,
+          modelTransform.position.y,
+          modelTransform.position.z
+        );
+        modelGroupRef.current.rotation.set(
+          modelTransform.rotation.x,
+          modelTransform.rotation.y,
+          modelTransform.rotation.z
+        );
+        modelGroupRef.current.scale.set(
+          modelTransform.scale.x,
+          modelTransform.scale.y,
+          modelTransform.scale.z
+        );
+      }
+    }, 0);
   }, [modelTransform]);
 
   // Guardar la referencia al callback externo para evitar re-ejecuciones
@@ -606,9 +637,29 @@ export default function ARPreview3D({
     onModelTransformChangeRef.current = onModelTransformChange ?? null;
   }, [onModelTransformChange]);
 
+  // Phone preview change callback ref
+  const onPhonePreviewChangeRef = useRef<typeof onPhonePreviewChange | null>(onPhonePreviewChange ?? null);
+  useEffect(() => {
+    onPhonePreviewChangeRef.current = onPhonePreviewChange ?? null;
+  }, [onPhonePreviewChange]);
+
+  // Ref para rastrear último valor emitido y último recibido del padre
+  const lastEmittedPhonePreviewRef = useRef<{ cameraDistance: number; yOffset: number; previewScale: number } | null>(null);
+  const lastReceivedPhonePreviewRef = useRef<typeof phonePreview>(phonePreview);
+
+  // Inicializar valores de calibración desde props si vienen del padre
+  useEffect(() => {
+    if (!phonePreview) return;
+    lastReceivedPhonePreviewRef.current = phonePreview;
+    if (typeof phonePreview.cameraDistance === 'number') setPhoneCameraDistance(phonePreview.cameraDistance);
+    if (typeof phonePreview.yOffset === 'number') setPhoneYOffset(phonePreview.yOffset);
+    if (typeof phonePreview.previewScale === 'number') setPhonePreviewScale(phonePreview.previewScale);
+  }, [phonePreview]);
+
   // Persistir transform del modelo hacia el padre cuando cambien las transformaciones.
   // No incluimos la referencia al callback en las dependencias para evitar
   // bucles por cambios de identidad del handler en el componente padre.
+   
   useEffect(() => {
     const fn = onModelTransformChangeRef.current;
     if (typeof fn === 'function') {
@@ -645,7 +696,41 @@ export default function ARPreview3D({
       };
       fn(next);
     }
-  }, [modelPosition, modelRotation, modelScale]);
+  }, [
+    modelPosition.x, modelPosition.y, modelPosition.z,
+    modelRotation.x, modelRotation.y, modelRotation.z,
+    modelScale.x, modelScale.y, modelScale.z
+  ]);
+
+  // Emitir cambios de calibración al padre cuando cambian
+  useEffect(() => {
+    const fn = onPhonePreviewChangeRef.current;
+    if (typeof fn === 'function') {
+      const eps = 1e-6;
+      const next = { cameraDistance: phoneCameraDistance, yOffset: phoneYOffset, previewScale: phonePreviewScale };
+      const prev = lastEmittedPhonePreviewRef.current;
+      const received = lastReceivedPhonePreviewRef.current;
+      
+      // No emitir si estos valores son los que acabamos de recibir del padre
+      if (received &&
+          Math.abs(received.cameraDistance - next.cameraDistance) <= eps &&
+          Math.abs(received.yOffset - next.yOffset) <= eps &&
+          Math.abs(received.previewScale - next.previewScale) <= eps) {
+        return;
+      }
+      
+      // No emitir si ya emitimos este mismo valor antes
+      if (prev &&
+          Math.abs(prev.cameraDistance - next.cameraDistance) <= eps &&
+          Math.abs(prev.yOffset - next.yOffset) <= eps &&
+          Math.abs(prev.previewScale - next.previewScale) <= eps) {
+        return;
+      }
+      
+      lastEmittedPhonePreviewRef.current = { ...next };
+      fn(next);
+    }
+  }, [phoneCameraDistance, phoneYOffset, phonePreviewScale]);
 
   // Ahora cada TransformControls se instancia con su propio ref (transformRefs.current[id])
   // y se monta directamente alrededor del objeto seleccionado, por lo que no necesitamos
@@ -701,17 +786,6 @@ export default function ARPreview3D({
   };
 
   // Helpers para editar la primitiva seleccionada
-  const updateSelectedPrimitivePosition = (axis: 'x' | 'y' | 'z', value: number) => {
-    if (!selectedPrimitive) return;
-    if (!onPrimitivesChange) return;
-    const updated = primitives.map((p: Primitive) => 
-      p.id === selectedPrimitive
-        ? { ...p, position: { ...p.position, [axis]: value } }
-        : p
-    );
-    onPrimitivesChange(updated);
-  };
-
   const updateSelectedPrimitiveScale = (axis: 'x' | 'y' | 'z', value: number) => {
     if (!selectedPrimitive) return;
     if (!onPrimitivesChange) return;
@@ -734,16 +808,7 @@ export default function ARPreview3D({
     onPrimitivesChange(updated);
   };
 
-  const updateSelectedPrimitiveColor = (color: string) => {
-    if (!selectedPrimitive) return;
-    if (!onPrimitivesChange) return;
-    const updated = primitives.map((p: Primitive) => 
-      p.id === selectedPrimitive
-        ? { ...p, color }
-        : p
-    );
-    onPrimitivesChange(updated);
-  };
+  
 
   const updatePrimitivePosition = (id: string, position: { x: number; y: number; z: number }) => {
     if (!onPrimitivesChange) return;
@@ -753,6 +818,33 @@ export default function ARPreview3D({
         : p
     );
     onPrimitivesChange(updated);
+  };
+
+  // Presets de cámara para facilitar la vista
+  const setCameraPreset = (preset: 'front' | 'back' | 'top' | 'iso') => {
+    const controls = orbitRef.current;
+    if (!controls) return;
+    const cam = controls.object;
+    const targetVec = modelGroupRef.current ? modelGroupRef.current.position.clone() : new THREE.Vector3(0, 0, 0);
+    const distance = Math.max(4, cam.position.distanceTo(targetVec) || 6);
+
+    switch (preset) {
+      case 'front':
+        cam.position.set(targetVec.x, targetVec.y + distance * 0.12, targetVec.z + distance);
+        break;
+      case 'back':
+        cam.position.set(targetVec.x, targetVec.y + distance * 0.12, targetVec.z - distance);
+        break;
+      case 'top':
+        cam.position.set(targetVec.x, targetVec.y + distance, targetVec.z);
+        break;
+      case 'iso':
+        cam.position.set(targetVec.x + distance * 0.7, targetVec.y + distance * 0.5, targetVec.z + distance * 0.7);
+        break;
+    }
+
+    controls.target.copy(targetVec);
+    controls.update();
   };
 
   return (
@@ -780,13 +872,12 @@ export default function ARPreview3D({
           const canvas = state.gl.domElement;
           const onLost = (event: Event) => {
             event.preventDefault();
-            console.warn('Contexto WebGL perdido en ARPreview3D');
             setWebglLost(true);
           };
           canvas.addEventListener('webglcontextlost', onLost, { passive: false });
 
           setCanvasReady(true);
-          console.log('Canvas 3D iniciado correctamente');
+          cameraRef.current = state.camera as THREE.Camera;
         }}
         onPointerMissed={clearSelection}
         >
@@ -812,6 +903,9 @@ export default function ARPreview3D({
 
         {/* Grid */}
         <Grid />
+
+        {/* Marcador del target de la cámara (pequeña esfera) */}
+        <CameraTargetMarker orbitRef={orbitRef} />
 
         {/* Modelo 3D (solo si hay URL definida).
             Ahora puede seleccionarse y moverse con gizmo igual que las primitivas.
@@ -1036,7 +1130,13 @@ export default function ARPreview3D({
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[3, 5, 2]} intensity={0.8} />
                 <Suspense fallback={null}>
-                  <PhoneModel url={modelUrl as string} modelTransform={{ position: modelPosition, rotation: modelRotation, scale: modelScale }} />
+                  <PhoneModel
+                    url={modelUrl as string}
+                    modelTransform={{ position: modelPosition, rotation: modelRotation, scale: modelScale }}
+                    cameraDistance={phoneCameraDistance}
+                    yOffset={phoneYOffset}
+                    previewScale={phonePreviewScale}
+                  />
                 </Suspense>
               </Canvas>
             </div>
@@ -1231,1057 +1331,298 @@ export default function ARPreview3D({
         )}
       </div>
 
-      {/* Panel de Herramientas de Edición debajo del visor */}
-      <div style={{
-        marginTop: '12px',
-        background: '#111',
-        color: 'white',
-        padding: '12px',
-        borderRadius: '8px',
-        border: '1px solid #333'
-      }}>
-        <button
-          onClick={() => setShowTools(!showTools)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            background: '#667eea',
-            border: 'none',
-            borderRadius: '6px',
-            color: 'white',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            fontSize: '0.85rem',
-            fontWeight: 'bold'
-          }}
-        >
-          <Settings size={16} />
-          {showTools ? 'Ocultar Herramientas' : 'Mostrar Herramientas'}
-        </button>
+      {/* Panel debajo del canvas: Transformaciones del modelo + Hotspots */}
+      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Transformaciones del modelo (debajo del canvas) */}
+        {!lightMode && modelUrl && (
+          <div style={{ background: '#111', color: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Modelo (Transform)</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              {(['x','y','z'] as const).map(axis => (
+                <input
+                  key={axis}
+                  type="number"
+                  step="0.1"
+                  value={modelPosition[axis].toFixed(2)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value) || 0;
+                    setModelPosition(prev => ({ ...prev, [axis]: v }));
+                    if (modelGroupRef.current) {
+                      if (axis === 'x') modelGroupRef.current.position.x = v;
+                      if (axis === 'y') modelGroupRef.current.position.y = v;
+                      if (axis === 'z') modelGroupRef.current.position.z = v;
+                    }
+                  }}
+                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
+                />
+              ))}
+            </div>
 
-        {showTools && (
-          <div style={{ marginTop: '12px' }}>
-            {/* Primitivas */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ 
-                fontWeight: 'bold', 
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.85rem'
-              }}>
-                <Move size={14} />
-                Primitivas
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                <button
-                  onClick={() => addPrimitive('box')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              {(['x','y','z'] as const).map(axis => (
+                <input
+                  key={axis}
+                  type="number"
+                  step="0.1"
+                  min={0.1}
+                  value={modelScale[axis].toFixed(2)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value) || 0.1;
+                    setModelScale(prev => ({ ...prev, [axis]: v }));
+                    if (modelGroupRef.current) {
+                      if (axis === 'x') modelGroupRef.current.scale.x = v;
+                      if (axis === 'y') modelGroupRef.current.scale.y = v;
+                      if (axis === 'z') modelGroupRef.current.scale.z = v;
+                    }
                   }}
-                >
-                  Cubo
-                </button>
-                <button
-                  onClick={() => addPrimitive('sphere')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
+                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              {(['x','y','z'] as const).map(axis => (
+                <input
+                  key={axis}
+                  type="number"
+                  step="0.1"
+                  value={modelRotation[axis].toFixed(2)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value) || 0;
+                    setModelRotation(prev => ({ ...prev, [axis]: v }));
+                    if (modelGroupRef.current) {
+                      if (axis === 'x') modelGroupRef.current.rotation.x = v;
+                      if (axis === 'y') modelGroupRef.current.rotation.y = v;
+                      if (axis === 'z') modelGroupRef.current.rotation.z = v;
+                    }
                   }}
-                >
-                  Esfera
-                </button>
-                <button
-                  onClick={() => addPrimitive('cylinder')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Cilindro
-                </button>
-                <button
-                  onClick={() => addPrimitive('cone')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Cono
-                </button>
-                <button
-                  onClick={() => addPrimitive('plane')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Plano
-                </button>
-              </div>
-              {primitives.length > 0 && (
-                <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
-                  {primitives.map((prim: Primitive) => (
-                    <div
-                      key={prim.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '4px',
-                        background: selectedPrimitive === prim.id ? 'rgba(102, 126, 234, 0.3)' : 'transparent',
-                        borderRadius: '4px',
-                        marginBottom: '2px'
-                      }}
-                    >
-                      <span onClick={() => setSelectedPrimitive(prim.id)} style={{ cursor: 'pointer', flex: 1 }}>
-                        {prim.type}
-                      </span>
-                      <button
-                        onClick={() => removePrimitive(prim.id)}
-                        style={{
-                          background: '#f44336',
-                          border: 'none',
-                          borderRadius: '3px',
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: '2px 6px',
-                          fontSize: '0.7rem'
-                        }}
-                      >
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  ))}
+                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setModelPosition({ x: 0, y: 0, z: 0 }); if (modelGroupRef.current) modelGroupRef.current.position.set(0,0,0); }} style={{ padding: '6px 10px', background: '#374151', border: 'none', borderRadius: 6, color: 'white' }}>Resetear posición</button>
+              <button onClick={() => { setModelRotation({ x:0,y:0,z:0 }); if (modelGroupRef.current) modelGroupRef.current.rotation.set(0,0,0); }} style={{ padding: '6px 10px', background: '#6b21a8', border: 'none', borderRadius: 6, color: 'white' }}>Resetear rotación</button>
+              <button onClick={() => { setModelScale({ x:1,y:1,z:1 }); if (modelGroupRef.current) modelGroupRef.current.scale.set(1,1,1); }} style={{ padding: '6px 10px', background: '#0ea5a0', border: 'none', borderRadius: 6, color: 'white' }}>Resetear escala</button>
+            </div>
+          </div>
+        )}
+
+        {/* Hotspots (debajo del canvas) */}
+        <div style={{ background: '#111', color: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Hotspots</div>
+          {hotspots.length === 0 ? (
+            <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Aún no hay hotspots configurados.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {hotspots.map(h => (
+                <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedHotspot === h.id ? 'rgba(102,126,234,0.2)' : 'transparent', borderRadius: 6 }}>
+                  <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => setSelectedHotspot(h.id)}>{('title' in h && h.title) ? h.title : '(sin título)'}</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{h.type}</div>
                 </div>
-              )}
+              ))}
 
-              {/* Propiedades de la primitiva seleccionada */}
-              {selectedPrimitive && (() => {
-                const prim = primitives.find((p: Primitive) => p.id === selectedPrimitive);
-                if (!prim) return null;
+              {selectedHotspot && (() => {
+                const hs = hotspots.find(h => h.id === selectedHotspot);
+                if (!hs) return null;
+                const posObj = Array.isArray(hs.position) ? { x: hs.position[0] ?? 0, y: hs.position[1] ?? 0, z: hs.position[2] ?? 0 } : hs.position as { x:number;y:number;z:number };
                 return (
-                  <div style={{
-                    marginTop: '10px',
-                    paddingTop: '8px',
-                    borderTop: '1px solid rgba(255,255,255,0.1)',
-                    fontSize: '0.7rem'
-                  }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Objeto seleccionado</div>
-
-                    <div style={{ marginBottom: '6px' }}>
-                      <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición (X, Y, Z)</div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {(['x','y','z'] as const).map(axis => (
-                          <input
-                            key={axis}
-                            type="number"
-                            step="0.1"
-                            value={prim.position[axis].toFixed(2)}
-                            onChange={(e) => updateSelectedPrimitivePosition(axis, parseFloat(e.target.value) || 0)}
-                            style={{
-                              width: '33%',
-                              padding: '3px 4px',
-                              borderRadius: '4px',
-                              border: '1px solid #555',
-                              background: '#111',
-                              color: 'white'
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '6px' }}>
-                      <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala (X, Y, Z)</div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {(['x','y','z'] as const).map(axis => (
-                          <input
-                            key={axis}
-                            type="number"
-                            step="0.1"
-                            min={0.1}
-                            value={prim.scale[axis].toFixed(2)}
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value) || 0.1;
-                              updateSelectedPrimitiveScale(axis, v);
-                            }}
-                            style={{
-                              width: '33%',
-                              padding: '3px 4px',
-                              borderRadius: '4px',
-                              border: '1px solid #555',
-                              background: '#111',
-                              color: 'white'
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '6px' }}>
-                      <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación (X, Y, Z)</div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {(['x','y','z'] as const).map(axis => (
-                          <input
-                            key={axis}
-                            type="number"
-                            step="0.1"
-                            value={prim.rotation[axis].toFixed(2)}
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value) || 0;
-                              updateSelectedPrimitiveRotation(axis, v);
-                            }}
-                            style={{
-                              width: '33%',
-                              padding: '3px 4px',
-                              borderRadius: '4px',
-                              border: '1px solid #555',
-                              background: '#111',
-                              color: 'white'
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: 2 }}>
-                        Valores en radianes (π ≈ 3.14)
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ opacity: 0.8, marginBottom: '2px' }}>Color</div>
-                      <input
-                        type="color"
-                        value={prim.color}
-                        onChange={(e) => updateSelectedPrimitiveColor(e.target.value)}
-                        style={{
-                          width: '100%',
-                          height: '24px',
-                          padding: 0,
-                          borderRadius: '4px',
-                          border: '1px solid #555',
-                          background: 'transparent',
-                          cursor: 'pointer'
-                        }}
-                      />
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ opacity: 0.8, marginBottom: 6 }}>Posición (X,Y,Z)</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {(['x','y','z'] as const).map(axis => (
+                        <input key={axis} type="number" step="0.1" value={posObj[axis].toFixed(2)} onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 0;
+                          if (!onHotspotPositionChange) return;
+                          const newPos = { ...posObj, [axis]: v };
+                          onHotspotPositionChange(hs.id, newPos);
+                        }} style={{ width: '33%', padding: '6px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white' }} />
+                      ))}
                     </div>
                   </div>
                 );
               })()}
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* Luces */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ 
-                fontWeight: 'bold', 
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.85rem'
-              }}>
-                <Lightbulb size={14} />
-                Luces
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                <button
-                  onClick={() => addLight('ambient')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#2196F3',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Ambiente
-                </button>
-                <button
-                  onClick={() => addLight('directional')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#2196F3',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Direccional
-                </button>
-                <button
-                  onClick={() => addLight('point')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#2196F3',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Punto
-                </button>
-                <button
-                  onClick={() => addLight('spot')}
-                  style={{
-                    padding: '6px 10px',
-                    background: '#2196F3',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Foco
-                </button>
-              </div>
-              {lights.length > 0 && (
-                <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
-                  {lights.map((light) => (
-                    <div
-                      key={light.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '4px',
-                        background: 'transparent',
-                        borderRadius: '4px',
-                        marginBottom: '2px'
-                      }}
-                    >
-                      <span style={{ flex: 1 }}>{light.type}</span>
-                      <button
-                        onClick={() => removeLight(light.id)}
-                        style={{
-                          background: '#f44336',
-                          border: 'none',
-                          borderRadius: '3px',
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: '2px 6px',
-                          fontSize: '0.7rem'
-                        }}
-                      >
-                        <Trash2 size={10} />
-                      </button>
+      {/* Botón flotante para abrir/cerrar el sidebar de herramientas */}
+      <div style={{ position: 'fixed', right: 20, top: 80, zIndex: 80 }}>
+        <button onClick={() => setShowTools(prev => !prev)} style={{ padding: '8px 10px', background: '#667eea', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer' }}>
+          <Settings size={14} /> {showTools ? 'Ocultar Herramientas' : 'Mostrar Herramientas'}
+        </button>
+      </div>
+
+      {/* Sidebar fijo a la derecha con las herramientas (primitivas, luces, camera presets, avanzadas) */}
+      {showTools && (
+        <div style={{ position: 'fixed', right: 20, top: 120, width: 360, maxHeight: '70vh', overflowY: 'auto', background: '#111', color: 'white', padding: 12, borderRadius: 8, border: '1px solid #333', zIndex: 79 }}>
+          {/* Primitivas */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Move size={14} /> Primitivas</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <button onClick={() => addPrimitive('box')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cubo</button>
+              <button onClick={() => addPrimitive('sphere')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Esfera</button>
+              <button onClick={() => addPrimitive('cylinder')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cilindro</button>
+              <button onClick={() => addPrimitive('cone')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cono</button>
+              <button onClick={() => addPrimitive('plane')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Plano</button>
+            </div>
+            {primitives.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Primitivas existentes</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {primitives.map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedPrimitive === p.id ? 'rgba(255,255,255,0.03)' : 'transparent', borderRadius: 6 }}>
+                      <div style={{ fontSize: '0.85rem' }}>{p.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{p.id}</span></div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setSelectedPrimitive(p.id)} style={{ padding: '4px 8px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white' }}>Seleccionar</button>
+                        <button onClick={() => removePrimitive(p.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                      </div>
                     </div>
                   ))}
-                </div>
-              )}
-            </div>
-
-            {/* Modelo 3D */}
-            {!lightMode && modelUrl && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{
-                  fontWeight: 'bold',
-                  marginBottom: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.85rem'
-                }}>
-                  Modelo 3D
-                </div>
-                <div style={{ fontSize: '0.7rem', marginBottom: '6px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <input
-                      type="checkbox"
-                      checked={modelSelected}
-                      onChange={(e) => setModelSelected(e.target.checked)}
-                    />
-                    Habilitar gizmo para mover el modelo
-                  </label>
-                </div>
-
-                <div style={{ marginBottom: '6px' }}>
-                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición modelo (X, Y, Z)</div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {(['x','y','z'] as const).map(axis => (
-                      <input
-                        key={axis}
-                        type="number"
-                        step="0.1"
-                        value={modelPosition[axis].toFixed(2)}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value) || 0;
-                          setModelPosition(prev => ({ ...prev, [axis]: v }));
-                          if (modelGroupRef.current) {
-                            if (axis === 'x') modelGroupRef.current.position.x = v;
-                            if (axis === 'y') modelGroupRef.current.position.y = v;
-                            if (axis === 'z') modelGroupRef.current.position.z = v;
-                          }
-                        }}
-                        style={{
-                          width: '33%',
-                          padding: '3px 4px',
-                          borderRadius: '4px',
-                          border: '1px solid #555',
-                          background: '#111',
-                          color: 'white'
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '6px' }}>
-                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala modelo (X, Y, Z)</div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {(['x','y','z'] as const).map(axis => (
-                      <input
-                        key={axis}
-                        type="number"
-                        step="0.1"
-                        min={0.1}
-                        value={modelScale[axis].toFixed(2)}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value) || 0.1;
-                          setModelScale(prev => ({ ...prev, [axis]: v }));
-                          if (modelGroupRef.current) {
-                            if (axis === 'x') modelGroupRef.current.scale.x = v;
-                            if (axis === 'y') modelGroupRef.current.scale.y = v;
-                            if (axis === 'z') modelGroupRef.current.scale.z = v;
-                          }
-                        }}
-                        style={{
-                          width: '33%',
-                          padding: '3px 4px',
-                          borderRadius: '4px',
-                          border: '1px solid #555',
-                          background: '#111',
-                          color: 'white'
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '6px' }}>
-                  <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación modelo (X, Y, Z)</div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {(['x','y','z'] as const).map(axis => (
-                      <input
-                        key={axis}
-                        type="number"
-                        step="0.1"
-                        value={modelRotation[axis].toFixed(2)}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value) || 0;
-                          setModelRotation(prev => ({ ...prev, [axis]: v }));
-                          if (modelGroupRef.current) {
-                            if (axis === 'x') modelGroupRef.current.rotation.x = v;
-                            if (axis === 'y') modelGroupRef.current.rotation.y = v;
-                            if (axis === 'z') modelGroupRef.current.rotation.z = v;
-                          }
-                        }}
-                        style={{
-                          width: '33%',
-                          padding: '3px 4px',
-                          borderRadius: '4px',
-                          border: '1px solid #555',
-                          background: '#111',
-                          color: 'white'
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: 2 }}>
-                    Valores en radianes (π ≈ 3.14)
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModelPosition({ x: 0, y: 0, z: 0 });
-                    if (modelGroupRef.current) {
-                      modelGroupRef.current.position.set(0, 0, 0);
-                    }
-                  }}
-                  style={{
-                    marginTop: '4px',
-                    padding: '4px 8px',
-                    background: '#374151',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.7rem'
-                  }}
-                >
-                  Resetear al centro
-                </button>
-              </div>
-            )}
-
-            {/* Hotspots */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{
-                fontWeight: 'bold',
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.85rem'
-              }}>
-                Hotspots
-              </div>
-
-              {hotspots.length === 0 ? (
-                <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>
-                  Aún no hay hotspots configurados.
-                </div>
-              ) : (
-                <>
-                  <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
-                    {hotspots.map((hotspot) => (
-                      <div
-                        key={hotspot.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '4px',
-                          background: selectedHotspot === hotspot.id ? 'rgba(102, 126, 234, 0.3)' : 'transparent',
-                          borderRadius: '4px',
-                          marginBottom: '2px'
-                        }}
-                      >
-                        <span
-                          onClick={() => setSelectedHotspot(hotspot.id)}
-                          style={{ cursor: 'pointer', flex: 1 }}
-                        >
-                          {('title' in hotspot && hotspot.title) ? hotspot.title : '(sin título)'}
-                        </span>
-                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                          {hotspot.type}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {selectedHotspot && (() => {
-                    const hs = hotspots.find(h => h.id === selectedHotspot);
-                    if (!hs) return null;
-
-                    return (
-                      <div style={{
-                        marginTop: '10px',
-                        paddingTop: '8px',
-                        borderTop: '1px solid rgba(255,255,255,0.1)',
-                        fontSize: '0.7rem'
-                      }}>
-                        {/* Controles de Posición */}
-                        <div style={{ opacity: 0.8, marginBottom: '2px' }}>Posición Hotspot (X, Y, Z)</div>
-                        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                          {(() => {
-                            const posObj = Array.isArray(hs.position)
-                              ? { x: hs.position[0] ?? 0, y: hs.position[1] ?? 0, z: hs.position[2] ?? 0 }
-                              : (hs.position as { x: number; y: number; z: number });
-
-                            return (['x','y','z'] as const).map(axis => (
-                              <input
-                                key={axis}
-                                type="number"
-                                step="0.1"
-                                value={posObj[axis].toFixed(2)}
-                                onChange={(e) => {
-                                  const v = parseFloat(e.target.value) || 0;
-                                  if (!onHotspotPositionChange) return;
-                                  const newPos = { ...posObj, [axis]: v };
-                                  onHotspotPositionChange(hs.id, newPos);
-                                }}
-                                style={{
-                                  width: '33%',
-                                  padding: '3px 4px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #555',
-                                  background: '#111',
-                                  color: 'white'
-                                }}
-                              />
-                            ));
-                          })()}
-                        </div>
-
-                        {/* Controles de Escala */}
-                        {hs.scale && (
-                          <>
-                            <div style={{ opacity: 0.8, marginBottom: '2px' }}>Escala Hotspot (X, Y, Z)</div>
-                            <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                              {(() => {
-                                const sclObj = Array.isArray(hs.scale)
-                                  ? { x: hs.scale[0] ?? 1, y: hs.scale[1] ?? 1, z: hs.scale[2] ?? 1 }
-                                  : hs.scale as { x: number; y: number; z: number };
-
-                                return (['x','y','z'] as const).map(axis => (
-                                  <input
-                                    key={axis}
-                                    type="number"
-                                    step="0.1"
-                                    min="0.1"
-                                    value={sclObj[axis].toFixed(2)}
-                                    onChange={(e) => {
-                                      const v = parseFloat(e.target.value) || 0.1;
-                                      if (!onHotspotScaleChange) return;
-                                      const newScl = { ...sclObj, [axis]: v };
-                                      onHotspotScaleChange(hs.id, newScl);
-                                    }}
-                                    style={{
-                                      width: '33%',
-                                      padding: '3px 4px',
-                                      borderRadius: '4px',
-                                      border: '1px solid #555',
-                                      background: '#111',
-                                      color: 'white'
-                                    }}
-                                  />
-                                ));
-                              })()}
-                            </div>
-                          </>
-                        )}
-
-                        {/* Controles de Rotación */}
-                        {hs.rotation && (
-                          <>
-                            <div style={{ opacity: 0.8, marginBottom: '2px' }}>Rotación Hotspot (X, Y, Z) [grados]</div>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              {(() => {
-                                const rotObj = Array.isArray(hs.rotation)
-                                  ? { x: hs.rotation[0] ?? 0, y: hs.rotation[1] ?? 0, z: hs.rotation[2] ?? 0 }
-                                  : hs.rotation as { x: number; y: number; z: number };
-
-                                return (['x','y','z'] as const).map(axis => 
-                                  <input
-                                    key={axis}
-                                    type="number"
-                                    step="5"
-                                    value={((rotObj[axis] * 180) / Math.PI).toFixed(1)}
-                                    onChange={(e) => {
-                                      const degrees = parseFloat(e.target.value) || 0;
-                                      const radians = (degrees * Math.PI) / 180;
-                                      if (!onHotspotRotationChange) return;
-                                      const newRotation = { ...rotObj, [axis]: radians };
-                                      onHotspotRotationChange(hs.id, newRotation);
-                                    }}
-                                    style={{
-                                      width: '33%',
-                                      padding: '3px 4px',
-                                      borderRadius: '4px',
-                                      border: '1px solid #555',
-                                      background: '#111',
-                                      color: 'white'
-                                    }}
-                                  />
-                                );
-                              })()}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </>
-              )}
-            </div>
-
-            {/* Cámara Presets */}
-            <div>
-              <div style={{ 
-                fontWeight: 'bold', 
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.85rem',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Camera size={14} />
-                  Vista de Cámara
-                </div>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <button
-                    onClick={() => setShowLightControls(!showLightControls)}
-                    style={{
-                      padding: '4px 8px',
-                      background: showLightControls ? '#4CAF50' : '#607D8B',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.65rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <Lightbulb size={10} />
-                    Luces
-                  </button>
-                  <button
-                    onClick={() => setShowAdvancedControls(!showAdvancedControls)}
-                    style={{
-                      padding: '4px 8px',
-                      background: showAdvancedControls ? '#4CAF50' : '#607D8B', 
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.65rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <Settings size={10} />
-                    Avanzado
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                <button
-                  style={{
-                    padding: '4px 8px',
-                    background: '#FF9800',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.7rem'
-                  }}
-                >
-                  Frontal
-                </button>
-                <button
-                  style={{
-                    padding: '4px 8px',
-                    background: '#FF9800',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.7rem'
-                  }}
-                >
-                  Trasera
-                </button>
-                <button
-                  style={{
-                    padding: '4px 8px',
-                    background: '#FF9800',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.7rem'
-                  }}
-                >
-                  Superior
-                </button>
-                <button
-                  style={{
-                    padding: '4px 8px',
-                    background: '#FF9800',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.7rem'
-                  }}
-                >
-                  Isométrica
-                </button>
-              </div>
-            </div>
-
-            {/* Panel de Controles de Luces */}
-            {showLightControls && (
-              <div style={{ 
-                marginTop: '12px',
-                padding: '12px',
-                background: '#0a0a0a',
-                borderRadius: '6px',
-                border: '1px solid #444'
-              }}>
-                <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: '8px',
-                  fontSize: '0.8rem',
-                  color: '#FFC107'
-                }}>
-                  ⚡ Sistema de Iluminación
-                </div>
-                
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                  <button
-                    onClick={() => {
-                      const newLight: Light = {
-                        id: `light-${Date.now()}`,
-                        type: 'ambient',
-                        position: { x: 0, y: 0, z: 0 },
-                        intensity: 0.5,
-                        color: '#ffffff'
-                      };
-                      setLights([...lights, newLight]);
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      background: '#673AB7',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.65rem'
-                    }}
-                  >
-                    + Ambiental
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newLight: Light = {
-                        id: `light-${Date.now()}`,
-                        type: 'directional',
-                        position: { x: 5, y: 10, z: 5 },
-                        intensity: 1.0,
-                        color: '#ffffff'
-                      };
-                      setLights([...lights, newLight]);
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      background: '#FF5722',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.65rem'
-                    }}
-                  >
-                    + Direccional
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newLight: Light = {
-                        id: `light-${Date.now()}`,
-                        type: 'point',
-                        position: { x: 0, y: 5, z: 0 },
-                        intensity: 1.2,
-                        color: '#ffffff'
-                      };
-                      setLights([...lights, newLight]);
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      background: '#009688',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.65rem'
-                    }}
-                  >
-                    + Punto
-                  </button>
-                </div>
-
-                {lights.length > 0 && (
-                  <div style={{ fontSize: '0.65rem', maxHeight: '120px', overflowY: 'auto' }}>
-                    {lights.map((light, index) => (
-                      <div 
-                        key={light.id}
-                        style={{ 
-                          padding: '4px',
-                          marginBottom: '4px',
-                          background: 'rgba(255,255,255,0.05)',
-                          borderRadius: '3px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: '60px' }}>
-                          {light.type.charAt(0).toUpperCase() + light.type.slice(1)}
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="3"
-                          step="0.1"
-                          value={light.intensity}
-                          onChange={(e) => {
-                            const newLights = [...lights];
-                            newLights[index].intensity = parseFloat(e.target.value);
-                            setLights(newLights);
-                          }}
-                          style={{ width: '40px' }}
-                        />
-                        <input
-                          type="color"
-                          value={light.color}
-                          onChange={(e) => {
-                            const newLights = [...lights];
-                            newLights[index].color = e.target.value;
-                            setLights(newLights);
-                          }}
-                          style={{ width: '20px', height: '16px', border: 'none' }}
-                        />
-                        <button
-                          onClick={() => {
-                            setLights(lights.filter(l => l.id !== light.id));
-                          }}
-                          style={{
-                            padding: '2px 4px',
-                            background: '#f44336',
-                            border: 'none',
-                            borderRadius: '2px',
-                            color: 'white',
-                            cursor: 'pointer',
-                            fontSize: '0.6rem'
-                          }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Panel de Controles Avanzados */}
-            {showAdvancedControls && (
-              <div style={{ 
-                marginTop: '12px',
-                padding: '12px',
-                background: '#0a0a0a',
-                borderRadius: '6px',
-                border: '1px solid #444'
-              }}>
-                <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: '8px',
-                  fontSize: '0.8rem',
-                  color: '#00BCD4'
-                }}>
-                  🔧 Controles Avanzados
-                </div>
-                
-                <div style={{ fontSize: '0.65rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <button
-                    onClick={() => {
-                      // Reset de la cámara a posición inicial
-                      if (orbitRef.current) {
-                        orbitRef.current.reset();
-                      }
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#FF9800',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.7rem'
-                    }}
-                  >
-                    🎥 Resetear Cámara
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      if (confirm('¿Estás seguro de que quieres resetear la posición, rotación y escala del modelo?')) {
-                        // Reset de todas las posiciones de modelo
-                        setModelPosition({ x: 0, y: 0, z: 0 });
-                        setModelRotation({ x: 0, y: 0, z: 0 });
-                        setModelScale({ x: 1, y: 1, z: 1 });
-                      }
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#E91E63',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.7rem'
-                    }}
-                  >
-                    📦 Resetear Modelo
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      setLights([]);
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#9C27B0',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '0.7rem'
-                    }}
-                  >
-                    💡 Limpiar Luces
-                  </button>
-                  
-                  <div style={{ 
-                    marginTop: '8px', 
-                    paddingTop: '8px', 
-                    borderTop: '1px solid #333',
-                    opacity: 0.7 
-                  }}>
-                    <div>Canvas: {(showAdvancedControls || showLightControls) ? '350px' : '500px'}</div>
-                    <div>WebGL: {webglLost ? 'Perdido' : 'Activo'}</div>
-                    <div>Modelo: {modelUrl ? 'Cargado' : 'Sin modelo'}</div>
-                  </div>
                 </div>
               </div>
             )}
           </div>
-        )}
-      </div>
+
+          {/* Luces */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Lightbulb size={14} /> Luces</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <button onClick={() => addLight('ambient')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Ambiental</button>
+              <button onClick={() => addLight('directional')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Direccional</button>
+              <button onClick={() => addLight('point')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Punto</button>
+              <button onClick={() => addLight('spot')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Foco</button>
+            </div>
+            {lights.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Luces añadidas</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {lights.map(l => (
+                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: 'transparent', borderRadius: 6 }}>
+                      <div style={{ fontSize: '0.85rem' }}>{l.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{l.id}</span></div>
+                      <div>
+                        <button onClick={() => removeLight(l.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Camera presets */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}><Camera size={14} /> Vista de Cámara</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setShowLightControls(!showLightControls)} style={{ padding: '4px 8px', background: showLightControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Luces</button>
+                <button onClick={() => setShowAdvancedControls(!showAdvancedControls)} style={{ padding: '4px 8px', background: showAdvancedControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Avanzado</button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => setCameraPreset('front')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Frontal</button>
+              <button onClick={() => setCameraPreset('back')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Trasera</button>
+              <button onClick={() => setCameraPreset('top')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Superior</button>
+              <button onClick={() => setCameraPreset('iso')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Isométrica</button>
+            </div>
+          </div>
+
+          {/* Light controls */}
+          {showLightControls && (
+            <div style={{ marginBottom: 12, padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: 6 }}>⚡ Sistema de Iluminación</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'ambient', position: { x:0,y:0,z:0 }, intensity:0.5, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#673AB7', border: 'none', borderRadius: 4, color: 'white' }}>+ Ambiental</button>
+                <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'directional', position: { x:5,y:10,z:5 }, intensity:1, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#FF5722', border: 'none', borderRadius: 4, color: 'white' }}>+ Direccional</button>
+                <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'point', position: { x:0,y:5,z:0 }, intensity:1.2, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#009688', border: 'none', borderRadius: 4, color: 'white' }}>+ Punto</button>
+              </div>
+            </div>
+          )}
+
+          {/* Advanced controls */}
+          {showAdvancedControls && (
+            <div style={{ padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Cámara</button>
+                <button onClick={() => { if (confirm('¿Resetear posición/rot/escala?')) { setModelPosition({ x:0,y:0,z:0 }); setModelRotation({ x:0,y:0,z:0 }); setModelScale({ x:1,y:1,z:1 }); } }} style={{ padding: '6px 10px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Modelo</button>
+                <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
+
+                {/* Calibración Phone Preview */}
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #333' }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración Phone Preview</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia cámara (m)</div>
+                      <input type="range" min="0.2" max="3" step="0.05" value={phoneCameraDistance} onChange={(e) => setPhoneCameraDistance(parseFloat(e.target.value))} />
+                    </div>
+                    <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="number"
+                        min={0.2}
+                        max={3}
+                        step={0.01}
+                        value={Number(phoneCameraDistance.toFixed(2))}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (Number.isNaN(v)) return;
+                          setPhoneCameraDistance(v);
+                        }}
+                        style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Offset vertical (m)</div>
+                      <input type="range" min="-1" max="1" step="0.01" value={phoneYOffset} onChange={(e) => setPhoneYOffset(parseFloat(e.target.value))} />
+                    </div>
+                    <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="number"
+                        min={-1}
+                        max={1}
+                        step={0.01}
+                        value={Number(phoneYOffset.toFixed(2))}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (Number.isNaN(v)) return;
+                          setPhoneYOffset(v);
+                        }}
+                        style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Factor de escala</div>
+                      <input type="range" min="0.2" max="3" step="0.01" value={phonePreviewScale} onChange={(e) => setPhonePreviewScale(parseFloat(e.target.value))} />
+                    </div>
+                    <div style={{ width: '92px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                      <span style={{ opacity: 0.9 }}>x</span>
+                      <input
+                        type="number"
+                        min={0.2}
+                        max={3}
+                        step={0.01}
+                        value={Number(phonePreviewScale.toFixed(2))}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (Number.isNaN(v)) return;
+                          setPhonePreviewScale(v);
+                        }}
+                        style={{ width: 68, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

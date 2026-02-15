@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { normalizeARData, canonicalizeARDataForSave } from '@/lib/ar-utils';
@@ -71,9 +72,26 @@ export default function ARConfigPage() {
     scale: { x: 1, y: 1, z: 1 }
   });
 
+  // Calibración de la vista móvil (persistible)
+  const [phonePreview, setPhonePreview] = useState<{ cameraDistance: number; yOffset: number; previewScale: number }>({ cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 });
+
   // Refs para garantizar que el guardado usa el último transform/primitives inmediatamente
   const latestModelTransformRef = React.useRef(modelTransform);
   const latestPrimitivesRef = React.useRef<Primitive[]>([]);
+  const phonePreviewRef = React.useRef(phonePreview);
+
+  // Memorizar la función de callback para evitar recrearla en cada render
+  const handlePhonePreviewChange = useCallback((p: { cameraDistance: number; yOffset: number; previewScale: number }) => {
+    const eps = 1e-6;
+    const prev = phonePreviewRef.current;
+    // Solo actualizar si hay cambio real
+    if (Math.abs(prev.cameraDistance - p.cameraDistance) > eps ||
+        Math.abs(prev.yOffset - p.yOffset) > eps ||
+        Math.abs(prev.previewScale - p.previewScale) > eps) {
+      setPhonePreview(p);
+      phonePreviewRef.current = p;
+    }
+  }, []);
 
   // Mantener refs sincronizadas con el estado actual para que el guardado use valores recientes
   useEffect(() => {
@@ -135,6 +153,30 @@ export default function ARConfigPage() {
         };
         setModelTransform(defaultTransform);
         latestModelTransformRef.current = defaultTransform;
+      }
+
+      // Cargar calibración de preview móvil si existe, sino resetear a defaults
+      const savedPhoneRaw = arData && (arData as Record<string, unknown>)['phonePreview'];
+      const defaultPhonePreview = { cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 };
+      let newPhonePreview = defaultPhonePreview;
+      
+      if (savedPhoneRaw && typeof savedPhoneRaw === 'object') {
+        const sp = savedPhoneRaw as Record<string, unknown>;
+        newPhonePreview = {
+          cameraDistance: Number(sp['cameraDistance'] ?? 1.0),
+          yOffset: Number(sp['yOffset'] ?? 0),
+          previewScale: Number(sp['previewScale'] ?? 1.0)
+        };
+      }
+      
+      // Solo actualizar si los valores son diferentes
+      const eps = 1e-6;
+      const prev = phonePreviewRef.current;
+      if (Math.abs(prev.cameraDistance - newPhonePreview.cameraDistance) > eps ||
+          Math.abs(prev.yOffset - newPhonePreview.yOffset) > eps ||
+          Math.abs(prev.previewScale - newPhonePreview.previewScale) > eps) {
+        setPhonePreview(newPhonePreview);
+        phonePreviewRef.current = newPhonePreview;
       }
 
       // Preferir el transform/model guardado en el esquema normalizado (scenes/scene_entities)
@@ -263,7 +305,8 @@ export default function ARConfigPage() {
       const rawArData = {
         hotspots,
         primitives: latestPrimitivesRef.current || primitives,
-        modelTransform: latestModelTransformRef.current || modelTransform
+        modelTransform: latestModelTransformRef.current || modelTransform,
+        phonePreview
       };
       const arData = canonicalizeARDataForSave(rawArData);
 
@@ -617,7 +660,7 @@ export default function ARConfigPage() {
                             <div style={{ display: 'flex', gap: '16px', marginTop: '16px', alignItems: 'center' }}>
                               <div style={{ background: '#fafafa', padding: '12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {qrDataUrl ? (
-                                  <img src={qrDataUrl} alt="QR" style={{ width: 220, height: 220, display: 'block' }} />
+                                  <Image src={qrDataUrl} alt="QR" width={220} height={220} unoptimized style={{ display: 'block' }} />
                                 ) : (
                                   <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>Generando…</div>
                                 )}
@@ -752,6 +795,8 @@ export default function ARConfigPage() {
                     modelUrl={modelUrl || undefined}
                     modelTransform={modelTransform}
                     lightMode={lightMode}
+                    phonePreview={phonePreview}
+                    onPhonePreviewChange={handlePhonePreviewChange}
                     hotspots={hotspots.map(h => {
                       const base = {
                         id: h.id,
@@ -773,27 +818,27 @@ export default function ARConfigPage() {
                       }
                     })}
                     primitives={primitives}
-                    onHotspotPositionChange={(id, position) => {
+                    onHotspotPositionChange={(id: string, position: { x: number; y: number; z: number }) => {
                       setHotspots(prev => prev.map(h => 
                         h.id === id ? { ...h, position } : h
                       ));
                     }}
-                    onHotspotScaleChange={(id, scale) => {
+                    onHotspotScaleChange={(id: string, scale: { x: number; y: number; z: number }) => {
                       setHotspots(prev => prev.map(h => 
                         h.id === id ? { ...h, scale } : h
                       ));
                     }}
-                    onHotspotRotationChange={(id, rotation) => {
+                    onHotspotRotationChange={(id: string, rotation: { x: number; y: number; z: number }) => {
                       setHotspots(prev => prev.map(h => 
                         h.id === id ? { ...h, rotation } : h
                       ));
                     }}
-                    onModelTransformChange={(transform) => {
+                    onModelTransformChange={(transform: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) => {
                       console.log('Actualizando transformación del modelo:', transform);
                       setModelTransform(transform);
                       latestModelTransformRef.current = transform;
                     }}
-                    onPrimitivesChange={(p) => { setPrimitives(p); latestPrimitivesRef.current = p; }}
+                    onPrimitivesChange={(p: Primitive[]) => { setPrimitives(p); latestPrimitivesRef.current = p; }}
                   />
                 </div>
                 

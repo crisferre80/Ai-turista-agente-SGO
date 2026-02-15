@@ -83,6 +83,12 @@ export interface ARData {
     rotation: { x: number; y: number; z: number };
     scale: { x: number; y: number; z: number };
   };
+  // Configuración de vista previa en teléfono (calibración)
+  phonePreview?: {
+    cameraDistance?: number;
+    yOffset?: number;
+    previewScale?: number;
+  };
 }
 
 // Datos completos de un atractivo con AR

@@ -35,6 +35,7 @@ type ARScenePageProps = {
   disableOrbitControls?: boolean;
   anchorPosition?: [number, number, number];
   isAnchored?: boolean;
+  phonePreview?: { cameraDistance: number; yOffset: number; previewScale: number };
 };
 
 export default function ARScene({ 
@@ -42,11 +43,22 @@ export default function ARScene({
   showGrid = true, 
   disableOrbitControls = false,
   anchorPosition = [0, 0, -3],
-  isAnchored = false
+  isAnchored = false,
+  phonePreview
 }: ARScenePageProps) {
-  const [modelTransform, setModelTransform] = useState(
-    (attraction.ar_hotspots?.modelTransform as any) ?? null
+  const [modelTransform, setModelTransform] = useState<{
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  } | null>(
+    (attraction.ar_hotspots?.modelTransform as { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) ?? null
   );
+
+  // Aplicar phonePreview.yOffset para ajustar altura del modelo
+  // En WebXR, cameraDistance no aplica porque la cámara es del usuario
+  const adjustedAnchorPosition: [number, number, number] = phonePreview
+    ? [anchorPosition[0], anchorPosition[1] + (phonePreview.yOffset || 0), anchorPosition[2]]
+    : anchorPosition;
 
   // Preferir el esquema nuevo si existe (scenes/scene_entities)
   // Esto permite que el runtime aplique las transformaciones persistidas.
@@ -74,7 +86,7 @@ export default function ARScene({
 
       {/* Cámara con simulación AR */}
       {isAnchored ? (
-        <ARCamera anchorTarget={anchorPosition} />
+        <ARCamera anchorTarget={adjustedAnchorPosition} />
       ) : (
         <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
       )}
@@ -87,7 +99,7 @@ export default function ARScene({
           enableRotate={true}
           maxDistance={10}
           minDistance={isAnchored ? 0.5 : 1}
-          target={isAnchored ? anchorPosition : [0, 0, 0]}
+          target={isAnchored ? adjustedAnchorPosition : [0, 0, 0]}
         />
       )}
 
@@ -96,17 +108,18 @@ export default function ARScene({
 
       {/* Modelo 3D principal (aplica transform guardado si existe) */}
       {attraction.ar_model_url && attraction.ar_model_url.trim() !== '' ? (
-        <Suspense fallback={<LoadingModel position={anchorPosition} isAnchored={isAnchored} />}>
+        <Suspense fallback={<LoadingModel position={adjustedAnchorPosition} isAnchored={isAnchored} />}>
           <MainModel
             modelUrl={attraction.ar_model_url}
             imageUrl={attraction.image_url}
-            position={anchorPosition}
+            position={adjustedAnchorPosition}
             isAnchored={isAnchored}
             transform={modelTransform}
+            phonePreview={phonePreview}
           />
         </Suspense>
       ) : (
-        <FallbackVisual imageUrl={attraction.image_url} position={anchorPosition} isAnchored={isAnchored} />
+        <FallbackVisual imageUrl={attraction.image_url} position={adjustedAnchorPosition} isAnchored={isAnchored} />
       )}
 
       {/* Hotspots AR */}
@@ -114,11 +127,11 @@ export default function ARScene({
         // Ajustar posición del hotspot relativa al ancla
         const hotspotPos = hotspot.position;
         const adjustedPos: [number, number, number] = Array.isArray(hotspotPos)
-          ? [hotspotPos[0] + anchorPosition[0], hotspotPos[1] + anchorPosition[1], hotspotPos[2] + anchorPosition[2]]
+          ? [hotspotPos[0] + adjustedAnchorPosition[0], hotspotPos[1] + adjustedAnchorPosition[1], hotspotPos[2] + adjustedAnchorPosition[2]]
           : [
-              (hotspotPos.x ?? 0) + anchorPosition[0],
-              (hotspotPos.y ?? 0) + anchorPosition[1],
-              (hotspotPos.z ?? 0) + anchorPosition[2]
+              (hotspotPos.x ?? 0) + adjustedAnchorPosition[0],
+              (hotspotPos.y ?? 0) + adjustedAnchorPosition[1],
+              (hotspotPos.z ?? 0) + adjustedAnchorPosition[2]
             ];
         
         return (
@@ -133,7 +146,7 @@ export default function ARScene({
         const pos = prim.position || { x: 0, y: 0, z: 0 };
         const rot = prim.rotation || { x: 0, y: 0, z: 0 };
         const scl = prim.scale || { x: 1, y: 1, z: 1 };
-        const adjustedPos: [number, number, number] = [pos.x + anchorPosition[0], pos.y + anchorPosition[1], pos.z + anchorPosition[2]];
+        const adjustedPos: [number, number, number] = [pos.x + adjustedAnchorPosition[0], pos.y + adjustedAnchorPosition[1], pos.z + adjustedAnchorPosition[2]];
 
         return (
           <group key={prim.id} position={adjustedPos} rotation={[rot.x, rot.y, rot.z]} scale={[scl.x, scl.y, scl.z]}>
@@ -173,7 +186,7 @@ export default function ARScene({
 
       {/* Grid de referencia (se oculta después de colocar) */}
       {showGrid && (
-        <gridHelper args={[10, 10, '#00ff00', '#004400']} position={anchorPosition} />
+        <gridHelper args={[10, 10, '#00ff00', '#004400']} position={adjustedAnchorPosition} />
       )}
     </>
   );
@@ -208,18 +221,19 @@ function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) 
   return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
 }
 
-function MainModel({ modelUrl, imageUrl, position, isAnchored, transform }: { 
+function MainModel({ modelUrl, imageUrl, position, isAnchored, transform, phonePreview }: { 
   modelUrl: string; 
   imageUrl?: string;
   position: [number, number, number];
   isAnchored: boolean;
   transform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } } | null;
+  phonePreview?: { cameraDistance: number; yOffset: number; previewScale: number };
 }) {
   let gltfScene = null;
-  let error = null;
   
   // useModel delega en useGLTF internamente y requiere Suspense en el árbol padre
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gltf = useModel(modelUrl as string) as any;
     gltfScene = gltf?.scene ?? null;
   } catch (err) {
@@ -230,14 +244,15 @@ function MainModel({ modelUrl, imageUrl, position, isAnchored, transform }: {
     return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;
   }
 
-  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} transform={transform} />;
+  return <StaticModel scene={gltfScene} position={position} isAnchored={isAnchored} transform={transform} phonePreview={phonePreview} />;
 }
 
-function StaticModel({ scene, position, isAnchored, transform }: { 
+function StaticModel({ scene, position, isAnchored, transform, phonePreview }: { 
   scene: THREE.Group | THREE.Object3D; 
   position: [number, number, number];
   isAnchored: boolean;
   transform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } } | null;
+  phonePreview?: { cameraDistance: number; yOffset: number; previewScale: number };
 }) {
   const mesh = useRef<THREE.Mesh>(null);
 
@@ -257,7 +272,15 @@ function StaticModel({ scene, position, isAnchored, transform }: {
     ? [position[0] + transform.position.x, position[1] + transform.position.y, position[2] + transform.position.z]
     : position;
 
-  const appliedScale = transform?.scale ? [transform.scale.x, transform.scale.y, transform.scale.z] : (isAnchored ? [0.3,0.3,0.3] : [0.8,0.8,0.8]);
+  // Usar phonePreview.previewScale si existe, sino usar escala por defecto
+  const baseScale = isAnchored ? 0.3 : 0.8;
+  const previewScaleMultiplier = phonePreview?.previewScale ?? 1.0;
+  const finalScale = baseScale * previewScaleMultiplier;
+  
+  const appliedScale = transform?.scale 
+    ? [transform.scale.x * finalScale, transform.scale.y * finalScale, transform.scale.z * finalScale] 
+    : [finalScale, finalScale, finalScale];
+  
   const appliedRotation = transform?.rotation ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] : undefined;
 
   return (
@@ -265,7 +288,9 @@ function StaticModel({ scene, position, isAnchored, transform }: {
       ref={mesh}
       object={scene.clone()}
       position={appliedPosition}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rotation={appliedRotation as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       scale={appliedScale as any}
     />
   );
@@ -276,6 +301,15 @@ function FallbackVisual({ imageUrl, position, isAnchored }: {
   position: [number, number, number];
   isAnchored: boolean;
 }) {
+  const mesh = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (mesh.current && isAnchored) {
+      const time = Date.now() * 0.001;
+      mesh.current.rotation.y = Math.sin(time * 0.2) * 0.1; 
+      mesh.current.rotation.x = Math.cos(time * 0.15) * 0.05;
+    }
+  });
+
   if (!isAnchored) {
     return null;
   }
@@ -305,15 +339,6 @@ function FallbackVisual({ imageUrl, position, isAnchored }: {
       </group>
     );
   }
-
-  const mesh = useRef<THREE.Mesh>(null);
-  useFrame((state, delta) => {
-    if (mesh.current) {
-      const time = state.clock.getElapsedTime();
-      mesh.current.rotation.y = Math.sin(time * 0.2) * 0.1; 
-      mesh.current.rotation.x = Math.cos(time * 0.15) * 0.05;
-    }
-  });
   
   return (
     <mesh ref={mesh} position={position} castShadow>
@@ -381,8 +406,11 @@ function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
   }
 
   // Image hotspot: render as textured plane (works in immersive AR)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((hotspot as any).image_url) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const imageUrl = (hotspot as any).image_url as string;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const tex = imageUrl ? useTexture(imageUrl) : null;
     return (
       <group position={position}>

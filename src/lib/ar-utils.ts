@@ -108,6 +108,7 @@ export function normalizeARData(raw: unknown): ARData {
   })) : [];
 
   const mt = obj.modelTransform as Record<string, unknown> | undefined;
+  const phone = obj.phonePreview as Record<string, unknown> | undefined;
   const modelTransform = mt
     ? {
         position: vecToObj(mt.position),
@@ -116,7 +117,15 @@ export function normalizeARData(raw: unknown): ARData {
       }
     : defaultModelTransform;
 
-  return { hotspots, primitives, modelTransform };
+  const phonePreview = phone
+    ? {
+        cameraDistance: Number(phone.cameraDistance ?? 1.0),
+        yOffset: Number(phone.yOffset ?? 0),
+        previewScale: Number(phone.previewScale ?? 1.0)
+      }
+    : { cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 };
+
+  return { hotspots, primitives, modelTransform, phonePreview };
 }
 
 export function canonicalizeARDataForSave(raw: unknown): ARData {
@@ -156,6 +165,14 @@ export function canonicalizeARDataForSave(raw: unknown): ARData {
     position: { x: Number(mtPos.x), y: Number(mtPos.y), z: Number(mtPos.z) },
     rotation: { x: Number(mtRot.x), y: Number(mtRot.y), z: Number(mtRot.z) },
     scale: { x: Number(mtScl.x), y: Number(mtScl.y), z: Number(mtScl.z) }
+  };
+
+  // Ensure phonePreview is numeric and present
+  const pp = (normalized as any).phonePreview || {};
+  normalized.phonePreview = {
+    cameraDistance: Number(pp.cameraDistance ?? 1.0),
+    yOffset: Number(pp.yOffset ?? 0),
+    previewScale: Number(pp.previewScale ?? 1.0)
   };
 
   return normalized;
