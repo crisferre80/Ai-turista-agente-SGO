@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { loadARModelFromScene } from '@/lib/ar-scene-persistence';
 import * as THREE from 'three';
 import type { AttractionWithAR, WebXRCapabilities, ARHotspot } from '@/types/ar';
+import ARGrid from '@/components/ARGrid';
 
 interface ARSceneProps {
   attraction: AttractionWithAR;
@@ -28,7 +29,11 @@ interface ARSceneProps {
 }
 
 export default function ARScene({ attraction, disableOrbitControls = false, showGrid = true }: ARSceneProps) {
-  const [modelTransform, setModelTransform] = useState<any>(attraction.ar_hotspots?.modelTransform ?? null);
+  const [modelTransform, setModelTransform] = useState<{
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+  } | null>(attraction.ar_hotspots?.modelTransform ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +90,15 @@ export default function ARScene({ attraction, disableOrbitControls = false, show
 
       {/* Grid de referencia (opcional, solo antes de "pegar" la escena) */}
       {showGrid && (
-        <gridHelper args={[10, 10, '#888888', '#444444']} position={[0, 0, 0]} />
+        <ARGrid
+          size={40}
+          divisions={40}
+          colorCenterLine="#888888"
+          colorGrid="#444444"
+          origin={[0, 0, 0]}
+          scale={1}
+          showAxes={false}
+        />
       )}
     </>
   );
@@ -94,7 +107,14 @@ export default function ARScene({ attraction, disableOrbitControls = false, show
 /**
  * Componente de modelo 3D principal
  */
-function MainModel({ modelUrl, transform }: { modelUrl: string; transform?: { position?: any; rotation?: any; scale?: any } | null }) {
+function MainModel({ modelUrl, transform }: { 
+  modelUrl: string; 
+  transform?: { 
+    position?: { x: number; y: number; z: number }; 
+    rotation?: { x: number; y: number; z: number }; 
+    scale?: { x: number; y: number; z: number } 
+  } | null 
+}) {
   const gltf = useModel(modelUrl);
   const gltfScene = gltf.scene;
 
@@ -108,7 +128,14 @@ function MainModel({ modelUrl, transform }: { modelUrl: string; transform?: { po
 /**
  * Subcomponente para animar el modelo (evita uso condicional de hooks)
  */
-function AnimatedModel({ scene, transform }: { scene: THREE.Group | THREE.Object3D; transform?: { position?: any; rotation?: any; scale?: any } | null }) {
+function AnimatedModel({ scene, transform }: { 
+  scene: THREE.Group | THREE.Object3D; 
+  transform?: { 
+    position?: { x: number; y: number; z: number }; 
+    rotation?: { x: number; y: number; z: number }; 
+    scale?: { x: number; y: number; z: number } 
+  } | null 
+}) {
   const mesh = useRef<THREE.Mesh>(null);
 
   // Animar rotación suave

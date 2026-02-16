@@ -11,6 +11,8 @@ import { Settings, Lightbulb, Camera, Move, RotateCcw, Maximize2 } from 'lucide-
 
 import type { ARHotspot } from '@/types/ar';
 import { loadGLTF } from '@/lib/model-loader';
+import ARScene from '@/components/ARPageClient/ARScene';
+import ARGrid from '@/components/ARGrid';
 
 // Reuse shared ARHotspot type from global types to avoid mismatches across app
 type Hotspot = ARHotspot;
@@ -76,6 +78,7 @@ function Model({ url }: { url: string }) {
 
         gltf.scene.scale.setScalar(scale);
         gltf.scene.position.sub(center.multiplyScalar(scale));
+        gltf.scene.position.y += box.min.y * scale; // Ajustar para que base esté en Y=0
 
         setModel(gltf.scene);
       } catch (err) {
@@ -185,93 +188,6 @@ function HotspotMarker({
   );
 }
 
-// Phone-friendly model viewer: centra el modelo en frente de la cámara,
-// ajusta escala para que quepa en pantalla y posiciona la base en Y=0.
-type PhoneModelProps = {
-  url: string;
-  modelTransform?: {
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number; z: number };
-    scale: { x: number; y: number; z: number };
-  };
-  cameraDistance?: number;
-  yOffset?: number;
-  previewScale?: number;
-};
-
-function PhoneModel({ url, modelTransform, cameraDistance = 1.0, yOffset = 0, previewScale = 1.0 }: PhoneModelProps) {
-  const [gltf, setGltf] = useState<THREE.Group | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const groupRef = useRef<THREE.Group | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    loadGLTF(url).then((res: GLTF) => {
-      if (!mounted) return;
-      const scene = res.scene;
-
-      try {
-        // Calcular bounding box y escala de ajuste (similar a Model)
-        const box = new THREE.Box3().setFromObject(scene);
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const desired = 0.8;
-        const fitScale = maxDim > 0 ? desired / maxDim : 1;
-        const userScale = modelTransform?.scale?.x ?? 1;
-        const finalScale = fitScale * userScale;
-
-        scene.scale.setScalar(finalScale);
-
-        // Recalcular bbox tras escalar
-        const box2 = new THREE.Box3().setFromObject(scene);
-        const center = box2.getCenter(new THREE.Vector3());
-
-        // Ajustar para centrar en X/Z pero mantener la base en Y=0
-        scene.position.x -= center.x;
-        scene.position.z -= center.z;
-
-        // Llevar la base del modelo a Y=0
-        const minY = box2.min.y * finalScale;
-        scene.position.y -= minY;
-      } catch {
-        // si algo falla en centrar, seguir igualmente con el scene sin ajustes
-      }
-
-      setGltf(scene);
-    }).catch(() => {
-      setError('No se pudo cargar modelo');
-    });
-    return () => { mounted = false; };
-  }, [url, modelTransform?.scale?.x]);
-
-  if (error) return null;
-  if (!gltf) return null;
-
-  // Calcular bounding box y escala para la vista móvil
-  const box = new THREE.Box3().setFromObject(gltf);
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-  // Queremos que el mayor lado ocupe ~0.8m en la vista móvil
-  const desired = 0.8;
-  const fitScale = maxDim > 0 ? desired / maxDim : 1;
-
-  const userScale = modelTransform?.scale?.x ?? 1;
-  const finalScale = fitScale * userScale;
-
-  // Posicionar la base del modelo en y=0. La preview móvil está desacoplada
-  // de la posición global del editor para evitar que seleccionar/hacer click
-  // en el canvas mueva la vista móvil.
-  const bboxMin = box.min.clone();
-  const baseOffsetY = bboxMin.y;
-  const userRot = modelTransform?.rotation ?? { x: 0, y: 0, z: 0 };
-
-  return (
-    <group ref={groupRef} position={[0, -baseOffsetY + yOffset, -cameraDistance]} rotation={[userRot.x, userRot.y, userRot.z]} scale={[finalScale * previewScale, finalScale * previewScale, finalScale * previewScale]}>
-      <primitive object={gltf} />
-    </group>
-  );
-}
-
 // Componente que pinta un pequeño marcador amarillo en el target actual de OrbitControls
 function CameraTargetMarker({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl | null> }) {
   const ref = useRef<THREE.Mesh | null>(null);
@@ -285,6 +201,90 @@ function CameraTargetMarker({ orbitRef }: { orbitRef: React.RefObject<OrbitContr
       <sphereGeometry args={[0.06, 8, 8]} />
       <meshBasicMaterial color="#ffd54f" />
     </mesh>
+  );
+}
+
+ // Helper visual para mostrar el frustum de la cámara del teléfono en AR
+// En WebXR: la cámara está fija en la posición del usuario (0, 1.6, 0)
+// El modelo se ancla a una distancia delante del usuario
+function PhoneCameraFrustumHelper({ 
+  distance, 
+  yOffset, 
+  fov = 75 
+}: { 
+  distance: number; 
+  yOffset: number; 
+  fov?: number; 
+}) {
+  const helperRef = useRef<THREE.CameraHelper | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const lineRef = useRef<THREE.Line | null>(null);
+
+  useEffect(() => {
+    // Crear una cámara virtual que representa la cámara del teléfono en AR
+    // En AR real, la cámara está siempre en nivel de ojos del usuario
+    const virtualCamera = new THREE.PerspectiveCamera(fov, 9 / 16, 0.1, 100);
+    virtualCamera.position.set(0, 1.6, 0); // Nivel de ojos del usuario
+    virtualCamera.lookAt(0, yOffset, -distance); // Mirar hacia el ancla del modelo
+    virtualCamera.updateProjectionMatrix();
+    cameraRef.current = virtualCamera;
+
+    // Crear el helper
+    const helper = new THREE.CameraHelper(virtualCamera);
+    helper.name = 'phoneCameraHelper';
+    helperRef.current = helper;
+
+    // Crear una línea desde la cámara hasta el ancla
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 1.6, 0), // Cámara del usuario
+      new THREE.Vector3(0, yOffset, -distance) // Ancla del modelo
+    ]);
+    const lineMaterial = new THREE.LineBasicMaterial({ 
+      color: 0x00ff00, 
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.6,
+      depthTest: false
+    });
+    const line = new THREE.Line(lineGeometry, lineMaterial);
+    line.name = 'phoneCameraLine';
+    line.renderOrder = 999; // Renderizar encima de todo
+    lineRef.current = line;
+
+    return () => {
+      helper.geometry?.dispose();
+      helper.material && (helper.material as THREE.Material).dispose();
+      lineGeometry?.dispose();
+      lineMaterial?.dispose();
+    };
+  }, []);
+
+  useFrame(() => {
+    if (cameraRef.current && helperRef.current) {
+      // La cámara siempre está en nivel de ojos
+      cameraRef.current.position.set(0, 1.6, 0);
+      // Mirar hacia el ancla del modelo
+      cameraRef.current.lookAt(0, yOffset, -distance);
+      cameraRef.current.fov = fov;
+      cameraRef.current.updateProjectionMatrix();
+      helperRef.current.update();
+    }
+
+    // Actualizar la línea
+    if (lineRef.current) {
+      const points = [
+        new THREE.Vector3(0, 1.6, 0), // Cámara
+        new THREE.Vector3(0, yOffset, -distance) // Ancla
+      ];
+      lineRef.current.geometry.setFromPoints(points);
+    }
+  });
+
+  return (
+    <>
+      {helperRef.current && <primitive object={helperRef.current} />}
+      {lineRef.current && <primitive object={lineRef.current} />}
+    </>
   );
 }
 
@@ -380,16 +380,6 @@ function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
   }
 
   return null;
-}
-
-function Grid() {
-  return (
-    <>
-      {/* Grid principal y ejes básicos */}
-      <gridHelper args={[40, 40, '#00ff00', '#004400']} position={[0, 0, 0]} />
-      <axesHelper args={[5]} />
-    </>
-  );
 }
 
 // Componente para renderizar primitivas
@@ -503,11 +493,14 @@ export default function ARPreview3D({
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
   const [showPhonePreview, setShowPhonePreview] = useState(false);
+  const [showCameraGizmo, setShowCameraGizmo] = useState(false);
+  const [selectedCameraGizmo, setSelectedCameraGizmo] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const cameraRef = useRef<THREE.Camera | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
   const isTransformingRef = useRef(false);
   const isApplyingExternalTransformRef = useRef(false);
+  const isApplyingExternalPhonePreviewRef = useRef(false);
   const lastEmittedModelTransformRef = useRef<{
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -549,9 +542,11 @@ export default function ARPreview3D({
   });
 
   // Opciones de calibración para la vista móvil (Phone Preview)
-  const [phoneCameraDistance, setPhoneCameraDistance] = useState<number>(1.0);
-  const [phoneYOffset, setPhoneYOffset] = useState<number>(0);
-  const [phonePreviewScale, setPhonePreviewScale] = useState<number>(1.0);
+  // En WebXR real: la cámara está fija en (0, 1.6, 0) - nivel de ojos
+  // El modelo se ancla a una distancia delante del usuario
+  const [anchorDistance, setAnchorDistance] = useState<number>(3.0); // qué tan lejos del usuario aparece el modelo
+  const [anchorYOffset, setAnchorYOffset] = useState<number>(0); // ajuste de altura del ancla (0 = nivel del suelo)
+  const [arModelScale, setArModelScale] = useState<number>(1.0); // escala del modelo en AR
 
   const syncModelStateFromGroup = () => {
     const obj = modelGroupRef.current;
@@ -646,14 +641,49 @@ export default function ARPreview3D({
   // Ref para rastrear último valor emitido y último recibido del padre
   const lastEmittedPhonePreviewRef = useRef<{ cameraDistance: number; yOffset: number; previewScale: number } | null>(null);
   const lastReceivedPhonePreviewRef = useRef<typeof phonePreview>(phonePreview);
+  
+  // Refs para rastrear valores locales actuales sin agregarlos como dependencias
+  const anchorDistanceRef = useRef(anchorDistance);
+  const anchorYOffsetRef = useRef(anchorYOffset);
+  const arModelScaleRef = useRef(arModelScale);
+  
+  // Mantener refs sincronizados con estados
+  anchorDistanceRef.current = anchorDistance;
+  anchorYOffsetRef.current = anchorYOffset;
+  arModelScaleRef.current = arModelScale;
 
   // Inicializar valores de calibración desde props si vienen del padre
   useEffect(() => {
     if (!phonePreview) return;
     lastReceivedPhonePreviewRef.current = phonePreview;
-    if (typeof phonePreview.cameraDistance === 'number') setPhoneCameraDistance(phonePreview.cameraDistance);
-    if (typeof phonePreview.yOffset === 'number') setPhoneYOffset(phonePreview.yOffset);
-    if (typeof phonePreview.previewScale === 'number') setPhonePreviewScale(phonePreview.previewScale);
+    
+    const eps = 1e-6;
+    const needsUpdate =
+      (typeof phonePreview.cameraDistance === 'number' && 
+       Math.abs(anchorDistanceRef.current - phonePreview.cameraDistance) > eps) ||
+      (typeof phonePreview.yOffset === 'number' && 
+       Math.abs(anchorYOffsetRef.current - phonePreview.yOffset) > eps) ||
+      (typeof phonePreview.previewScale === 'number' && 
+       Math.abs(arModelScaleRef.current - phonePreview.previewScale) > eps);
+    
+    if (!needsUpdate) return;
+    
+    // Marcar que estamos aplicando cambios externos para no re-emitirlos
+    isApplyingExternalPhonePreviewRef.current = true;
+    
+    // Solo actualizar si los valores realmente cambiaron
+    if (typeof phonePreview.cameraDistance === 'number' && 
+        Math.abs(anchorDistanceRef.current - phonePreview.cameraDistance) > eps) {
+      setAnchorDistance(phonePreview.cameraDistance);
+    }
+    if (typeof phonePreview.yOffset === 'number' && 
+        Math.abs(anchorYOffsetRef.current - phonePreview.yOffset) > eps) {
+      setAnchorYOffset(phonePreview.yOffset);
+    }
+    if (typeof phonePreview.previewScale === 'number' && 
+        Math.abs(arModelScaleRef.current - phonePreview.previewScale) > eps) {
+      setArModelScale(phonePreview.previewScale);
+    }
   }, [phonePreview]);
 
   // Persistir transform del modelo hacia el padre cuando cambien las transformaciones.
@@ -706,23 +736,15 @@ export default function ARPreview3D({
   useEffect(() => {
     const fn = onPhonePreviewChangeRef.current;
     if (typeof fn === 'function') {
-      const eps = 1e-6;
-      const next = { cameraDistance: phoneCameraDistance, yOffset: phoneYOffset, previewScale: phonePreviewScale };
-      const prev = lastEmittedPhonePreviewRef.current;
-      const received = lastReceivedPhonePreviewRef.current;
-      
-      // No emitir si estos valores son los que acabamos de recibir del padre
-      if (
-        received &&
-        typeof received.cameraDistance === 'number' &&
-        typeof received.yOffset === 'number' &&
-        typeof received.previewScale === 'number' &&
-        Math.abs(received.cameraDistance - next.cameraDistance) <= eps &&
-        Math.abs(received.yOffset - next.yOffset) <= eps &&
-        Math.abs(received.previewScale - next.previewScale) <= eps
-      ) {
+      // Si estamos aplicando valores del padre, no re-emitir
+      if (isApplyingExternalPhonePreviewRef.current) {
+        isApplyingExternalPhonePreviewRef.current = false;
         return;
       }
+      
+      const eps = 1e-6;
+      const next = { cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale };
+      const prev = lastEmittedPhonePreviewRef.current;
       
       // No emitir si ya emitimos este mismo valor antes
       if (prev &&
@@ -735,7 +757,7 @@ export default function ARPreview3D({
       lastEmittedPhonePreviewRef.current = { ...next };
       fn(next);
     }
-  }, [phoneCameraDistance, phoneYOffset, phonePreviewScale]);
+  }, [anchorDistance, anchorYOffset, arModelScale]);
 
   // Ahora cada TransformControls se instancia con su propio ref (transformRefs.current[id])
   // y se monta directamente alrededor del objeto seleccionado, por lo que no necesitamos
@@ -825,6 +847,85 @@ export default function ARPreview3D({
     onPrimitivesChange(updated);
   };
 
+  // Efecto para monitorear y re-habilitar OrbitControls si se quedan deshabilitados
+  useEffect(() => {
+    const checkInterval = setInterval(() => {
+      if (orbitRef.current && !isTransformingRef.current) {
+        // Si no estamos transformando y los controles están deshabilitados, re-habilitarlos
+        if (!orbitRef.current.enabled) {
+          console.log('OrbitControls deshabilitados detectados, re-habilitando...');
+          orbitRef.current.enabled = true;
+        }
+      }
+    }, 1000); // Verificar cada segundo
+
+    return () => clearInterval(checkInterval);
+  }, []);
+
+  // Función para sincronizar la vista del editor con la cámara del teléfono
+  // En WebXR: la cámara está en (0, 1.6, 0) y el modelo anclado delante
+  const syncToPhoneCamera = () => {
+    const controls = orbitRef.current;
+    if (!controls) return;
+    
+    const cam = controls.object;
+    
+    // Posicionar la cámara del editor donde estaría en AR real (nivel de ojos)
+    cam.position.set(0, 1.6, 0);
+    
+    // Apuntar hacia el ancla del modelo
+    controls.target.set(0, anchorYOffset, -anchorDistance);
+    
+    // Actualizar el FOV si es una cámara perspectiva
+    if (cam instanceof THREE.PerspectiveCamera) {
+      cam.fov = 75; // FOV típico de cámaras de teléfono
+      cam.updateProjectionMatrix();
+    }
+    
+    controls.update();
+  };
+
+  // Función para encuadrar automáticamente el modelo en la vista
+  const frameModel = () => {
+    const controls = orbitRef.current;
+    if (!controls || !modelUrl) return;
+    
+    const cam = controls.object;
+    
+    // Calcular el bounding box del modelo
+    let box = new THREE.Box3();
+    
+    if (modelGroupRef.current) {
+      box.setFromObject(modelGroupRef.current);
+    } else {
+      // Si no hay modelo, usar un box por defecto
+      box = new THREE.Box3(
+        new THREE.Vector3(-1, -1, -1),
+        new THREE.Vector3(1, 1, 1)
+      );
+    }
+    
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    // Calcular la distancia ideal de la cámara
+    const fov = cam instanceof THREE.PerspectiveCamera ? cam.fov : 60;
+    const distance = maxDim / (2 * Math.tan((fov * Math.PI) / 360));
+    const padding = 1.5; // Factor de padding para que no esté tan ajustado
+    
+    // Posicionar la cámara en una vista isométrica agradable
+    const finalDistance = distance * padding;
+    cam.position.set(
+      center.x + finalDistance * 0.7,
+      center.y + finalDistance * 0.5,
+      center.z + finalDistance * 0.7
+    );
+    
+    controls.target.copy(center);
+    controls.update();
+  };
+
   // Presets de cámara para facilitar la vista
   const setCameraPreset = (preset: 'front' | 'back' | 'top' | 'iso') => {
     const controls = orbitRef.current;
@@ -868,7 +969,7 @@ export default function ARPreview3D({
         <Canvas
         frameloop="demand"
         dpr={[1, 1.5]}
-        camera={{ position: [4, 3, 4], fov: 60 }}
+        camera={{ position: [3, 2, 3], fov: 60 }}
         style={{ width: '100%', height: '100%', display: 'block', background: '#000000' }}
         onCreated={(state) => {
           state.gl.setClearColor('#000000', 1);
@@ -890,8 +991,14 @@ export default function ARPreview3D({
           ref={orbitRef}
           enableDamping
           dampingFactor={0.05}
-          minDistance={2}
-          maxDistance={20}
+          minDistance={0.5}
+          maxDistance={50}
+          enablePan={true}
+          enableZoom={true}
+          enableRotate={true}
+          maxPolarAngle={Math.PI}
+          minPolarAngle={0}
+          makeDefault
         />
 
         {/* Gizmo mode toolbar (translate / rotate / scale) */}
@@ -907,10 +1014,60 @@ export default function ARPreview3D({
         ))}
 
         {/* Grid */}
-        <Grid />
+        <ARGrid />
+
+        {/* Gizmo del ancla AR (donde se posiciona el modelo) */}
+        {showCameraGizmo && (
+          selectedCameraGizmo ? (
+            <TransformControls
+              mode={transformMode}
+              size={1.2}
+              onMouseDown={() => { if (orbitRef.current) orbitRef.current.enabled = false; }}
+              onMouseUp={() => { if (orbitRef.current) orbitRef.current.enabled = true; }}
+              onObjectChange={(event) => {
+                const target = (event as unknown as { target?: { object?: THREE.Object3D } }).target;
+                const obj = target?.object;
+                if (!obj) return;
+
+                const pos = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+                // En AR real, la cámara está en (0, 1.6, 0), el gizmo muestra la posición del ancla
+                // Este gizmo ya no representa la "cámara" sino el punto donde se ancla el modelo
+                setAnchorDistance(Math.abs(pos.z)); // distancia desde el usuario
+                setAnchorYOffset(pos.y); // altura del ancla
+              }}
+            >
+              <group position={[0, anchorYOffset, -anchorDistance]}>
+                <Box args={[0.5, 0.3, 0.2]} position={[0, 0, 0]}>
+                  <meshStandardMaterial color="#00ff00" wireframe />
+                </Box>
+                <Text position={[0, 0.5, 0]} fontSize={0.2} color="#00ff00">
+                  ⚓ Ancla AR
+                </Text>
+              </group>
+            </TransformControls>
+          ) : (
+            <group position={[0, anchorYOffset, -anchorDistance]} onClick={() => setSelectedCameraGizmo(true)}>
+              <Box args={[0.5, 0.3, 0.2]} position={[0, 0, 0]}>
+                <meshStandardMaterial color="#00ff00" wireframe />
+              </Box>
+              <Text position={[0, 0.5, 0]} fontSize={0.2} color="#00ff00">
+                ⚓ Ancla AR
+              </Text>
+            </group>
+          )
+        )}
 
         {/* Marcador del target de la cámara (pequeña esfera) */}
         <CameraTargetMarker orbitRef={orbitRef} />
+
+        {/* Helper visual del frustum de la cámara del teléfono */}
+        {showCameraGizmo && (
+          <PhoneCameraFrustumHelper 
+            distance={anchorDistance} 
+            yOffset={anchorYOffset} 
+            fov={75} 
+          />
+        )}
 
         {/* Modelo 3D (solo si hay URL definida).
             Ahora puede seleccionarse y moverse con gizmo igual que las primitivas.
@@ -1127,20 +1284,34 @@ export default function ARPreview3D({
 
         {/* Controles e información */}
 
-        {/* Phone preview overlay (small phone simulator near the canvas) */}
+        {/* Phone preview overlay usando ARScene para mostrar exactamente lo mismo que en el dispositivo */}
         {showPhonePreview && modelUrl && (
           <div style={{ position: 'absolute', top: 14, right: 14, width: 220, height: 440, zIndex: 40, borderRadius: 18, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ width: '100%', height: '100%', background: '#000' }}>
-              <Canvas camera={{ position: [0, 0, 0], fov: 50 }} style={{ width: '100%', height: '100%' }}>
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[3, 5, 2]} intensity={0.8} />
+              <Canvas 
+                style={{ width: '100%', height: '100%' }}
+              >
                 <Suspense fallback={null}>
-                  <PhoneModel
-                    url={modelUrl as string}
-                    modelTransform={{ position: modelPosition, rotation: modelRotation, scale: modelScale }}
-                    cameraDistance={phoneCameraDistance}
-                    yOffset={phoneYOffset}
-                    previewScale={phonePreviewScale}
+                  <ARScene
+                    attraction={{
+                      id: 'preview-phone',
+                      name: 'Vista Móvil',
+                      lat: 0,
+                      lng: 0,
+                      ar_model_url: modelUrl,
+                      ar_hotspots: {
+                        hotspots,
+                        primitives,
+                        modelTransform: modelTransform ?? undefined,
+                        phonePreview: { cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale }
+                      },
+                      has_ar_content: true
+                    }}
+                    showGrid={true}
+                    disableOrbitControls={true}
+                    anchorPosition={[0, anchorYOffset, -anchorDistance]}
+                    isAnchored={true}
+                    phonePreview={{ cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale }}
                   />
                 </Suspense>
               </Canvas>
@@ -1159,11 +1330,32 @@ export default function ARPreview3D({
           maxWidth: '250px',
           border: '1px solid rgba(0, 255, 0, 0.3)'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            🎮 Controles
-            <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: canvasReady ? '#00ff00' : '#ff9800', borderRadius: '4px', color: '#000' }}>
-              {canvasReady ? '✓' : '...'}
-            </span>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🎮 Controles
+              <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: canvasReady ? '#00ff00' : '#ff9800', borderRadius: '4px', color: '#000' }}>
+                {canvasReady ? '✓' : '...'}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                if (orbitRef.current) {
+                  orbitRef.current.enabled = true;
+                }
+              }}
+              style={{
+                padding: '2px 6px',
+                background: '#2563eb',
+                border: 'none',
+                borderRadius: 4,
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.7rem'
+              }}
+              title="Habilitar controles de cámara"
+            >
+              🔓 Activar
+            </button>
           </div>
           <div style={{ fontSize: '0.7rem', lineHeight: '1.5' }}>
             • <strong>Rotar:</strong> Click izq + arrastrar<br/>
@@ -1238,6 +1430,24 @@ export default function ARPreview3D({
               }}
             >
               📱 Preview
+            </button>
+
+            {/* Camera gizmo toggle */}
+            <button
+              onClick={() => setShowCameraGizmo(prev => !prev)}
+              title="Mostrar gizmo del ancla AR"
+              style={{
+                marginLeft: 6,
+                padding: '4px 8px',
+                background: showCameraGizmo ? '#10B981' : 'transparent',
+                color: showCameraGizmo ? 'white' : '#ddd',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: '0.75rem'
+              }}
+            >
+              ⚓ Ancla AR
             </button>
           </div>
         </div>
@@ -1334,6 +1544,24 @@ export default function ARPreview3D({
             <div>Agrega un modelo 3D para ver la vista previa</div>
           </div>
         )}
+
+        {/* Controles de cámara */}
+        <div style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 10,
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          fontSize: '0.75rem',
+          lineHeight: '1.4'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>🖱️ Controles:</div>
+          <div>• Click izquierdo: Rotar vista</div>
+          <div>• Click derecho: Mover vista</div>
+          <div>• Scroll: Zoom</div>
+        </div>
       </div>
 
       {/* Panel debajo del canvas: Transformaciones del modelo + Hotspots */}
@@ -1527,6 +1755,12 @@ export default function ARPreview3D({
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={frameModel} style={{ padding: '6px 10px', background: '#00C853', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Maximize2 size={14} /> Encuadrar
+              </button>
+              <button onClick={syncToPhoneCamera} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }} title="Ver desde la perspectiva del teléfono">
+                📱 Vista Móvil
+              </button>
               <button onClick={() => setCameraPreset('front')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Frontal</button>
               <button onClick={() => setCameraPreset('back')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Trasera</button>
               <button onClick={() => setCameraPreset('top')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Superior</button>
@@ -1555,25 +1789,26 @@ export default function ARPreview3D({
                 <button onClick={() => { if (confirm('¿Resetear posición/rot/escala?')) { setModelPosition({ x:0,y:0,z:0 }); setModelRotation({ x:0,y:0,z:0 }); setModelScale({ x:1,y:1,z:1 }); } }} style={{ padding: '6px 10px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Modelo</button>
                 <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
 
-                {/* Calibración Phone Preview */}
+                {/* Calibración AR - Conceptos WebXR */}
                 <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #333' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración Phone Preview</div>
+                  <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración AR (WebXR)</div>
+                  <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 8 }}>En AR real, la cámara está fija en la posición del usuario. Ajusta dónde se ancla el modelo:</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia cámara (m)</div>
-                      <input type="range" min="0.2" max="3" step="0.05" value={phoneCameraDistance} onChange={(e) => setPhoneCameraDistance(parseFloat(e.target.value))} />
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia del ancla (m)</div>
+                      <input type="range" min="0.5" max="10" step="0.1" value={anchorDistance} onChange={(e) => setAnchorDistance(parseFloat(e.target.value))} />
                     </div>
                     <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
-                        min={0.2}
-                        max={3}
-                        step={0.01}
-                        value={Number(phoneCameraDistance.toFixed(2))}
+                        min={0.5}
+                        max={10}
+                        step={0.1}
+                        value={Number(anchorDistance.toFixed(1))}
                         onChange={(e) => {
                           const v = parseFloat(e.target.value);
                           if (Number.isNaN(v)) return;
-                          setPhoneCameraDistance(v);
+                          setAnchorDistance(v);
                         }}
                         style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
                       />
@@ -1581,20 +1816,20 @@ export default function ARPreview3D({
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Offset vertical (m)</div>
-                      <input type="range" min="-1" max="1" step="0.01" value={phoneYOffset} onChange={(e) => setPhoneYOffset(parseFloat(e.target.value))} />
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Altura del ancla (m)</div>
+                      <input type="range" min="-2" max="3" step="0.05" value={anchorYOffset} onChange={(e) => setAnchorYOffset(parseFloat(e.target.value))} />
                     </div>
                     <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
-                        min={-1}
-                        max={1}
-                        step={0.01}
-                        value={Number(phoneYOffset.toFixed(2))}
+                        min={-2}
+                        max={3}
+                        step={0.05}
+                        value={Number(anchorYOffset.toFixed(2))}
                         onChange={(e) => {
                           const v = parseFloat(e.target.value);
                           if (Number.isNaN(v)) return;
-                          setPhoneYOffset(v);
+                          setAnchorYOffset(v);
                         }}
                         style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
                       />
@@ -1602,8 +1837,8 @@ export default function ARPreview3D({
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Factor de escala</div>
-                      <input type="range" min="0.2" max="3" step="0.01" value={phonePreviewScale} onChange={(e) => setPhonePreviewScale(parseFloat(e.target.value))} />
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Escala del modelo</div>
+                      <input type="range" min="0.2" max="3" step="0.05" value={arModelScale} onChange={(e) => setArModelScale(parseFloat(e.target.value))} />
                     </div>
                     <div style={{ width: '92px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
                       <span style={{ opacity: 0.9 }}>x</span>
@@ -1611,12 +1846,12 @@ export default function ARPreview3D({
                         type="number"
                         min={0.2}
                         max={3}
-                        step={0.01}
-                        value={Number(phonePreviewScale.toFixed(2))}
+                        step={0.05}
+                        value={Number(arModelScale.toFixed(2))}
                         onChange={(e) => {
                           const v = parseFloat(e.target.value);
                           if (Number.isNaN(v)) return;
-                          setPhonePreviewScale(v);
+                          setArModelScale(v);
                         }}
                         style={{ width: 68, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
                       />

@@ -44,7 +44,7 @@ export default function ARScene({
   disableOrbitControls = false,
   anchorPosition = [0, 0, -3],
   isAnchored = false,
-  phonePreview
+  phonePreview,
 }: ARScenePageProps) {
   const [modelTransform, setModelTransform] = useState<{
     position: { x: number; y: number; z: number };
@@ -54,11 +54,12 @@ export default function ARScene({
     (attraction.ar_hotspots?.modelTransform as { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } }) ?? null
   );
 
-  // Aplicar phonePreview.yOffset para ajustar altura del modelo
-  // En WebXR, cameraDistance no aplica porque la cámara es del usuario
+  // Aplicar phonePreview para ajustar la posición del ancla
+  // En WebXR real: la cámara está fija en (0, 1.6, 0) - nivel de ojos
+  // El modelo se ancla a una distancia delante del usuario
   const adjustedAnchorPosition: [number, number, number] = phonePreview
-    ? [anchorPosition[0], anchorPosition[1] + (phonePreview.yOffset || 0), anchorPosition[2]]
-    : anchorPosition;
+    ? [0, phonePreview.yOffset, -phonePreview.cameraDistance] // Usar los valores de calibración AR
+    : anchorPosition; // O usar la posición por defecto
 
   // Preferir el esquema nuevo si existe (scenes/scene_entities)
   // Esto permite que el runtime aplique las transformaciones persistidas.
@@ -193,9 +194,10 @@ export default function ARScene({
 }
 
 // Cámara con simulación de movimiento AR
+// En WebXR real: la cámara está SIEMPRE en la posición del usuario (nivel de ojos)
 function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) {
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
-  const basePosition = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.6, 3));
+  const basePosition = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.6, 0)); // Nivel de ojos del usuario
 
   useFrame((state) => {
     if (!cameraRef.current) return;
@@ -218,7 +220,7 @@ function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) 
     cameraRef.current.lookAt(anchorTarget[0], anchorTarget[1], anchorTarget[2]);
   });
 
-  return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 3]} fov={75} />;
+  return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 0]} fov={75} />;
 }
 
 function MainModel({ modelUrl, imageUrl, position, isAnchored, transform, phonePreview }: { 
@@ -233,8 +235,7 @@ function MainModel({ modelUrl, imageUrl, position, isAnchored, transform, phoneP
   
   // useModel delega en useGLTF internamente y requiere Suspense en el árbol padre
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const gltf = useModel(modelUrl as string) as any;
+    const gltf = useModel(modelUrl as string);
     gltfScene = gltf?.scene ?? null;
   } catch (err) {
     console.error('❌ Error al obtener modelo con useModel:', err);
@@ -288,10 +289,8 @@ function StaticModel({ scene, position, isAnchored, transform, phonePreview }: {
       ref={mesh}
       object={scene.clone()}
       position={appliedPosition}
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rotation={appliedRotation as any}
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      scale={appliedScale as any}
+      rotation={appliedRotation}
+      scale={appliedScale}
     />
   );
 }
@@ -406,10 +405,8 @@ function ARHotspotComponent({ hotspot }: { hotspot: ARHotspot }) {
   }
 
   // Image hotspot: render as textured plane (works in immersive AR)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((hotspot as any).image_url) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const imageUrl = (hotspot as any).image_url as string;
+  if ('image_url' in hotspot && hotspot.image_url) {
+    const imageUrl = hotspot.image_url;
     // eslint-disable-next-line react-hooks/rules-of-hooks
     const tex = imageUrl ? useTexture(imageUrl) : null;
     return (

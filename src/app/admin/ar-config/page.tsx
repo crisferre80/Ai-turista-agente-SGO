@@ -1,13 +1,117 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { supabase } from '@/lib/supabase';
 import { normalizeARData, canonicalizeARDataForSave } from '@/lib/ar-utils';
 import { loadARModelFromScene, saveARModelToScene } from '@/lib/ar-scene-persistence';
 import type { ARHotspot, ARHotspotType } from '@/types/ar';
 import { Upload, Plus, Trash2, Image as ImageIcon, Box } from 'lucide-react';
+import * as THREE from 'three';
+
+// Componente de vista previa del modelo 3D
+function ModelPreview({ url }: { url?: string }) {
+  if (!url) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: '#666',
+        fontSize: '0.8rem'
+      }}>
+        Selecciona un modelo para ver la vista previa
+      </div>
+    );
+  }
+
+  return (
+    <Canvas style={{ width: '100%', height: '100%' }}>
+      <PerspectiveCamera makeDefault position={[0, 0, 2]} fov={50} />
+      <OrbitControls 
+        enablePan={false} 
+        enableZoom={true} 
+        enableRotate={true}
+        minDistance={1}
+        maxDistance={5}
+      />
+      
+      {/* Iluminación básica */}
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[5, 5, 5]} intensity={0.8} />
+      
+      {/* Modelo con Suspense */}
+      <Suspense fallback={
+        <mesh>
+          <boxGeometry args={[0.3, 0.3, 0.3]} />
+          <meshStandardMaterial color="#cccccc" />
+        </mesh>
+      }>
+        <Model url={url} />
+      </Suspense>
+    </Canvas>
+  );
+}
+
+// Componente simple del modelo para vista previa
+function Model({ url }: { url: string }) {
+  const [model, setModel] = useState<THREE.Group | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!url) return;
+
+    const loadModel = async () => {
+      try {
+        const { loadGLTF } = await import('@/lib/model-loader');
+        const gltf = await loadGLTF(url);
+        
+        // Centrar y escalar el modelo
+        const scene = gltf.scene;
+        const box = new (await import('three')).Box3().setFromObject(scene);
+        const center = box.getCenter(new (await import('three')).Vector3());
+        const size = box.getSize(new (await import('three')).Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = maxDim > 0 ? 1 / maxDim : 1;
+        
+        scene.position.sub(center);
+        scene.scale.setScalar(scale);
+        
+        setModel(scene);
+        setError(false);
+      } catch (err) {
+        console.error('Error loading model preview:', err);
+        setError(true);
+      }
+    };
+
+    loadModel();
+  }, [url]);
+
+  if (error) {
+    return (
+      <mesh>
+        <boxGeometry args={[0.5, 0.5, 0.5]} />
+        <meshStandardMaterial color="#ff6b6b" />
+      </mesh>
+    );
+  }
+
+  if (!model) {
+    return (
+      <mesh>
+        <boxGeometry args={[0.3, 0.3, 0.3]} />
+        <meshStandardMaterial color="#cccccc" />
+      </mesh>
+    );
+  }
+
+  return <primitive object={model} />;
+}
 
 // Importar vista previa AR dinámicamente
 const ARPreview3D = dynamic(() => import('@/components/ARPreview3D'), { ssr: false });
@@ -52,7 +156,7 @@ export default function ARConfigPage() {
   
   // Estados del formulario AR
   const [arEnabled, setArEnabled] = useState(false);
-  const [modelUrl, setModelUrl] = useState('');
+  const [modelFileName, setModelFileName] = useState('');
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [primitives, setPrimitives] = useState<Primitive[]>([]);
   const [lightMode, setLightMode] = useState(false);
@@ -74,6 +178,9 @@ export default function ARConfigPage() {
 
   // Calibración de la vista móvil (persistible)
   const [phonePreview, setPhonePreview] = useState<{ cameraDistance: number; yOffset: number; previewScale: number }>({ cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 });
+
+  // Lista de modelos disponibles en el bucket
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   // Refs para garantizar que el guardado usa el último transform/primitives inmediatamente
   const latestModelTransformRef = React.useRef(modelTransform);
@@ -106,10 +213,38 @@ export default function ARConfigPage() {
     loadAttractions();
   }, []);
 
+  // Cargar lista de modelos disponibles del bucket
+  useEffect(() => {
+    const loadAvailableModels = async () => {
+      try {
+        const { data, error } = await supabase.storage.from('ar-content').list('ar-models', {
+          limit: 100,
+          offset: 0
+        });
+        
+        if (error) {
+          console.error('Error loading models:', error);
+          return;
+        }
+        
+        // Filtrar solo archivos .glb y .gltf
+        const modelFiles = data
+          ?.filter(file => file.name.endsWith('.glb') || file.name.endsWith('.gltf'))
+          ?.map(file => file.name) || [];
+        
+        setAvailableModels(modelFiles);
+      } catch (error) {
+        console.error('Error loading available models:', error);
+      }
+    };
+    
+    loadAvailableModels();
+  }, []);
+
   useEffect(() => {
     if (selectedAttraction) {
       setArEnabled(selectedAttraction.has_ar_content || false);
-      setModelUrl(selectedAttraction.ar_model_url || '');
+      setModelFileName(selectedAttraction.ar_model_url ? selectedAttraction.ar_model_url.split('/').pop() || '' : '');
       setQrCode(selectedAttraction.qr_code || `AR_${selectedAttraction.id}`);
       
       // Normalizar formatos legacy/array/object y garantizar campos
@@ -196,7 +331,7 @@ export default function ARConfigPage() {
 
           // Si por alguna razón el legacy está vacío pero existe en scenes, lo usamos.
           if ((!selectedAttraction.ar_model_url || selectedAttraction.ar_model_url.trim() === '') && modelUrlFromScene) {
-            setModelUrl(modelUrlFromScene);
+            setModelFileName(modelUrlFromScene.split('/').pop() || '');
           }
         } catch {
           // noop: si falla lectura, seguimos con legacy
@@ -233,11 +368,19 @@ export default function ARConfigPage() {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('ar-content')
-        .getPublicUrl(filePath);
-
-      setModelUrl(publicUrl);
+      setModelFileName(fileName);
+      
+      // Recargar lista de modelos disponibles
+      const { data, error: listError } = await supabase.storage.from('ar-content').list('ar-models', {
+        limit: 100,
+        offset: 0
+      });
+      if (!listError) {
+        const modelFiles = data
+          ?.filter(file => file.name.endsWith('.glb') || file.name.endsWith('.gltf'))
+          ?.map(file => file.name) || [];
+        setAvailableModels(modelFiles);
+      }
     } catch (error) {
       console.error('Error subiendo modelo 3D:', error);
       alert('Error al subir el modelo 3D');
@@ -311,6 +454,9 @@ export default function ARConfigPage() {
       };
       const arData = canonicalizeARDataForSave(rawArData);
 
+      // Obtener URL pública del modelo si hay uno seleccionado
+      const modelUrl = modelFileName ? supabase.storage.from('ar-content').getPublicUrl(`ar-models/${modelFileName}`).data.publicUrl : '';
+
       // Persistir modelo 3D en el esquema normalizado (scenes/assets/scene_entities)
       // Mantiene attractions.ar_model_url como compatibilidad temporal.
       if (arEnabled && modelUrl && modelUrl.trim() !== '') {
@@ -358,6 +504,9 @@ export default function ARConfigPage() {
       setSaving(false);
     }
   };
+
+  // Obtener URL pública del modelo seleccionado
+  const currentModelUrl = modelFileName ? supabase.storage.from('ar-content').getPublicUrl(`ar-models/${modelFileName}`).data.publicUrl : undefined;
 
   return (
     <div style={{ 
@@ -491,25 +640,56 @@ export default function ARConfigPage() {
 
                 {arEnabled && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {/* URL del modelo */}
+                    {/* Selector de modelo 3D */}
                     <div>
                       <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>
                         Modelo 3D
                       </label>
-                      <input
-                        type="text"
-                        value={modelUrl}
-                        onChange={(e) => setModelUrl(e.target.value)}
-                        placeholder="URL del modelo .glb/.gltf"
+                      <select
+                        value={modelFileName}
+                        onChange={(e) => {
+                          setModelFileName(e.target.value);
+                        }}
                         style={{
                           width: '100%',
                           padding: '6px',
                           border: '1px solid #ddd',
                           borderRadius: '4px',
-                          fontSize: '0.8rem'
+                          fontSize: '0.8rem',
+                          backgroundColor: 'white'
                         }}
-                      />
+                      >
+                        <option value="">Sin modelo 3D</option>
+                        {availableModels.map(model => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
+                    {/* Vista previa del modelo seleccionado */}
+                    {modelFileName && (
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>
+                          Vista Previa del Modelo
+                        </label>
+                        <div style={{
+                          width: '100%',
+                          height: '200px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          background: '#f8f9fa',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          <ModelPreview url={currentModelUrl} />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Upload de archivo */}
                     <label style={{
@@ -772,7 +952,7 @@ export default function ARConfigPage() {
                   Elige un lugar para configurar su contenido AR
                 </p>
               </div>
-            ) : arEnabled && (modelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) ? (
+            ) : arEnabled && (currentModelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) ? (
               <>
                 <h3 style={{ 
                   margin: '0 0 16px', 
@@ -793,7 +973,7 @@ export default function ARConfigPage() {
                   position: 'relative'
                 }}>
                   <ARPreview3D
-                    modelUrl={modelUrl || undefined}
+                    modelUrl={currentModelUrl}
                     modelTransform={modelTransform}
                     lightMode={lightMode}
                     phonePreview={phonePreview}
