@@ -127,6 +127,7 @@ function MainModel({ modelUrl, transform }: {
 
 /**
  * Subcomponente para animar el modelo (evita uso condicional de hooks)
+ * Sigue patrones de Three.js para clonado y transformaciones
  */
 function AnimatedModel({ scene, transform }: { 
   scene: THREE.Group | THREE.Object3D; 
@@ -136,22 +137,37 @@ function AnimatedModel({ scene, transform }: {
     scale?: { x: number; y: number; z: number } 
   } | null 
 }) {
-  const mesh = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
 
   // Animar rotación suave
   useFrame((state, delta) => {
-    if (mesh.current) {
-      mesh.current.rotation.y += delta * 0.2;
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.2;
     }
   });
 
+  // Calcular posición siguiendo patrón Three.js: Vector3.set() o .copy()
+  const position: [number, number, number] = transform?.position 
+    ? [transform.position.x, transform.position.y, -5 + transform.position.z]
+    : [0, 0, -5];
+
+  // Rotación en radianes - Three.js usa Euler(x, y, z, 'XYZ')
+  const rotation: [number, number, number] | undefined = transform?.rotation 
+    ? [transform.rotation.x, transform.rotation.y, transform.rotation.z]
+    : undefined;
+
+  // Escala - Three.js soporta uniforme (number) o por eje (Vector3)
+  const scale: [number, number, number] | number = transform?.scale 
+    ? [transform.scale.x, transform.scale.y, transform.scale.z]
+    : 1;
+
   return (
     <primitive
-      ref={mesh}
+      ref={groupRef}
       object={scene.clone()}
-      position={transform?.position ? [0 + transform.position.x, 0 + transform.position.y, -5 + transform.position.z] : [0, 0, -5]}
-      rotation={transform?.rotation ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] : undefined}
-      scale={transform?.scale ? [transform.scale.x, transform.scale.y, transform.scale.z] : 1}
+      position={position}
+      rotation={rotation}
+      scale={scale}
     />
   );
 }

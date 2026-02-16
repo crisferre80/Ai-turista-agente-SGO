@@ -85,12 +85,17 @@ export default function ARScene({
       <directionalLight position={[5, 5, 5]} intensity={0.8} castShadow />
       <pointLight position={[-5, 5, -5]} intensity={0.4} />
 
-      {/* Cámara con simulación AR */}
-      {isAnchored ? (
-        <ARCamera anchorTarget={adjustedAnchorPosition} />
-      ) : (
-        <PerspectiveCamera makeDefault position={[0, 1.6, 3]} fov={75} />
-      )}
+      {/* Cámara
+          WebXR Spec: La cámara se maneja automáticamente en sesiones immersive-ar.
+          Esta configuración solo se usa en preview/editor mode.
+      */}
+      <PerspectiveCamera 
+        makeDefault 
+        position={[0, 1.6, 3]} 
+        fov={75}
+        near={0.01}
+        far={20}
+      />
 
       {/* Controles de cámara (solo si no están desactivados) */}
       {!disableOrbitControls && (
@@ -192,37 +197,6 @@ export default function ARScene({
     </>
   );
 }
-
-// Cámara con simulación de movimiento AR
-// En WebXR real: la cámara está SIEMPRE en la posición del usuario (nivel de ojos)
-function ARCamera({ anchorTarget }: { anchorTarget: [number, number, number] }) {
-  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
-  const basePosition = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.6, 0)); // Nivel de ojos del usuario
-
-  useFrame((state) => {
-    if (!cameraRef.current) return;
-
-    const time = state.clock.getElapsedTime();
-    
-    // Simular pequeños movimientos como si fuera movimiento natural del usuario
-    const sway = Math.sin(time * 0.5) * 0.02;
-    const bob = Math.cos(time * 0.7) * 0.01;
-    const drift = Math.sin(time * 0.3) * 0.015;
-    
-    // Aplicar movimientos sutiles a la cámara
-    cameraRef.current.position.set(
-      basePosition.current.x + sway,
-      basePosition.current.y + bob,
-      basePosition.current.z + drift
-    );
-    
-    // Hacer que la cámara mire hacia el objeto anclado
-    cameraRef.current.lookAt(anchorTarget[0], anchorTarget[1], anchorTarget[2]);
-  });
-
-  return <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.6, 0]} fov={75} />;
-}
-
 function MainModel({ modelUrl, imageUrl, position, isAnchored, transform, phonePreview }: { 
   modelUrl: string; 
   imageUrl?: string;
@@ -257,15 +231,14 @@ function StaticModel({ scene, position, isAnchored, transform, phonePreview }: {
 }) {
   const mesh = useRef<THREE.Mesh>(null);
 
+  // Solo rotar automáticamente si NO está anclado Y NO tiene transform personalizado
   useFrame((state, delta) => {
-    if (mesh.current && !isAnchored) {
-      // Solo rotar si no está anclado
+    if (mesh.current && !isAnchored && !transform?.rotation) {
+      // Solo rotar si no está anclado y no tiene rotación personalizada
       mesh.current.rotation.y += delta * 0.15;
-    } else if (mesh.current && isAnchored) {
-      // Cuando está anclado, agregar un pequeño movimiento sutil
-      const time = state.clock.getElapsedTime();
-      mesh.current.rotation.y = Math.sin(time * 0.1) * 0.05; // Oscilación muy sutil
     }
+    // NO modificar la rotación cuando está anclado o tiene transform personalizado
+    // para respetar las transformaciones del usuario
   });
 
   // Aplicar transform si existe (transform es relativo al ancla)
@@ -273,16 +246,17 @@ function StaticModel({ scene, position, isAnchored, transform, phonePreview }: {
     ? [position[0] + transform.position.x, position[1] + transform.position.y, position[2] + transform.position.z]
     : position;
 
-  // Usar phonePreview.previewScale si existe, sino usar escala por defecto
-  const baseScale = isAnchored ? 0.3 : 0.8;
-  const previewScaleMultiplier = phonePreview?.previewScale ?? 1.0;
-  const finalScale = baseScale * previewScaleMultiplier;
+  // Aplicar escala: primero la escala del transform del usuario, luego el multiplicador AR si existe
+  // NO usar baseScale arbitrario - respetar las transformaciones del usuario
+  const arScaleMultiplier = phonePreview?.previewScale ?? 1.0;
   
-  const appliedScale = transform?.scale 
-    ? [transform.scale.x * finalScale, transform.scale.y * finalScale, transform.scale.z * finalScale] 
-    : [finalScale, finalScale, finalScale];
+  const appliedScale: [number, number, number] = transform?.scale 
+    ? [transform.scale.x * arScaleMultiplier, transform.scale.y * arScaleMultiplier, transform.scale.z * arScaleMultiplier]
+    : [arScaleMultiplier, arScaleMultiplier, arScaleMultiplier]; // Si no hay transform, solo aplicar el multiplicador AR
   
-  const appliedRotation = transform?.rotation ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] : undefined;
+  const appliedRotation: [number, number, number] | undefined = transform?.rotation 
+    ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] 
+    : undefined;
 
   return (
     <primitive

@@ -22,20 +22,23 @@ export default function ARGrid({
   scale = 1,
   showAxes = true
 }: ARGridProps) {
+  // Extraer valores del array origin para que ESLint pueda analizarlos estáticamente
+  const [originX, originY, originZ] = origin;
+
   const gridHelper = useMemo(() => {
     const helper = new THREE.GridHelper(size, divisions, colorCenterLine, colorGrid);
-    helper.position.set(origin[0], origin[1], origin[2]);
+    helper.position.set(originX, originY, originZ);
     helper.scale.setScalar(scale);
     return helper;
-  }, [size, divisions, colorCenterLine, colorGrid, origin[0], origin[1], origin[2], scale]);
+  }, [size, divisions, colorCenterLine, colorGrid, originX, originY, originZ, scale]);
 
   const axesHelper = useMemo(() => {
     if (!showAxes) return null;
     const helper = new THREE.AxesHelper(5);
-    helper.position.set(origin[0], origin[1], origin[2]);
+    helper.position.set(originX, originY, originZ);
     helper.scale.setScalar(scale);
     return helper;
-  }, [showAxes, origin[0], origin[1], origin[2], scale]);
+  }, [showAxes, originX, originY, originZ, scale]);
 
   return (
     <>

@@ -9,8 +9,16 @@ import { ARHitTest } from './ARHitTest';
 import ARScene from './ARScene';
 import type { ARData } from '@/types/ar';
 
+// WebXR Advanced Features
+import { ARAnchors, type ARAnchorData } from './ARAnchors';
+import { ARLightEstimation } from './ARLightEstimation';
+import { ARDepthSensing } from './ARDepthSensing';
+import { ARCameraAccess } from './ARCameraAccess';
+// Imagen Tracking types (para futuro uso)
+// import ARImageTracking, { type TrackedImageResult, type TrackableImage } from './ARImageTracking';
+
 // Icons for improved UI
-import { X, Play, MapPin, Camera, CheckCircle, RotateCcw } from 'lucide-react';
+import { X, Play, MapPin, Camera, CheckCircle, RotateCcw, Anchor, Lightbulb, Layers } from 'lucide-react';
 
 type Attraction = {
   id: string;
@@ -31,13 +39,30 @@ interface WebXRSceneProps {
   onClose: () => void;
 }
 
-// Componente principal de la escena WebXR
+// Componente principal de la escena WebXR con características avanzadas
 export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   const [placedObject, setPlacedObject] = useState<{
     position: THREE.Vector3;
     rotation: THREE.Quaternion;
+    anchorId?: string; // ID del anchor si está persistido
   } | null>(null);
   
+  // Estado de características avanzadas
+  const [features, setFeatures] = useState({
+    anchors: false,
+    lightEstimation: false,
+    depthSensing: false,
+    cameraAccess: false,
+    imageTracking: false
+  });
+  
+  // Estado para image tracking (preparado para uso futuro)
+  // const [trackedImages, setTrackedImages] = useState<Map<string, TrackedImageResult>>(new Map());
+  // const [trackableImages, setTrackableImages] = useState<TrackableImage[]>([]);
+  
+  // Crear XR Store - @react-three/xr v6
+  // Las features de sesión se configuran automáticamente según el modo (AR/VR)
+  // Para habilitar features opcionales, se pueden especificar al entrar en sesión
   const store = createXRStore();
 
   const handlePlace = (result: { position: THREE.Vector3; rotation: THREE.Quaternion }) => {
@@ -50,9 +75,61 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
       position: result.position.clone(),
       rotation: result.rotation.clone()
     });
-    
-    // mark search complete
   };
+  
+  // Handler para cuando se crea un anchor
+  const handleAnchorCreated = (anchor: ARAnchorData) => {
+    console.log('🔗 Anchor creado:', anchor.id);
+    setFeatures(prev => ({ ...prev, anchors: true }));
+    
+    // Actualizar objeto colocado con el anchor ID
+    if (placedObject) {
+      setPlacedObject(prev => prev ? { ...prev, anchorId: anchor.id } : null);
+    }
+  };
+  
+  // Handler para actualización de iluminación
+  const handleLightUpdate = () => {
+    // Light estimation se aplica automáticamente a la escena
+    setFeatures(prev => ({ ...prev, lightEstimation: true }));
+  };
+  
+  // Handler para depth sensing
+  const handleDepthUpdate = () => {
+    setFeatures(prev => ({ ...prev, depthSensing: true }));
+  };
+  
+  // Handler para camera access
+  const handleCameraFrame = () => {
+    setFeatures(prev => ({ ...prev, cameraAccess: true }));
+  };
+  
+  // Preparado para Image Tracking (activar cuando se configuren imágenes/QR)
+  /*
+  const handleImageDetected = (result: TrackedImageResult) => {
+    console.log('📷 Imagen detectada:', result.name);
+    setFeatures(prev => ({ ...prev, imageTracking: true }));
+    // setTrackedImages(prev => new Map(prev).set(result.id, result));
+    
+    // Auto-colocar objeto en la posición de la imagen si no hay objeto ya colocado
+    if (!placedObject) {
+      setPlacedObject({
+        position: result.position.clone(),
+        rotation: new THREE.Quaternion().setFromEuler(result.rotation)
+      });
+    }
+  };
+  
+  // Handler para cuando se pierde tracking de una imagen
+  const handleImageLost = (imageId: string) => {
+    console.log('📷 Imagen perdida:', imageId);
+    // setTrackedImages(prev => {
+    //   const next = new Map(prev);
+    //   next.delete(imageId);
+    //   return next;
+    // });
+  };
+  */
 
   const handleReset = () => {
     setPlacedObject(null);
@@ -79,9 +156,32 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
 
           <div className="ml-4 flex items-center gap-2">
             {placedObject ? (
-              <div className="inline-flex items-center gap-2 bg-green-500/20 px-2 py-1 rounded-full text-xs text-green-300 tracking-wide">
-                <CheckCircle className="h-4 w-4 text-green-400" />
-                <span className="font-medium">Anclado</span>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-2 bg-green-500/20 px-2 py-1 rounded-full text-xs text-green-300 tracking-wide">
+                  <CheckCircle className="h-4 w-4 text-green-400" />
+                  <span className="font-medium">Anclado</span>
+                </div>
+                {/* Indicadores de features avanzadas activas */}
+                {placedObject.anchorId && (
+                  <div className="inline-flex items-center gap-1 bg-purple-500/20 px-2 py-1 rounded-full text-xs text-purple-300" title="Anchor persistente">
+                    <Anchor className="h-3 w-3" />
+                  </div>
+                )}
+                {features.lightEstimation && (
+                  <div className="inline-flex items-center gap-1 bg-amber-500/20 px-2 py-1 rounded-full text-xs text-amber-300" title="Light Estimation activa">
+                    <Lightbulb className="h-3 w-3" />
+                  </div>
+                )}
+                {features.depthSensing && (
+                  <div className="inline-flex items-center gap-1 bg-blue-500/20 px-2 py-1 rounded-full text-xs text-blue-300" title="Depth Sensing activo">
+                    <Layers className="h-3 w-3" />
+                  </div>
+                )}
+                {features.imageTracking && (
+                  <div className="inline-flex items-center gap-1 bg-pink-500/20 px-2 py-1 rounded-full text-xs text-pink-300" title="Image Tracking activo">
+                    <Camera className="h-3 w-3" />
+                  </div>
+                )}
               </div>
             ) : (
               <div className="inline-flex items-center gap-2 bg-yellow-500/20 px-2 py-1 rounded-full text-xs text-yellow-300 tracking-wide">
@@ -109,7 +209,8 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           store={store}
           className="flex items-center gap-3 bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-semibold py-3 px-5 rounded-full shadow-xl transition-all duration-200 transform hover:scale-102 border border-white/10 animate-ar-button"
           onError={(error) => {
-            console.error('WebXR AR Error:', error);
+            console.error('❌ WebXR AR Error:', error);
+            console.log('💡 Asegúrate de estar en HTTPS y tener un dispositivo compatible');
           }}
         >
           <Play className="h-4 w-4" />
@@ -128,9 +229,18 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
         )}
       </div>
 
-      {/* Canvas WebXR */}
+      {/* Canvas WebXR
+          Nota: En WebXR real, la cámara sigue automáticamente al usuario.
+          La posición inicial solo aplica antes de entrar en sesión AR.
+          @react-three/xr maneja la configuración XR automáticamente.
+      */}
       <Canvas
-        camera={{ position: [0, 1.6, 6], fov: 75 }}
+        camera={{ 
+          position: [0, 1.6, 3], 
+          fov: 75,
+          near: 0.01,
+          far: 20
+        }}
         gl={{ 
           antialias: true,
           preserveDrawingBuffer: true,
@@ -140,13 +250,63 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           width: '100%',
           height: '100%'
         }}
-        onCreated={() => {
-          console.log('✅ WebXR Canvas creado');
-        }}
       >
         {/* Envolvedor XR - habilita WebXR en el Canvas */}
         <XR store={store}>
-          {/* Iluminación */}
+          {/* ========================================
+              WebXR Advanced Features Implementation
+              ======================================== */}
+          
+          {/* Anchors API: Persistencia de objetos en posiciones del mundo real */}
+          <ARAnchors 
+            onAnchorCreated={handleAnchorCreated}
+            debug={false}
+          />
+          
+          {/* Light Estimation: Iluminación realista según el entorno */}
+          <ARLightEstimation 
+            autoApply={true}
+            intensityScale={1.0}
+            onLightUpdate={handleLightUpdate}
+            debug={false}
+          />
+          
+          {/* Depth Sensing: Oclusión realista de objetos */}
+          <ARDepthSensing 
+            format="luminance-alpha"
+            usage="cpu-optimized"
+            autoApplyOcclusion={false}
+            visualizeDepth={false}
+            onDepthUpdate={handleDepthUpdate}
+            debug={false}
+          />
+          
+          {/* Camera Access: Mezclar video real con contenido 3D */}
+          <ARCameraAccess 
+            showAsBackground={false}
+            videoEffect="none"
+            backgroundOpacity={1.0}
+            onCameraFrame={handleCameraFrame}
+            debug={false}
+          />
+          
+          {/* Image Tracking: Detectar QR codes y marcadores para posicionar objetos */}
+          {/* Preparado para uso futuro cuando se configuren imágenes rastreables */}
+          {/* {trackableImages.length > 0 && (
+            <ARImageTracking 
+              images={trackableImages}
+              onImageDetected={handleImageDetected}
+              onImageLost={handleImageLost}
+              autoCreateAnchors={true}
+              showDebugMarkers={true}
+            />
+          )} */}
+          
+          {/* ========================================
+              Standard AR Scene Setup
+              ======================================== */}
+          
+          {/* Iluminación base (se complementa con Light Estimation) */}
           <ambientLight intensity={0.4} />
           <directionalLight 
             position={[5, 5, 5]} 

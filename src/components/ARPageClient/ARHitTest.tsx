@@ -4,11 +4,14 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useXR } from '@react-three/xr';
 import * as THREE from 'three';
+import { useARAnchors } from './ARAnchors';
 
 interface HitTestResult {
   position: THREE.Vector3;
   rotation: THREE.Quaternion;
   transform: XRRigidTransform;
+  // Añadir referencia al hit test result para crear anchors
+  hitTestResult?: XRHitTestResult;
 }
 
 interface ARHitTestProps {
@@ -18,6 +21,10 @@ interface ARHitTestProps {
   children?: React.ReactNode;
   autoPlace?: boolean;
   singlePlacement?: boolean;
+  /** Crear anchor al colocar objeto (persistencia) */
+  createAnchor?: boolean;
+  /** Callback cuando se crea un anchor */
+  onAnchorCreated?: (anchorId: string) => void;
 }
 
 export function ARHitTest({ 
@@ -26,7 +33,9 @@ export function ARHitTest({
   showReticle = true,
   children,
   autoPlace = false,
-  singlePlacement = true
+  singlePlacement = true,
+  createAnchor = true,
+  onAnchorCreated
 }: ARHitTestProps) {
   const { session } = useXR();
   const { } = useThree();
@@ -38,28 +47,43 @@ export function ARHitTest({
   const [isPlacing, setIsPlacing] = useState(false);
   const [hasPlaced, setHasPlaced] = useState(false);
   const autoPlaceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Hook para acceder a Anchors API
+  const anchorsAPI = useARAnchors();
+  
+  // Guardar el último XRHitTestResult para crear anchors
+  const lastHitTestResultRef = useRef<XRHitTestResult | null>(null);
 
   // Configurar hit test source cuando se inicia la sesión
+  // Siguiendo especificación WebXR oficial: usar 'viewer' para hit test y 'local-floor' para poses
   const setupHitTestSource = useCallback(async () => {
     if (!session) return;
 
     try {
-      // Obtener tanto el reference space 'viewer' para el hit test source
-      // como el reference space local para resolver las poses una sola vez.
+      // WebXR Spec: 'viewer' reference space para hit testing (relativo a cabeza/dispositivo)
       const viewerRef = await session.requestReferenceSpace('viewer');
+      
+      // WebXR AR Spec: 'local-floor' es el estándar para AR (origen en el suelo)
+      // Fallback a 'local' si no está disponible
       try {
-        localRefSpaceRef.current = await session.requestReferenceSpace('local');
-      } catch (e) {
-        // algunos runtimes pueden no soportar 'local' explícitamente; dejar null y usar viewer como fallback
-        console.warn('No se pudo obtener referenceSpace "local", usando "viewer" como fallback', e);
-        localRefSpaceRef.current = null;
+        localRefSpaceRef.current = await session.requestReferenceSpace('local-floor');
+        console.log('✅ Usando reference space: local-floor (WebXR AR estándar)');
+      } catch {
+        try {
+          localRefSpaceRef.current = await session.requestReferenceSpace('local');
+          console.log('⚠️ Fallback a reference space: local');
+        } catch {
+          console.warn('⚠️ No se pudo obtener reference space, usando viewer como último recurso');
+          localRefSpaceRef.current = null;
+        }
       }
 
+      // WebXR Hit Test API: requestHitTestSource para detectar superficies reales
       if (session.requestHitTestSource) {
         const hitTestSource = await session.requestHitTestSource({ space: viewerRef });
         hitTestSourceRef.current = hitTestSource || null;
       }
-      console.log('✅ Hit test source configurado');
+      console.log('✅ Hit test source configurado (WebXR Hit Test API)');
       
     } catch (error) {
       console.error('❌ Error configurando hit test:', error);
@@ -105,8 +129,12 @@ export function ARHitTest({
           const result: HitTestResult = {
             position,
             rotation,
-            transform: pose.transform
+            transform: pose.transform,
+            hitTestResult: hit // Guardar referencia para crear anchors
           };
+          
+          // Guardar el hit test result para crear anchors después
+          lastHitTestResultRef.current = hit;
 
           setHitResult(result);
           onHitTest?.(result);
@@ -132,19 +160,38 @@ export function ARHitTest({
   });
 
   // Manejar colocación de objeto
-  const handlePlace = useCallback(() => {
+  const handlePlace = useCallback(async () => {
     if (!hitResult || isPlacing) return;
     if (singlePlacement && hasPlaced) return;
 
     setIsPlacing(true);
     
     try {
+      // Intentar crear anchor si está habilitado y disponible
+      let anchorId: string | undefined;
+      
+      if (createAnchor && anchorsAPI?.isSupported && lastHitTestResultRef.current) {
+        console.log('🔗 Creando anchor desde hit test result...');
+        
+        const anchorData = await anchorsAPI.createAnchorFromHitTest(lastHitTestResultRef.current);
+        
+        if (anchorData) {
+          anchorId = anchorData.id;
+          console.log('✅ Anchor creado exitosamente:', anchorId);
+          onAnchorCreated?.(anchorId);
+        } else {
+          console.warn('⚠️ No se pudo crear anchor, colocando sin persistencia');
+        }
+      }
+      
+      // Llamar callback de colocación
       onPlace?.(hitResult);
       setHasPlaced(true);
       
       console.log('✅ Objeto colocado en:', {
         position: hitResult.position.toArray(),
-        rotation: hitResult.rotation.toArray()
+        rotation: hitResult.rotation.toArray(),
+        hasAnchor: !!anchorId
       });
       
     } catch (error) {
@@ -152,7 +199,7 @@ export function ARHitTest({
     } finally {
       setTimeout(() => setIsPlacing(false), 500);
     }
-  }, [hitResult, isPlacing, onPlace, singlePlacement, hasPlaced]);
+  }, [hitResult, isPlacing, onPlace, singlePlacement, hasPlaced, createAnchor, anchorsAPI, onAnchorCreated]);
   
   // Colocación automática cuando se detecta una superficie
   useEffect(() => {

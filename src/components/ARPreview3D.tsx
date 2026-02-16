@@ -57,8 +57,12 @@ interface ARPreview3DProps {
   onPhonePreviewChange?: (p: { cameraDistance: number; yOffset: number; previewScale: number }) => void;
 }
 
+/**
+ * Componente para cargar y mostrar modelos 3D en el editor
+ * Normaliza el tamaño del modelo y lo centra siguiendo patrones Three.js
+ */
 function Model({ url }: { url: string }) {
-  const [model, setModel] = useState<THREE.Group | null>(null);
+  const [model, setModel] = useState<THREE.Object3D | null>(null);
   const [error, setError] = useState<string | null>(null);
   const groupRef = useRef<THREE.Group>(null);
 
@@ -70,17 +74,30 @@ function Model({ url }: { url: string }) {
     loadGLTF(url).then((gltf: GLTF) => {
       if (!mounted) return;
       try {
-        const box = new THREE.Box3().setFromObject(gltf.scene);
+        // Clonar scene para no modificar el original (patrón Three.js)
+        const clonedScene = gltf.scene.clone();
+        
+        // Box3.setFromObject() - calcular bounding box (patrón Three.js)
+        const box = new THREE.Box3().setFromObject(clonedScene);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
+        
+        // Normalizar escala para que quepa en 3 unidades
         const scale = maxDim > 3 ? 3 / maxDim : 1;
 
-        gltf.scene.scale.setScalar(scale);
-        gltf.scene.position.sub(center.multiplyScalar(scale));
-        gltf.scene.position.y += box.min.y * scale; // Ajustar para que base esté en Y=0
+        // Aplicar transformaciones siguiendo patrón Three.js
+        clonedScene.scale.setScalar(scale);
+        
+        // Centrar modelo usando Vector3.sub() y .multiplyScalar()
+        const scaledCenter = center.multiplyScalar(scale);
+        clonedScene.position.sub(scaledCenter);
+        clonedScene.position.y += box.min.y * scale; // Base en Y=0
 
-        setModel(gltf.scene);
+        // updateMatrix() actualiza la matriz local (patrón Three.js)
+        clonedScene.updateMatrix();
+
+        setModel(clonedScene);
       } catch (err) {
         console.error('Error procesando glTF:', err);
         setError('Error procesando modelo 3D');
@@ -253,7 +270,7 @@ function PhoneCameraFrustumHelper({
 
     return () => {
       helper.geometry?.dispose();
-      helper.material && (helper.material as THREE.Material).dispose();
+      if (helper.material) (helper.material as THREE.Material).dispose();
       lineGeometry?.dispose();
       lineMaterial?.dispose();
     };
@@ -1302,7 +1319,11 @@ export default function ARPreview3D({
                       ar_hotspots: {
                         hotspots,
                         primitives,
-                        modelTransform: modelTransform ?? undefined,
+                        modelTransform: {
+                          position: modelPosition,
+                          rotation: modelRotation,
+                          scale: modelScale
+                        },
                         phonePreview: { cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale }
                       },
                       has_ar_content: true
