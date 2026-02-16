@@ -298,8 +298,47 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   const handleQRScanSuccess = async (qrCode: string) => {
     setQrScannerOpen(false);
-    
-    // Buscar atractivo por código QR
+    // Si el QR contiene JSON con type 'ar-marker', manejar localmente
+    try {
+      const parsed = JSON.parse(qrCode);
+      if (parsed && parsed.type === 'ar-marker' && parsed.attractionId) {
+        // Redirigir directamente usando el attractionId embebido
+        router.push(`/ar/${parsed.attractionId}`);
+        return;
+      }
+    } catch (err) {
+      // No es JSON, continuar con el comportamiento antiguo
+    }
+
+    // Si el QR es una URL, manejar redirección: internas con router.push, externas con location
+    try {
+      const maybeUrl = qrCode.trim();
+      const urlPattern = /^(https?:)\/\//i;
+      if (urlPattern.test(maybeUrl)) {
+        try {
+          const parsedUrl = new URL(maybeUrl);
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          // Si pertenece al mismo origen o es una ruta interna, usar router.push
+          if (parsedUrl.origin === origin) {
+            router.push(parsedUrl.pathname + parsedUrl.search + parsedUrl.hash);
+            return;
+          }
+          // Si la ruta parece ser una ruta de la app (contiene /ar/ o /place/), intentar usar router
+          if (/\/ar\//.test(parsedUrl.pathname) || /\/place\//.test(parsedUrl.pathname) || /\/places\//.test(parsedUrl.pathname)) {
+            try { router.push(parsedUrl.pathname + parsedUrl.search + parsedUrl.hash); return; } catch {}
+          }
+          // Fallback: navegar externamente
+          window.location.href = maybeUrl;
+          return;
+        } catch (err) {
+          // no es una URL válida -> continuar
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    // Buscar atractivo por código QR (fallback: string simple que coincide con campo qr_code)
     try {
       const { data, error } = await supabase
         .from('attractions')
@@ -310,7 +349,6 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       if (error) throw error;
 
       if (data) {
-        // Redirigir directamente a la página AR
         router.push(`/ar/${data.id}`);
       } else {
         alert('No se encontró un lugar con este código QR.');

@@ -295,23 +295,40 @@ export default function GPSObjectPositioner({
   // Buscar ubicación por nombre (usando Nominatim de OpenStreetMap)
   const searchLocation = async () => {
     if (!searchQuery.trim()) return;
-
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`
-      );
-      const data = await response.json();
-
-      if (data.length > 0) {
-        setSelectedLat(parseFloat(data[0].lat));
-        setSelectedLng(parseFloat(data[0].lon));
-        alert(`📍 Encontrado: ${data[0].display_name}`);
+      if (MAPBOX_TOKEN) {
+        const q = encodeURIComponent(searchQuery);
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?limit=1&access_token=${MAPBOX_TOKEN}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Mapbox Geocoding error: ${res.status}`);
+        const json = await res.json();
+        if (json.features && json.features.length > 0) {
+          const feat = json.features[0];
+          const [lng, lat] = feat.center;
+          setSelectedLat(Number(lat));
+          setSelectedLng(Number(lng));
+          alert(`📍 Encontrado: ${feat.place_name}`);
+        } else {
+          alert('No se encontraron resultados');
+        }
       } else {
-        alert('No se encontraron resultados');
+        // Fallback a Nominatim si no hay token de Mapbox
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`,
+          { headers: { 'Accept': 'application/json' } }
+        );
+        const data = await response.json();
+        if (data.length > 0) {
+          setSelectedLat(parseFloat(data[0].lat));
+          setSelectedLng(parseFloat(data[0].lon));
+          alert(`📍 Encontrado: ${data[0].display_name}`);
+        } else {
+          alert('No se encontraron resultados');
+        }
       }
     } catch (error) {
       console.error('Error buscando ubicación:', error);
-      alert('Error al buscar ubicación');
+      alert('Error al buscar el lugar');
     }
   };
 
