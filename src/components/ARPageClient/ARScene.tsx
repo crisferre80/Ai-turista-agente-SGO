@@ -230,6 +230,7 @@ function StaticModel({ scene, position, isAnchored, transform, phonePreview }: {
   phonePreview?: { cameraDistance: number; yOffset: number; previewScale: number };
 }) {
   const mesh = useRef<THREE.Mesh>(null);
+  const [baseScale, setBaseScale] = useState<number>(1);
 
   // Solo rotar automáticamente si NO está anclado Y NO tiene transform personalizado
   useFrame((state, delta) => {
@@ -258,13 +259,54 @@ function StaticModel({ scene, position, isAnchored, transform, phonePreview }: {
     ? [transform.rotation.x, transform.rotation.y, transform.rotation.z] 
     : undefined;
 
+  // Auto-calcular escala base basada en el bounding box del modelo cuando NO hay transform guardado
+  useEffect(() => {
+    if (transform || !scene) return;
+    let raf = 0 as number;
+    try {
+      const box = new THREE.Box3();
+      // Calcular bounding box acumulando las geometrías de los meshes del scene
+      (scene as THREE.Object3D).traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh && 'isMesh' in mesh && mesh.isMesh && mesh.geometry) {
+          const geom = mesh.geometry as THREE.BufferGeometry;
+          if (!geom.boundingBox) geom.computeBoundingBox();
+          if (geom.boundingBox) {
+            const geomBox = geom.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+            box.union(geomBox);
+          }
+        }
+      });
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      if (maxDim > 0) {
+        const TARGET_MAX = 1.2; // metros - target max dimension for models
+        const scaleFactor = TARGET_MAX / maxDim;
+        // Limit excessive upscaling
+        const finalScale = Math.min(Math.max(scaleFactor, 0.05), 5);
+        // Defer setState to avoid synchronous state updates inside the effect
+        raf = requestAnimationFrame(() => setBaseScale(finalScale));
+      } else {
+        raf = requestAnimationFrame(() => setBaseScale(1));
+      }
+    } catch (err) {
+      console.warn('No se pudo calcular bounding box para auto-escala:', err);
+      raf = requestAnimationFrame(() => setBaseScale(1));
+    }
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [scene, transform]);
+
   return (
     <primitive
       ref={mesh}
       object={scene.clone()}
       position={appliedPosition}
       rotation={appliedRotation}
-      scale={appliedScale}
+      scale={[appliedScale[0] * baseScale, appliedScale[1] * baseScale, appliedScale[2] * baseScale]}
     />
   );
 }

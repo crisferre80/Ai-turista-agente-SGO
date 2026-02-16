@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, ARButton, createXRStore } from '@react-three/xr';
 import { Environment, Html } from '@react-three/drei';
@@ -14,8 +14,8 @@ import { ARAnchors, type ARAnchorData } from './ARAnchors';
 import { ARLightEstimation } from './ARLightEstimation';
 import { ARDepthSensing } from './ARDepthSensing';
 import { ARCameraAccess } from './ARCameraAccess';
-// Imagen Tracking types (para futuro uso)
-// import ARImageTracking, { type TrackedImageResult, type TrackableImage } from './ARImageTracking';
+// Imagen Tracking
+import ARImageTracking, { type TrackedImageResult, type TrackableImage } from './ARImageTracking';
 
 // Icons for improved UI
 import { X, Play, MapPin, Camera, CheckCircle, RotateCcw, Anchor, Lightbulb, Layers } from 'lucide-react';
@@ -32,6 +32,8 @@ type Attraction = {
   ar_model_url?: string;
   ar_hotspots?: ARData;
   qr_code?: string;
+  reference_image_url?: string;
+  qr_physical_width?: number;
 };
 
 interface WebXRSceneProps {
@@ -58,7 +60,16 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   
   // Estado para image tracking (preparado para uso futuro)
   // const [trackedImages, setTrackedImages] = useState<Map<string, TrackedImageResult>>(new Map());
-  // const [trackableImages, setTrackableImages] = useState<TrackableImage[]>([]);
+  // Preparar imágenes rastreables si el atractivo tiene `reference_image_url`
+  const trackableImages: TrackableImage[] = useMemo(() => {
+    if (!attraction.reference_image_url) return [];
+    return [{
+      id: attraction.id,
+      name: attraction.name,
+      imageUrl: attraction.reference_image_url,
+      widthInMeters: Number(attraction.qr_physical_width ?? 0.15)
+    }];
+  }, [attraction.reference_image_url, attraction.id, attraction.name, attraction.qr_physical_width]);
   
   // Crear XR Store - @react-three/xr v6
   // Las features de sesión se configuran automáticamente según el modo (AR/VR)
@@ -291,16 +302,22 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           />
           
           {/* Image Tracking: Detectar QR codes y marcadores para posicionar objetos */}
-          {/* Preparado para uso futuro cuando se configuren imágenes rastreables */}
-          {/* {trackableImages.length > 0 && (
-            <ARImageTracking 
+          {/* Activar ARImageTracking automáticamente si hay una imagen de referencia */}
+          {trackableImages.length > 0 && (
+            <ARImageTracking
               images={trackableImages}
-              onImageDetected={handleImageDetected}
-              onImageLost={handleImageLost}
+              onImageDetected={(result: TrackedImageResult) => {
+                console.log('📷 Imagen detectada (WebXRScene):', result);
+                setFeatures(prev => ({ ...prev, imageTracking: true }));
+                if (!placedObject) {
+                  setPlacedObject({ position: result.position.clone(), rotation: new THREE.Quaternion().setFromEuler(result.rotation) });
+                }
+              }}
+              onImageLost={(id: string) => { console.log('📷 Imagen perdida (WebXRScene):', id); }}
               autoCreateAnchors={true}
               showDebugMarkers={true}
             />
-          )} */}
+          )}
           
           {/* ========================================
               Standard AR Scene Setup

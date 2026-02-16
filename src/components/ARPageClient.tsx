@@ -21,6 +21,8 @@ type Attraction = {
   ar_model_url?: string;
   ar_hotspots?: ARData;
   qr_code?: string;
+  reference_image_url?: string;
+  qr_physical_width?: number;
 };
 
 type ARPageClientProps = {

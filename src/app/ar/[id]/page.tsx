@@ -21,6 +21,8 @@ type Attraction = {
   ar_model_url?: string;
   ar_hotspots?: ARData;
   qr_code?: string;
+  reference_image_url?: string;
+  qr_physical_width?: number;
 };
 
 export default async function ARPage({ params }: ARPageProps) {
@@ -29,7 +31,7 @@ export default async function ARPage({ params }: ARPageProps) {
   // Cargar datos del atractivo
   const { data: attraction, error } = await supabase
     .from('attractions')
-    .select('id,name,description,image_url,category,lat,lng,has_ar_content,ar_model_url,ar_hotspots,qr_code')
+    .select('id,name,description,image_url,category,lat,lng,has_ar_content,ar_model_url,ar_hotspots,qr_code,reference_image_url,qr_physical_width')
     .eq('id', id)
     .maybeSingle();
 
@@ -50,6 +52,8 @@ export default async function ARPage({ params }: ARPageProps) {
     ar_model_url: attraction.ar_model_url || undefined,
     ar_hotspots: normalizeARData(attraction.ar_hotspots),
     qr_code: attraction.qr_code || undefined,
+    reference_image_url: attraction.reference_image_url || undefined,
+    qr_physical_width: attraction.qr_physical_width ?? undefined,
   };
 
   // Si no tiene contenido AR, redirigir al detalle normal
