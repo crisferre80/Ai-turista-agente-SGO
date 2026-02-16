@@ -153,11 +153,13 @@ export default function GPSObjectPositioner({
         marker.on('dragend', async () => {
           const lngLat = marker.getLngLat();
           try {
-            const { error } = await supabase
-              .from('ar_positioned_objects')
-              .update({ latitude: lngLat.lat, longitude: lngLat.lng })
-              .eq('id', pos.id);
-            if (error) throw error;
+            // Use server API to avoid RLS issues
+            const res = await fetch('/api/ar-position', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: pos.id, latitude: lngLat.lat, longitude: lngLat.lng })
+            });
+            if (!res.ok) throw new Error('failed_update');
             // Update local state
             setPositions(prev => prev.map(p => p.id === pos.id ? { ...p, latitude: lngLat.lat, longitude: lngLat.lng } : p));
           } catch (err) {
@@ -341,19 +343,24 @@ export default function GPSObjectPositioner({
 
     setLoading(true);
     try {
-      // Insertar sin .select() para evitar que la REST API haga una segunda consulta (?select=*)
-      const { error } = await supabase
-        .from('ar_positioned_objects')
-        .insert({
+      // Call server-side endpoint to create position (uses service role)
+      const res = await fetch('/api/ar-position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           attraction_id: attractionId,
           latitude: selectedLat,
           longitude: selectedLng,
           altitude: altitude,
           label: label.trim(),
           model_url: modelUrl || null
-        });
+        })
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || 'server_error');
+      }
 
       // Recargar posiciones desde la BD para obtener la fila insertada
       await loadPositions();
@@ -378,12 +385,8 @@ export default function GPSObjectPositioner({
     if (!confirm('¿Eliminar esta posición?')) return;
 
     try {
-      const { error } = await supabase
-        .from('ar_positioned_objects')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const res = await fetch(`/api/ar-position?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete_failed');
 
       // Remove marker from map if exists
       if (markersRef.current[id]) {

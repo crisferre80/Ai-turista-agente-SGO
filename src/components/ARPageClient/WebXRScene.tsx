@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, ARButton, createXRStore } from '@react-three/xr';
 import { Environment, Html } from '@react-three/drei';
@@ -149,6 +149,8 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+      {/* Device camera preview before entering AR (uses getUserMedia) */}
+      <DeviceCameraPreview />
       {/* Header — compacto y profesional */}
       <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between">
         <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm border border-white/8 rounded-lg p-2 px-3 shadow-sm animate-header-in">
@@ -541,6 +543,55 @@ function LoadingModel() {
       <sphereGeometry args={[0.2, 16, 16]} />
       <meshBasicMaterial color="#666" wireframe />
     </mesh>
+  );
+}
+
+// Small helper component: show device camera preview using getUserMedia
+function DeviceCameraPreview() {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    let stream: MediaStream | null = null;
+
+    const start = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        if (!mounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+          setActive(true);
+        }
+      } catch (err) {
+        // permission denied or not available
+        setActive(false);
+        if (stream) stream.getTracks().forEach(t => t.stop());
+      }
+    };
+
+    start();
+
+    return () => {
+      mounted = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  // Renders a full-bleed video behind the canvas. Pointer events disabled so UI remains interactive.
+  return (
+    <video
+      ref={videoRef}
+      className={`absolute inset-0 w-full h-full object-cover ${active ? 'opacity-100' : 'opacity-0'}`}
+      style={{ zIndex: 0, pointerEvents: 'none' }}
+      playsInline
+      muted
+    />
   );
 }
 
