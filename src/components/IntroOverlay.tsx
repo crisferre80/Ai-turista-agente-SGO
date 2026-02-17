@@ -196,6 +196,7 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 <div style={{ position: 'relative' }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
+                                        className="intro-avatar"
                                         src={isSpeaking ? "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.webp" : SANTI_AVATAR}
                                         alt="Santi"
                                         style={{
@@ -264,6 +265,45 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
 
                     @media (min-width: 900px) {
                         .intro-grid { grid-template-columns: 1.2fr 0.8fr; }
+                    }
+                `}</style>
+                <style jsx>{`
+                    /* Mobile adjustments: ensure titles/text are visible and avatar scales down */
+                    @media (max-width: 768px) {
+                        .intro-content {
+                            padding: 24px !important;
+                            box-sizing: border-box;
+                            min-height: 100vh;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        .intro-grid {
+                            grid-template-columns: 1fr !important;
+                            gap: 16px !important;
+                            align-items: center !important;
+                        }
+
+                        .intro-avatar {
+                            max-height: 42vh !important;
+                            height: auto !important;
+                            width: auto !important;
+                            transform: none !important;
+                        }
+
+                        .start-button {
+                            padding: 14px 36px !important;
+                            font-size: 1.1rem !important;
+                        }
+
+                        h1 {
+                            font-size: clamp(1.8rem, 8vw, 2.8rem) !important;
+                        }
+
+                        p {
+                            font-size: clamp(0.95rem, 4vw, 1.15rem) !important;
+                        }
                     }
                 `}</style>
             </div>

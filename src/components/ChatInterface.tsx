@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { stopSantiNarration } from '@/lib/speech';
 
 declare global {
     interface Window {
@@ -1426,7 +1427,19 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         width={200}
                         height={200}
                         unoptimized
-                        onClick={() => { setShowBubbleManual(prev => !prev); setIsIdle(false); updateInteractionTime(); }}
+                        onClick={() => { 
+                            setShowBubbleManual(prev => !prev); 
+                            setIsIdle(false); 
+                            updateInteractionTime(); 
+                            try { stopSantiNarration(); } catch (e) { /* ignore */ }
+                            try {
+                                if (audioRef.current && !audioRef.current.paused) {
+                                    audioRef.current.pause();
+                                    audioRef.current.currentTime = 0;
+                                }
+                            } catch (e) { /* ignore */ }
+                            setIsSpeaking(false);
+                        }}
                         style={{
                             height: isSpeaking ? 'clamp(250px, 40vh, 450px)' : 'clamp(120px, 20vh, 200px)',
                             width: 'auto',
