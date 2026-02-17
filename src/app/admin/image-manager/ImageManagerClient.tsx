@@ -257,26 +257,7 @@ export default function ImageManagerPage() {
     router.push('/admin');
   }, [isNewPlaceContext, files, currentFolder, bucketName, mode, router]);
 
-    // React to selection changes to perform safe (post-render) assignments
-    useEffect(() => {
-      if (selectedFiles.size === 0) return;
-
-      // If creating a new place and selecting main image -> assign first selected and navigate
-      if (isNewPlaceContext && mode === 'place-main-new') {
-        // Assign only the first selected image for main
-        const firstId = Array.from(selectedFiles)[0];
-        if (firstId) {
-          assignSelectedToNewPlace(new Set([firstId]));
-        }
-        return;
-      }
-
-      // For editing an existing attraction opened with attractionIdParam, auto-assign only when
-      // assigning the main image. For gallery assignment, user must confirm via modal/button
-      if (hasPreselectedAttraction && assignmentType === 'main') {
-        assignSelectedToAttraction(selectedFiles);
-      }
-    }, [selectedFiles, isNewPlaceContext, mode, hasPreselectedAttraction, assignmentType, assignSelectedToNewPlace, assignSelectedToAttraction]);
+  
 
   const handleSelectAll = () => {
     if (selectedFiles.size === files.length) {
@@ -397,6 +378,27 @@ export default function ImageManagerPage() {
       alert('Error al asignar las imágenes');
     }
   }, [attractionIdParam, selectedAttraction, files, currentFolder, bucketName, assignmentType, router, loadAttractions]);
+
+  // React to selection changes to perform safe (post-render) assignments
+  useEffect(() => {
+    if (selectedFiles.size === 0) return;
+
+    // If creating a new place and selecting main image -> assign first selected and navigate
+    if (isNewPlaceContext && mode === 'place-main-new') {
+      // Assign only the first selected image for main
+      const firstId = Array.from(selectedFiles)[0];
+      if (firstId) {
+        assignSelectedToNewPlace(new Set([firstId]));
+      }
+      return;
+    }
+
+    // For editing an existing attraction opened with attractionIdParam, auto-assign only when
+    // assigning the main image. For gallery assignment, user must confirm via modal/button
+    if (hasPreselectedAttraction && assignmentType === 'main') {
+      assignSelectedToAttraction(selectedFiles);
+    }
+  }, [selectedFiles, isNewPlaceContext, mode, hasPreselectedAttraction, assignmentType, assignSelectedToNewPlace, assignSelectedToAttraction]);
 
   const handleFolderClick = (folderName: string) => {
     setCurrentFolder(prev => prev ? `${prev}${folderName}` : folderName);
