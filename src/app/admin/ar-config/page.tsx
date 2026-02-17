@@ -467,6 +467,19 @@ export default function ARConfigPage() {
           transform: (latestModelTransformRef.current || modelTransform),
           sceneName: selectedAttraction.name,
         });
+      } else if (arEnabled && (!modelUrl || modelUrl.trim() === '')) {
+        // Si AR está habilitado pero no hay modelo, limpiar scene_entities del modelo
+        // pero mantener otros elementos (hotspots, primitivas)
+        try {
+          await supabase
+            .from('scene_entities')
+            .delete()
+            .eq('attraction_id', selectedAttraction.id)
+            .eq('entity_type', 'model');
+        } catch (cleanupError) {
+          console.warn('Error limpiando scene_entities:', cleanupError);
+          // No fallar el guardado por esto
+        }
       }
 
       const { error } = await supabase

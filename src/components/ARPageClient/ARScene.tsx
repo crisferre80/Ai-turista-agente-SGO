@@ -61,9 +61,21 @@ export default function ARScene({
     ? [0, phonePreview.yOffset, -phonePreview.cameraDistance] // Usar los valores de calibración AR
     : anchorPosition; // O usar la posición por defecto
 
+  // Sincronizar modelTransform desde props cuando cambia (para vista previa en tiempo real)
+  useEffect(() => {
+    const propTransform = attraction.ar_hotspots?.modelTransform as { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number }; scale: { x: number; y: number; z: number } } | undefined;
+    if (propTransform) {
+      setModelTransform(propTransform);
+    }
+  }, [attraction.ar_hotspots?.modelTransform]);
+
   // Preferir el esquema nuevo si existe (scenes/scene_entities)
   // Esto permite que el runtime aplique las transformaciones persistidas.
+  // SOLO para IDs reales (no para vista previa)
   useEffect(() => {
+    // Evitar carga DB para IDs de preview
+    if (attraction.id === 'preview-phone' || attraction.id.startsWith('preview-')) return;
+    
     let cancelled = false;
     (async () => {
       try {

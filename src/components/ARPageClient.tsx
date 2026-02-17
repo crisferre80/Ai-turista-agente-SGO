@@ -359,6 +359,21 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           disableOrbitControls={isPlaced && isMobileDevice()}
           anchorPosition={anchorPosition}
           isAnchored={isPlaced}
+          phonePreview={
+            attraction.ar_hotspots?.phonePreview
+              ? {
+                  cameraDistance: typeof attraction.ar_hotspots.phonePreview.cameraDistance === 'number' 
+                    ? attraction.ar_hotspots.phonePreview.cameraDistance 
+                    : 3.0,
+                  yOffset: typeof attraction.ar_hotspots.phonePreview.yOffset === 'number'
+                    ? attraction.ar_hotspots.phonePreview.yOffset
+                    : 0,
+                  previewScale: typeof attraction.ar_hotspots.phonePreview.previewScale === 'number'
+                    ? attraction.ar_hotspots.phonePreview.previewScale
+                    : 1.0
+                }
+              : undefined
+          }
         />
         </Canvas>
       )}

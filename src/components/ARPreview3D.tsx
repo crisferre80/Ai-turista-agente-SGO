@@ -565,6 +565,15 @@ export default function ARPreview3D({
   const [anchorYOffset, setAnchorYOffset] = useState<number>(0); // ajuste de altura del ancla (0 = nivel del suelo)
   const [arModelScale, setArModelScale] = useState<number>(1.0); // escala del modelo en AR
 
+  // Normalizar phonePreview entrante para asegurar valores numéricos
+  const phonePreviewForScene = phonePreview
+    ? {
+        cameraDistance: typeof phonePreview.cameraDistance === 'number' ? phonePreview.cameraDistance : anchorDistance,
+        yOffset: typeof phonePreview.yOffset === 'number' ? phonePreview.yOffset : anchorYOffset,
+        previewScale: typeof phonePreview.previewScale === 'number' ? phonePreview.previewScale : arModelScale,
+      }
+    : { cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale };
+
   const syncModelStateFromGroup = () => {
     const obj = modelGroupRef.current;
     if (!obj) return;
@@ -616,30 +625,33 @@ export default function ARPreview3D({
     // Marcar que este cambio viene de afuera para no re-emitirlo al padre.
     isApplyingExternalTransformRef.current = true;
 
-    // Defer state updates to avoid synchronous setState inside effect (ESLint rule)
-    setTimeout(() => {
-      setModelPosition({ ...modelTransform.position });
-      setModelRotation({ ...modelTransform.rotation });
-      setModelScale({ ...modelTransform.scale });
+    // Aplicar cambios directamente sin setTimeout para evitar condiciones de carrera
+    setModelPosition({ ...modelTransform.position });
+    setModelRotation({ ...modelTransform.rotation });
+    setModelScale({ ...modelTransform.scale });
 
-      if (modelGroupRef.current) {
-        modelGroupRef.current.position.set(
-          modelTransform.position.x,
-          modelTransform.position.y,
-          modelTransform.position.z
-        );
-        modelGroupRef.current.rotation.set(
-          modelTransform.rotation.x,
-          modelTransform.rotation.y,
-          modelTransform.rotation.z
-        );
-        modelGroupRef.current.scale.set(
-          modelTransform.scale.x,
-          modelTransform.scale.y,
-          modelTransform.scale.z
-        );
-      }
-    }, 0);
+    if (modelGroupRef.current) {
+      modelGroupRef.current.position.set(
+        modelTransform.position.x,
+        modelTransform.position.y,
+        modelTransform.position.z
+      );
+      modelGroupRef.current.rotation.set(
+        modelTransform.rotation.x,
+        modelTransform.rotation.y,
+        modelTransform.rotation.z
+      );
+      modelGroupRef.current.scale.set(
+        modelTransform.scale.x,
+        modelTransform.scale.y,
+        modelTransform.scale.z
+      );
+    }
+
+    // Resetear flag después de aplicar
+    requestAnimationFrame(() => {
+      isApplyingExternalTransformRef.current = false;
+    });
   }, [modelTransform]);
 
   // Guardar la referencia al callback externo para evitar re-ejecuciones
@@ -1317,22 +1329,22 @@ export default function ARPreview3D({
                       lng: 0,
                       ar_model_url: modelUrl,
                       ar_hotspots: {
-                        hotspots,
-                        primitives,
-                        modelTransform: {
-                          position: modelPosition,
-                          rotation: modelRotation,
-                          scale: modelScale
+                          hotspots,
+                          primitives,
+                          modelTransform: modelTransform ? modelTransform : {
+                            position: modelPosition,
+                            rotation: modelRotation,
+                            scale: modelScale
+                          },
+                          phonePreview: phonePreviewForScene
                         },
-                        phonePreview: { cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale }
-                      },
                       has_ar_content: true
                     }}
                     showGrid={true}
                     disableOrbitControls={true}
-                    anchorPosition={[0, anchorYOffset, -anchorDistance]}
+                    anchorPosition={[0, phonePreviewForScene.yOffset, -phonePreviewForScene.cameraDistance]}
                     isAnchored={true}
-                    phonePreview={{ cameraDistance: anchorDistance, yOffset: anchorYOffset, previewScale: arModelScale }}
+                    phonePreview={phonePreviewForScene}
                   />
                 </Suspense>
               </Canvas>
@@ -1600,12 +1612,18 @@ export default function ARPreview3D({
                   value={modelPosition[axis].toFixed(2)}
                   onChange={(e) => {
                     const v = parseFloat(e.target.value) || 0;
+                    // Marcar que este cambio es local para no reaplicar desde props
+                    isTransformingRef.current = true;
                     setModelPosition(prev => ({ ...prev, [axis]: v }));
                     if (modelGroupRef.current) {
                       if (axis === 'x') modelGroupRef.current.position.x = v;
                       if (axis === 'y') modelGroupRef.current.position.y = v;
                       if (axis === 'z') modelGroupRef.current.position.z = v;
                     }
+                    // Resetear flag después de un frame para permitir sync
+                    requestAnimationFrame(() => {
+                      isTransformingRef.current = false;
+                    });
                   }}
                   style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
                 />
@@ -1622,12 +1640,16 @@ export default function ARPreview3D({
                   value={modelScale[axis].toFixed(2)}
                   onChange={(e) => {
                     const v = parseFloat(e.target.value) || 0.1;
+                    isTransformingRef.current = true;
                     setModelScale(prev => ({ ...prev, [axis]: v }));
                     if (modelGroupRef.current) {
                       if (axis === 'x') modelGroupRef.current.scale.x = v;
                       if (axis === 'y') modelGroupRef.current.scale.y = v;
                       if (axis === 'z') modelGroupRef.current.scale.z = v;
                     }
+                    requestAnimationFrame(() => {
+                      isTransformingRef.current = false;
+                    });
                   }}
                   style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
                 />
@@ -1643,12 +1665,16 @@ export default function ARPreview3D({
                   value={modelRotation[axis].toFixed(2)}
                   onChange={(e) => {
                     const v = parseFloat(e.target.value) || 0;
+                    isTransformingRef.current = true;
                     setModelRotation(prev => ({ ...prev, [axis]: v }));
                     if (modelGroupRef.current) {
                       if (axis === 'x') modelGroupRef.current.rotation.x = v;
                       if (axis === 'y') modelGroupRef.current.rotation.y = v;
                       if (axis === 'z') modelGroupRef.current.rotation.z = v;
                     }
+                    requestAnimationFrame(() => {
+                      isTransformingRef.current = false;
+                    });
                   }}
                   style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
                 />
@@ -1656,9 +1682,24 @@ export default function ARPreview3D({
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setModelPosition({ x: 0, y: 0, z: 0 }); if (modelGroupRef.current) modelGroupRef.current.position.set(0,0,0); }} style={{ padding: '6px 10px', background: '#374151', border: 'none', borderRadius: 6, color: 'white' }}>Resetear posición</button>
-              <button onClick={() => { setModelRotation({ x:0,y:0,z:0 }); if (modelGroupRef.current) modelGroupRef.current.rotation.set(0,0,0); }} style={{ padding: '6px 10px', background: '#6b21a8', border: 'none', borderRadius: 6, color: 'white' }}>Resetear rotación</button>
-              <button onClick={() => { setModelScale({ x:1,y:1,z:1 }); if (modelGroupRef.current) modelGroupRef.current.scale.set(1,1,1); }} style={{ padding: '6px 10px', background: '#0ea5a0', border: 'none', borderRadius: 6, color: 'white' }}>Resetear escala</button>
+              <button onClick={() => { 
+                isTransformingRef.current = true;
+                setModelPosition({ x: 0, y: 0, z: 0 }); 
+                if (modelGroupRef.current) modelGroupRef.current.position.set(0,0,0);
+                requestAnimationFrame(() => { isTransformingRef.current = false; });
+              }} style={{ padding: '6px 10px', background: '#374151', border: 'none', borderRadius: 6, color: 'white' }}>Resetear posición</button>
+              <button onClick={() => { 
+                isTransformingRef.current = true;
+                setModelRotation({ x:0,y:0,z:0 }); 
+                if (modelGroupRef.current) modelGroupRef.current.rotation.set(0,0,0);
+                requestAnimationFrame(() => { isTransformingRef.current = false; });
+              }} style={{ padding: '6px 10px', background: '#6b21a8', border: 'none', borderRadius: 6, color: 'white' }}>Resetear rotación</button>
+              <button onClick={() => { 
+                isTransformingRef.current = true;
+                setModelScale({ x:1,y:1,z:1 }); 
+                if (modelGroupRef.current) modelGroupRef.current.scale.set(1,1,1);
+                requestAnimationFrame(() => { isTransformingRef.current = false; });
+              }} style={{ padding: '6px 10px', background: '#0ea5a0', border: 'none', borderRadius: 6, color: 'white' }}>Resetear escala</button>
             </div>
           </div>
         )}
@@ -1807,7 +1848,20 @@ export default function ARPreview3D({
               <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Cámara</button>
-                <button onClick={() => { if (confirm('¿Resetear posición/rot/escala?')) { setModelPosition({ x:0,y:0,z:0 }); setModelRotation({ x:0,y:0,z:0 }); setModelScale({ x:1,y:1,z:1 }); } }} style={{ padding: '6px 10px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Modelo</button>
+                <button onClick={() => { 
+                  if (confirm('¿Resetear posición/rot/escala?')) { 
+                    isTransformingRef.current = true;
+                    setModelPosition({ x:0,y:0,z:0 }); 
+                    setModelRotation({ x:0,y:0,z:0 }); 
+                    setModelScale({ x:1,y:1,z:1 });
+                    if (modelGroupRef.current) {
+                      modelGroupRef.current.position.set(0,0,0);
+                      modelGroupRef.current.rotation.set(0,0,0);
+                      modelGroupRef.current.scale.set(1,1,1);
+                    }
+                    requestAnimationFrame(() => { isTransformingRef.current = false; });
+                  } 
+                }} style={{ padding: '6px 10px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Modelo</button>
                 <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
 
                 {/* Calibración AR - Conceptos WebXR */}
