@@ -318,10 +318,6 @@ export default function ImageManagerPage() {
     }
   };
 
-  const handleAssignToAttraction = useCallback(async () => {
-    await assignSelectedToAttraction(selectedFiles);
-  }, [assignSelectedToAttraction, selectedFiles]);
-
   // Función auxiliar que recibe un Set de fileIds y realiza la asignación
   const assignSelectedToAttraction = useCallback(async (fileIdSet: Set<string>) => {
     const targetAttractionId = attractionIdParam || selectedAttraction;
@@ -378,6 +374,10 @@ export default function ImageManagerPage() {
       alert('Error al asignar las imágenes');
     }
   }, [attractionIdParam, selectedAttraction, files, currentFolder, bucketName, assignmentType, router, loadAttractions]);
+
+  const handleAssignToAttraction = useCallback(async () => {
+    await assignSelectedToAttraction(selectedFiles);
+  }, [assignSelectedToAttraction, selectedFiles]);
 
   // React to selection changes to perform safe (post-render) assignments
   useEffect(() => {

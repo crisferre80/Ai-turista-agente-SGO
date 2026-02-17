@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import NextImage from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
@@ -183,9 +183,10 @@ export default function AdminDashboard() {
     }, []);
 
     // Si venimos desde el Image Manager para editar un atractivo, abrir el editor
-    const searchParams = useSearchParams();
     useEffect(() => {
-        const editId = searchParams.get('editAttractionId');
+        if (typeof window === 'undefined') return;
+        const sp = new URLSearchParams(window.location.search);
+        const editId = sp.get('editAttractionId');
         if (!editId) return;
 
         // Traer el atractivo actualizado desde Supabase para asegurarnos
@@ -211,7 +212,7 @@ export default function AdminDashboard() {
                 console.error('Error fetching edited attraction:', e);
             }
         })();
-    }, [searchParams, router]);
+    }, [router]);
 
     const fetchData = async () => {
         setLoading(true);
