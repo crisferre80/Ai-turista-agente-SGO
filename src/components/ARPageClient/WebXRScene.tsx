@@ -70,11 +70,70 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
       widthInMeters: Number(attraction.qr_physical_width ?? 0.15)
     }];
   }, [attraction.reference_image_url, attraction.id, attraction.name, attraction.qr_physical_width]);
+
+  // Preload reference images as ImageBitmap so we can pass them to requestSession.trackedImages
+  const [loadedTrackableImages, setLoadedTrackableImages] = useState<TrackableImage[]>([]);
+  const [loadingTrackables, setLoadingTrackables] = useState(false);
+  const [preloadError, setPreloadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const localLoaded: TrackableImage[] = [];
+
+    const loadAll = async () => {
+      if (trackableImages.length === 0) return;
+      setLoadingTrackables(true);
+      setPreloadError(null);
+      try {
+        for (const img of trackableImages) {
+          try {
+            const resp = await fetch(img.imageUrl);
+            const blob = await resp.blob();
+            const bitmap = await createImageBitmap(blob);
+            if (!mounted) {
+              bitmap.close();
+              return;
+            }
+            localLoaded.push({ ...img, bitmap });
+          } catch (err) {
+            console.warn('Error preloading trackable image', img.imageUrl, err);
+            setPreloadError(prev => prev ?? String(err || 'unknown'));
+          }
+        }
+
+        if (mounted) {
+          setLoadedTrackableImages(localLoaded);
+          console.log('✅ Preloaded trackable images for AR session', localLoaded.length, localLoaded.map(l=>l.imageUrl));
+        }
+      } catch (err) {
+        console.error('Error preloading images', err);
+        if (mounted) setPreloadError(String(err || 'unknown'));
+      } finally {
+        if (mounted) setLoadingTrackables(false);
+      }
+    };
+
+    loadAll();
+
+    return () => {
+      mounted = false;
+      localLoaded.forEach(li => { try { li.bitmap?.close(); } catch {} });
+    };
+  }, [trackableImages, reloadKey]);
   
   // Crear XR Store - @react-three/xr v6
   // Las features de sesión se configuran automáticamente según el modo (AR/VR)
   // Para habilitar features opcionales, se pueden especificar al entrar en sesión
   const store = createXRStore();
+
+  // Prepare extra props for ARButton (sessionInit) in a TS-friendly way
+  const arButtonExtraProps = loadedTrackableImages.length > 0 ? {
+    sessionInit: {
+      optionalFeatures: ['local-floor', 'bounded-floor', 'anchors', 'hit-test', 'image-tracking'],
+      trackedImages: loadedTrackableImages.map(img => ({ image: img.bitmap, widthInMeters: img.widthInMeters }))
+    }
+  } : {};
 
   const handlePlace = (result: { position: THREE.Vector3; rotation: THREE.Quaternion }) => {
     // Solo permitir una colocación
@@ -219,6 +278,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
       {/* AR action (primary) */}
       <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-3">
         <ARButton
+          {...(arButtonExtraProps as unknown as Record<string, unknown>)}
           store={store}
           className="flex items-center gap-3 bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-semibold py-3 px-5 rounded-full shadow-xl transition-all duration-200 transform hover:scale-102 border border-white/10 animate-ar-button"
           onError={(error) => {
@@ -229,6 +289,29 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           <Play className="h-4 w-4" />
           <span className="uppercase tracking-wide text-sm">Iniciar AR</span>
         </ARButton>
+
+        {/* Preload status: spinner, success badge or retry button */}
+        <div className="ml-3 flex items-center">
+          {loadingTrackables ? (
+            <div className="flex items-center gap-2 text-white text-sm">
+              <div style={{width:20,height:20,border:'3px solid rgba(255,255,255,0.6)',borderTopColor:'transparent',borderRadius:'50%'}} className="animate-spin" />
+              <span>cargando imagen de referencia...</span>
+            </div>
+          ) : loadedTrackableImages.length > 0 ? (
+            <div className="inline-flex items-center gap-2 bg-green-600/80 text-white px-3 py-1 rounded-full text-sm">
+              <span style={{width:28,height:28,overflow:'hidden',display:'inline-block',borderRadius:6}}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={loadedTrackableImages[0].imageUrl} alt="ref" style={{width:'100%',height:'100%',objectFit:'cover'}} />
+              </span>
+              <span>Imagen de referencia lista</span>
+            </div>
+          ) : preloadError ? (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setReloadKey(k => k + 1)} className="bg-red-600 text-white px-3 py-1 rounded-md text-sm">Reintentar carga</button>
+              <span className="text-sm text-red-300">Error cargando imagen</span>
+            </div>
+          ) : null}
+        </div>
 
         {/* Reset button - solo visible si ya se colocó el objeto */}
         {placedObject && (
@@ -307,7 +390,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
           {/* Activar ARImageTracking automáticamente si hay una imagen de referencia */}
           {trackableImages.length > 0 && (
             <ARImageTracking
-              images={trackableImages}
+              images={loadedTrackableImages.length > 0 ? loadedTrackableImages : trackableImages}
               onImageDetected={(result: TrackedImageResult) => {
                 console.log('📷 Imagen detectada (WebXRScene):', result);
                 setFeatures(prev => ({ ...prev, imageTracking: true }));
