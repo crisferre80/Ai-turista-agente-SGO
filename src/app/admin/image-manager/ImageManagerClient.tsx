@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Check, Trash2, Folder, Image as ImageIcon, ArrowLeft, Plus } from 'lucide-react';
+import { Check, Trash2, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface FileMetadata {
@@ -61,31 +61,31 @@ function ImageCard({ file, bucketName, currentFolder, isSelected, onSelect, onDe
           onSelect(file.id);
         }}
       >
-        <div
-          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
-            isSelected
-              ? 'bg-blue-500 border-blue-500 text-white'
-              : 'bg-white border-gray-300 hover:border-blue-400'
-          }`}
-        >
-          {isSelected && <Check size={14} />}
+          <div
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+              isSelected
+                ? 'bg-blue-500 border-blue-500 text-white'
+                : 'bg-white border-gray-300 hover:border-blue-400'
+            }`}
+          >
+            {isSelected && <Check size={12} />}
+          </div>
         </div>
-      </div>
 
       <button
         onClick={(e) => {
           e.stopPropagation();
           onDelete(file.id);
         }}
-        className="absolute top-2 right-2 z-10 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-lg transition-colors shadow-md"
+        className="absolute top-2 right-2 z-10 bg-red-500 hover:bg-red-600 text-white p-1 rounded-lg transition-colors shadow-md"
       >
-        <Trash2 size={14} />
+        <Trash2 size={12} />
       </button>
 
-      <div className="aspect-[3/4] bg-gray-100 flex items-center justify-center relative">
+      <div className="aspect-[4/5] bg-gray-100 flex items-center justify-center relative">
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
           </div>
         )}
 
@@ -109,8 +109,8 @@ function ImageCard({ file, bucketName, currentFolder, isSelected, onSelect, onDe
         )}
       </div>
 
-      <div className="p-3 border-t border-gray-100 bg-white/80 backdrop-blur-sm">
-        <h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate" title={file.name}>
+      <div className="p-2 border-t border-gray-100 bg-white/80 backdrop-blur-sm">
+        <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate" title={file.name}>
           {file.name}
         </h3>
         <p className="text-[11px] text-gray-500 mt-1 flex items-center justify-between gap-2">
@@ -167,6 +167,10 @@ export default function ImageManagerPage() {
   useEffect(() => {
     loadAttractions();
   }, [loadAttractions]);
+
+  useEffect(() => {
+    console.debug('ImageManager: modeParam=', modeParam, 'attractionIdParam=', attractionIdParam, 'isNewPlaceContext=', isNewPlaceContext, 'hasPreselectedAttraction=', hasPreselectedAttraction);
+  }, [modeParam, attractionIdParam, isNewPlaceContext, hasPreselectedAttraction]);
 
   const loadFiles = useCallback(async (folderPath: string = '') => {
     try {
@@ -227,6 +231,53 @@ export default function ImageManagerPage() {
     });
   };
 
+  // Asigna las imágenes seleccionadas a un nuevo atractivo (guarda en localStorage y vuelve a /admin)
+  const assignSelectedToNewPlace = useCallback((fileIdSet: Set<string>) => {
+    if (!isNewPlaceContext || fileIdSet.size === 0) return;
+
+    const selectedFileObjects = files.filter(f => fileIdSet.has(f.id));
+    const imageUrls = selectedFileObjects.map(f => {
+      const fullPath = currentFolder ? `${currentFolder}${f.name}` : f.name;
+      return supabase.storage.from(bucketName).getPublicUrl(fullPath).data.publicUrl;
+    });
+
+    if (typeof window === 'undefined') return;
+
+    if (mode === 'place-main-new') {
+      const mainUrl = imageUrls[0];
+      if (mainUrl) {
+        window.localStorage.setItem('pendingNewPlaceMainImage', mainUrl);
+      }
+    } else if (mode === 'place-gallery-new') {
+      if (imageUrls.length > 0) {
+        window.localStorage.setItem('pendingNewPlaceGalleryImages', JSON.stringify(imageUrls));
+      }
+    }
+
+    router.push('/admin');
+  }, [isNewPlaceContext, files, currentFolder, bucketName, mode, router]);
+
+    // React to selection changes to perform safe (post-render) assignments
+    useEffect(() => {
+      if (selectedFiles.size === 0) return;
+
+      // If creating a new place and selecting main image -> assign first selected and navigate
+      if (isNewPlaceContext && mode === 'place-main-new') {
+        // Assign only the first selected image for main
+        const firstId = Array.from(selectedFiles)[0];
+        if (firstId) {
+          assignSelectedToNewPlace(new Set([firstId]));
+        }
+        return;
+      }
+
+      // For editing an existing attraction opened with attractionIdParam, auto-assign only when
+      // assigning the main image. For gallery assignment, user must confirm via modal/button
+      if (hasPreselectedAttraction && assignmentType === 'main') {
+        assignSelectedToAttraction(selectedFiles);
+      }
+    }, [selectedFiles, isNewPlaceContext, mode, hasPreselectedAttraction, assignmentType, assignSelectedToNewPlace, assignSelectedToAttraction]);
+
   const handleSelectAll = () => {
     if (selectedFiles.size === files.length) {
       setSelectedFiles(new Set());
@@ -286,19 +337,30 @@ export default function ImageManagerPage() {
     }
   };
 
-  const handleAssignToAttraction = async () => {
+  const handleAssignToAttraction = useCallback(async () => {
+    await assignSelectedToAttraction(selectedFiles);
+  }, [assignSelectedToAttraction, selectedFiles]);
+
+  // Función auxiliar que recibe un Set de fileIds y realiza la asignación
+  const assignSelectedToAttraction = useCallback(async (fileIdSet: Set<string>) => {
     const targetAttractionId = attractionIdParam || selectedAttraction;
-    if (!targetAttractionId || selectedFiles.size === 0) return;
+    if (!targetAttractionId || fileIdSet.size === 0) return;
 
     try {
-      const selectedFileObjects = files.filter(f => selectedFiles.has(f.id));
+      const selectedFileObjects = files.filter(f => fileIdSet.has(f.id));
       const imageUrls = selectedFileObjects.map(f => {
         const fullPath = currentFolder ? `${currentFolder}${f.name}` : f.name;
         return supabase.storage.from(bucketName).getPublicUrl(fullPath).data.publicUrl;
       });
 
-      const attraction = attractions.find(a => a.id === targetAttractionId);
-      if (!attraction) return;
+      // Obtener la versión más reciente del atractivo desde la DB
+      const { data: attractionFresh, error: fetchErr } = await supabase
+        .from('attractions')
+        .select('id, gallery_urls, image_url')
+        .eq('id', targetAttractionId)
+        .single();
+
+      if (fetchErr) throw fetchErr;
 
       if (assignmentType === 'main') {
         const { error } = await supabase
@@ -307,10 +369,13 @@ export default function ImageManagerPage() {
           .eq('id', targetAttractionId);
 
         if (error) throw error;
-        alert('Imagen principal asignada correctamente');
+        router.push(`/admin?editAttractionId=${targetAttractionId}`);
       } else {
-        const currentGallery = attraction.gallery_urls || [];
-        const newGallery = [...currentGallery, ...imageUrls];
+        const currentGallery: string[] = Array.isArray(attractionFresh?.gallery_urls) ? attractionFresh.gallery_urls : [];
+
+        // Unir evitando duplicados
+        const combined = [...currentGallery, ...imageUrls];
+        const newGallery = combined.filter((v, i) => combined.indexOf(v) === i);
 
         const { error } = await supabase
           .from('attractions')
@@ -318,7 +383,7 @@ export default function ImageManagerPage() {
           .eq('id', targetAttractionId);
 
         if (error) throw error;
-        alert(`${imageUrls.length} imagen(es) agregada(s) a la galería`);
+        router.push(`/admin?editAttractionId=${targetAttractionId}`);
       }
 
       setSelectedFiles(new Set());
@@ -331,19 +396,13 @@ export default function ImageManagerPage() {
       console.error('Error assigning images:', err);
       alert('Error al asignar las imágenes');
     }
-  };
+  }, [attractionIdParam, selectedAttraction, files, currentFolder, bucketName, assignmentType, router, loadAttractions]);
 
   const handleFolderClick = (folderName: string) => {
     setCurrentFolder(prev => prev ? `${prev}${folderName}` : folderName);
   };
 
-  const handleGoBack = () => {
-    if (currentFolder) {
-      const parts = currentFolder.split('/').filter(Boolean);
-      parts.pop();
-      setCurrentFolder(parts.length > 0 ? parts.join('/') + '/' : '');
-    }
-  };
+  
 
   const handleUseForNewPlace = () => {
     if (!isNewPlaceContext || selectedFiles.size === 0) return;
@@ -387,6 +446,14 @@ export default function ImageManagerPage() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-7xl mx-auto">
@@ -404,6 +471,52 @@ export default function ImageManagerPage() {
           </div>
         </div>
 
+        {showAttractionSelector && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-lg font-semibold mb-4">Asignar imágenes a atractivo</h2>
+
+              {hasPreselectedAttraction ? (
+                <div className="mb-4">
+                  <p className="text-sm">Asignando a atractivo preseleccionado: <strong>{attractions.find(a=>a.id===attractionIdParam)?.name || attractionIdParam}</strong></p>
+                </div>
+              ) : isNewPlaceContext ? (
+                <div className="mb-4">
+                  <p className="text-sm">Estás asignando imágenes a un <strong>nuevo atractivo</strong>. Al confirmar volverás al formulario de creación y las imágenes quedarán preseleccionadas.</p>
+                  <p className="text-xs text-gray-500 mt-2">Modo: {mode}</p>
+                </div>
+              ) : (
+                <div className="mb-4">
+                  <label className="text-sm block mb-2">Seleccionar atractivo</label>
+                  <select className="w-full border p-2 rounded" value={selectedAttraction || ''} onChange={(e) => setSelectedAttraction(e.target.value)}>
+                    <option value="">-- Elegir --</option>
+                    {attractions.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="mb-4">
+                <label className="text-sm block mb-2">Tipo de asignación</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setAssignmentType('main')} className={`px-3 py-2 rounded ${assignmentType==='main' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Imagen principal</button>
+                  <button onClick={() => setAssignmentType('gallery')} className={`px-3 py-2 rounded ${assignmentType==='gallery' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Galería</button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setShowAttractionSelector(false); }} className="px-3 py-2 bg-gray-200 rounded">Cancelar</button>
+                {isNewPlaceContext ? (
+                  <button onClick={() => { handleUseForNewPlace(); }} className="px-3 py-2 bg-blue-600 text-white rounded">Asignar a nuevo atractivo</button>
+                ) : (
+                  <button onClick={() => handleAssignToAttraction()} className="px-3 py-2 bg-blue-600 text-white rounded">Confirmar</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-1 bg-white p-4 rounded">
             <h3 className="text-sm font-medium mb-2">Carpetas</h3>
@@ -416,7 +529,7 @@ export default function ImageManagerPage() {
           </div>
 
           <div className="col-span-5">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {files.map(file => (
                 <ImageCard
                   key={file.id}

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import NextImage from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
@@ -181,6 +181,37 @@ export default function AdminDashboard() {
             window.localStorage.removeItem('pendingNewPlaceGalleryImages');
         }
     }, []);
+
+    // Si venimos desde el Image Manager para editar un atractivo, abrir el editor
+    const searchParams = useSearchParams();
+    useEffect(() => {
+        const editId = searchParams.get('editAttractionId');
+        if (!editId) return;
+
+        // Traer el atractivo actualizado desde Supabase para asegurarnos
+        // de tener la imagen/galería más reciente luego de la asignación.
+        (async () => {
+            try {
+                const { data: placeData, error: placeErr } = await supabase
+                    .from('attractions')
+                    .select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls')
+                    .eq('id', editId)
+                    .single();
+
+                if (placeErr) {
+                    console.warn('No se pudo cargar el atractivo editado:', placeErr.message || placeErr);
+                    return;
+                }
+
+                if (placeData) {
+                    startEditing(placeData as PlaceRecord);
+                    try { router.replace('/admin'); } catch (e) { /* ignore */ }
+                }
+            } catch (e) {
+                console.error('Error fetching edited attraction:', e);
+            }
+        })();
+    }, [searchParams, router]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -1252,7 +1283,7 @@ export default function AdminDashboard() {
                                         <button type="button" onClick={() => captureImage('place')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
                                         <button
                                             type="button"
-                                            onClick={() => router.push('/admin/image-manager?mode=place-main-new')}
+                                            onClick={() => router.push(editingId ? `/admin/image-manager?mode=place-main&attractionId=${editingId}` : '/admin/image-manager?mode=place-main-new')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
                                             🗂️ Galería
@@ -1266,7 +1297,7 @@ export default function AdminDashboard() {
                                         <button type="button" onClick={() => captureImage('gallery')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Galería</button>
                                         <button
                                             type="button"
-                                            onClick={() => router.push('/admin/image-manager?mode=place-gallery-new')}
+                                            onClick={() => router.push(editingId ? `/admin/image-manager?mode=place-gallery&attractionId=${editingId}` : '/admin/image-manager?mode=place-gallery-new')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
                                             🗂️ Buckets

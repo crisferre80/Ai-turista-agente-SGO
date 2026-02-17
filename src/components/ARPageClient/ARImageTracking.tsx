@@ -169,10 +169,12 @@ export default function ARImageTracking({
     if (typeof (xrSession as unknown as Record<string, unknown>).trackedImageScores !== 'undefined') {
       const timer = setTimeout(() => setIsSupported(true), 0);
       console.log('✅ Image Tracking soportado');
+      console.log('ℹ️ Session info:', xrSession);
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => setIsSupported(false), 0);
       console.warn('⚠️ Image Tracking NO soportado en este dispositivo');
+      console.warn('ℹ️ Session info (no image-tracking feature):', xrSession);
       return () => clearTimeout(timer);
     }
   }, [session]);
@@ -181,20 +183,41 @@ export default function ARImageTracking({
   useFrame((state) => {
     if (!session || !isSupported || loadedImages.length === 0) return;
 
+    // Debugging helpers: log some useful runtime info for inspection
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supportCheck = typeof (state as any).gl?.xr?.getFrame === 'function' && typeof (state as any).gl?.xr?.getReferenceSpace === 'function';
+      if (!supportCheck) {
+        console.debug('🔍 XR frame/referenceSpace helpers no disponibles (todavía).');
+      }
+      console.debug(`🔍 Loaded images: ${loadedImages.length}`, loadedImages.map(i => i.name));
+    } catch (e) {
+      // ignore
+    }
+
     const frame = (state as unknown as XRStateForFrame).gl?.xr?.getFrame?.() as XRFrame | undefined;
     if (!frame) return;
 
     try {
       // Obtener resultados de tracking de imágenes (tipo local)
       const trackedResults = frame.getImageTrackingResults?.() as XRImageTrackingResultLike[] | undefined;
-      if (!trackedResults) return;
+      if (!trackedResults) {
+        // No hay resultados en este frame
+        return;
+      }
+
+      console.debug(`🔁 ImageTracking results count: ${trackedResults.length}`);
 
       const currentTrackedIds = new Set<string>();
       const updatedMap = new Map<string, TrackedImageResult>();
 
-      trackedResults.forEach((result) => {
+      trackedResults.forEach((result, idx) => {
         const imageIndex = result.index as number;
-        if (imageIndex >= loadedImages.length) return;
+        console.debug(`🔎 result[${idx}] -> imageIndex=${imageIndex}, trackingState=${result.trackingState}, measuredSize=${JSON.stringify(result.measuredSize)}`);
+        if (imageIndex >= loadedImages.length) {
+          console.warn('⚠️ Image index fuera de rango; verifica el orden de las imágenes en sessionInit.trackedImages', imageIndex, loadedImages.length);
+          return;
+        }
 
         const trackableImage = loadedImages[imageIndex];
         
