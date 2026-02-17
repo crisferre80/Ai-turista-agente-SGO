@@ -148,7 +148,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
   };
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+    <div className="relative w-full h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
       {/* Device camera preview before entering AR (uses getUserMedia) */}
       <DeviceCameraPreview />
       {/* Header — compacto y profesional */}
@@ -261,7 +261,7 @@ export function WebXRScene({ attraction, onClose }: WebXRSceneProps) {
         }}
         style={{ 
           width: '100%',
-          height: '100%'
+          height: '100vh'
         }}
       >
         {/* Envolvedor XR - habilita WebXR en el Canvas */}
@@ -568,7 +568,7 @@ function DeviceCameraPreview() {
           videoRef.current.play().catch(() => {});
           setActive(true);
         }
-      } catch (err) {
+      } catch {
         // permission denied or not available
         setActive(false);
         if (stream) stream.getTracks().forEach(t => t.stop());
