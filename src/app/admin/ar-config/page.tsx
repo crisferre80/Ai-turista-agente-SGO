@@ -439,6 +439,104 @@ export default function ARConfigPage() {
     ));
   };
 
+  // Guardado inmediato cuando el usuario alterna el switch AR
+  const handleToggleArEnabled = async () => {
+    if (!selectedAttraction) return;
+
+    const next = !arEnabled;
+
+    // Actualización optimista en UI
+    setArEnabled(next);
+    setSaving(true);
+
+    try {
+      // Preparar arData (igual que en saveARConfiguration) para persistir si se habilita
+      const rawArData = {
+        hotspots,
+        primitives: latestPrimitivesRef.current || primitives,
+        modelTransform: latestModelTransformRef.current || modelTransform,
+        phonePreview
+      };
+      const arData = canonicalizeARDataForSave(rawArData);
+
+      const modelUrl = modelFileName ? supabase.storage.from('ar-content').getPublicUrl(`ar-models/${modelFileName}`).data.publicUrl : '';
+
+      // Si se desactiva AR: limpiar escena normalizada (scene_entities) del modelo
+      if (!next) {
+        try {
+          const { data: scene, error: sceneErr } = await supabase
+            .from('scenes')
+            .select('id')
+            .eq('attraction_id', selectedAttraction.id)
+            .maybeSingle();
+
+          if (!sceneErr && scene && scene.id) {
+            await supabase
+              .from('scene_entities')
+              .delete()
+              .eq('scene_id', scene.id)
+              .eq('type', 'model');
+          }
+        } catch (cleanupError) {
+          console.warn('Error limpiando scene_entities al desactivar AR (toggle):', cleanupError);
+        }
+      } else {
+        // Si se habilita y hay modelo, asegurar que está persistido en scene_entities
+        if (modelUrl && modelUrl.trim() !== '') {
+          try {
+            await saveARModelToScene({
+              supabase,
+              attractionId: selectedAttraction.id,
+              modelUrl,
+              transform: (latestModelTransformRef.current || modelTransform),
+              sceneName: selectedAttraction.name,
+            });
+          } catch (err) {
+            console.warn('No se pudo persistir modelo al habilitar AR (toggle):', err);
+            // No abortamos la operación; el resto se guarda en la tabla attractions.
+          }
+        }
+      }
+
+      const { error } = await supabase
+        .from('attractions')
+        .update({
+          has_ar_content: next,
+          ar_model_url: next ? (modelUrl || null) : null,
+          ar_hotspots: next ? arData : null,
+          qr_code: next ? qrCode : null
+        })
+        .eq('id', selectedAttraction.id);
+
+      if (error) throw error;
+
+      // Actualizar estado local para reflejar el cambio de inmediato
+      const updatedAttraction = {
+        ...selectedAttraction,
+        has_ar_content: next,
+        ar_model_url: next ? (modelUrl || null) : null,
+        ar_hotspots: next ? arData : null,
+        qr_code: next ? qrCode : null
+      } as Attraction;
+
+      if (!next) setModelFileName('');
+
+      setSelectedAttraction(updatedAttraction);
+      setAttractions(prev => prev.map(a => a.id === updatedAttraction.id ? updatedAttraction : a));
+
+      // Mensaje breve de confirmación
+      // (no modal para no interrumpir el flujo)
+      console.log(`AR ${next ? 'habilitado' : 'deshabilitado'} para ${selectedAttraction.id}`);
+    } catch (err) {
+      console.error('Error al alternar AR:', err);
+      // Revertir estado UI en fallo
+      setArEnabled(!next);
+      alert('Error actualizando estado AR. Revisa la consola para más detalles.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveARConfiguration = async () => {
     if (!selectedAttraction) return;
 
@@ -457,6 +555,27 @@ export default function ARConfigPage() {
       // Obtener URL pública del modelo si hay uno seleccionado
       const modelUrl = modelFileName ? supabase.storage.from('ar-content').getPublicUrl(`ar-models/${modelFileName}`).data.publicUrl : '';
 
+      // Si AR está deshabilitado, asegurarse de limpiar cualquier 'model' en scene_entities
+      if (!arEnabled) {
+        try {
+          const { data: scene, error: sceneErr } = await supabase
+            .from('scenes')
+            .select('id')
+            .eq('attraction_id', selectedAttraction.id)
+            .maybeSingle();
+
+          if (!sceneErr && scene && scene.id) {
+            await supabase
+              .from('scene_entities')
+              .delete()
+              .eq('scene_id', scene.id)
+              .eq('type', 'model');
+          }
+        } catch (cleanupError) {
+          console.warn('Error limpiando scene_entities al desactivar AR:', cleanupError);
+        }
+      }
+
       // Persistir modelo 3D en el esquema normalizado (scenes/assets/scene_entities)
       // Mantiene attractions.ar_model_url como compatibilidad temporal.
       if (arEnabled && modelUrl && modelUrl.trim() !== '') {
@@ -468,16 +587,24 @@ export default function ARConfigPage() {
           sceneName: selectedAttraction.name,
         });
       } else if (arEnabled && (!modelUrl || modelUrl.trim() === '')) {
-        // Si AR está habilitado pero no hay modelo, limpiar scene_entities del modelo
-        // pero mantener otros elementos (hotspots, primitivas)
+        // Si AR está habilitado pero no hay modelo, limpiar la entidad 'model' en el esquema
+        // normalizado (scenes / scene_entities). Usar scene_id + type (nombre real de columnas).
         try {
-          await supabase
-            .from('scene_entities')
-            .delete()
+          const { data: scene, error: sceneErr } = await supabase
+            .from('scenes')
+            .select('id')
             .eq('attraction_id', selectedAttraction.id)
-            .eq('entity_type', 'model');
+            .maybeSingle();
+
+          if (!sceneErr && scene && scene.id) {
+            await supabase
+              .from('scene_entities')
+              .delete()
+              .eq('scene_id', scene.id)
+              .eq('type', 'model');
+          }
         } catch (cleanupError) {
-          console.warn('Error limpiando scene_entities:', cleanupError);
+          console.warn('Error limpiando scene_entities (scene_id/type):', cleanupError);
           // No fallar el guardado por esto
         }
       }
@@ -493,6 +620,23 @@ export default function ARConfigPage() {
         .eq('id', selectedAttraction.id);
 
       if (error) throw error;
+
+      // Actualizar estado local inmediatamente para reflejar el cambio en la UI
+      const updatedAttraction = {
+        ...selectedAttraction,
+        has_ar_content: arEnabled,
+        ar_model_url: modelUrl || null,
+        ar_hotspots: arEnabled ? arData : null,
+        qr_code: arEnabled ? qrCode : null
+      } as Attraction;
+
+      // Actualizar modelFileName en el editor si se removió el modelo
+      if (!modelFileName) {
+        setModelFileName('');
+      }
+
+      setSelectedAttraction(updatedAttraction);
+      setAttractions(prev => prev.map(a => a.id === updatedAttraction.id ? updatedAttraction : a));
 
       alert('✅ Configuración AR guardada correctamente');
       loadAttractions();
@@ -634,21 +778,44 @@ export default function ARConfigPage() {
                   <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
                     ⚙️ Configuración
                   </h3>
-                  <button
-                    onClick={() => setArEnabled(!arEnabled)}
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                    onClick={handleToggleArEnabled}
+                    disabled={saving}
                     style={{
                       background: arEnabled ? '#4CAF50' : '#999',
                       color: 'white',
                       border: 'none',
                       padding: '6px 12px',
                       borderRadius: '6px',
-                      cursor: 'pointer',
+                      cursor: saving ? 'not-allowed' : 'pointer',
                       fontSize: '0.8rem',
-                      fontWeight: '600'
+                      fontWeight: '600',
+                      opacity: saving ? 0.7 : 1
                     }}
                   >
                     {arEnabled ? 'AR ON' : 'AR OFF'}
                   </button>
+
+                    {/* Botón de guardado siempre disponible para persistir ON/OFF y cambios rápidos */}
+                    <button
+                      onClick={saveARConfiguration}
+                      disabled={saving}
+                      style={{
+                        background: saving ? '#9E9E9E' : '#1976d2',
+                        color: 'white',
+                        border: 'none',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        cursor: saving ? 'not-allowed' : 'pointer',
+                        fontSize: '0.8rem'
+                      }}
+                      title="Guardar configuración AR"
+                    >
+                      {saving ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
+                  </div>
                 </div>
 
                 {arEnabled && (
@@ -913,25 +1080,7 @@ export default function ARConfigPage() {
                       )}
                     </div>
 
-                    {/* Botón guardar */}
-                    <button
-                      onClick={saveARConfiguration}
-                      disabled={saving}
-                      style={{
-                        background: '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        padding: '10px',
-                        borderRadius: '6px',
-                        cursor: saving ? 'not-allowed' : 'pointer',
-                        fontSize: '0.9rem',
-                        fontWeight: '600',
-                        marginTop: '8px',
-                        opacity: saving ? 0.6 : 1
-                      }}
-                    >
-                      {saving ? 'Guardando...' : 'Guardar'}
-                    </button>
+
                   </div>
                 )}
               </div>

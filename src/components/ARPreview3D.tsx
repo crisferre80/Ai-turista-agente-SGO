@@ -61,69 +61,139 @@ interface ARPreview3DProps {
  * Componente para cargar y mostrar modelos 3D en el editor
  * Normaliza el tamaño del modelo y lo centra siguiendo patrones Three.js
  */
-function Model({ url }: { url: string }) {
+function Model({
+  url,
+  activeAnimationName,
+  playing = true,
+  speed = 1,
+  loop = true,
+  onLoadedAnimations,
+}: {
+  url: string;
+  activeAnimationName?: string | null;
+  playing?: boolean;
+  speed?: number;
+  loop?: boolean;
+  onLoadedAnimations?: (clips: THREE.AnimationClip[]) => void;
+}) {
   const [model, setModel] = useState<THREE.Object3D | null>(null);
   const [error, setError] = useState<string | null>(null);
   const groupRef = useRef<THREE.Group>(null);
 
-  
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const actionsRef = useRef<Record<string, THREE.AnimationAction>>({});
+  const prevClipRef = useRef<string | null>(null);
+
   useEffect(() => {
     let mounted = true;
-    // reset error asynchronously to avoid synchronous setState inside effect
     const _t = setTimeout(() => setError(null), 0);
+
     loadGLTF(url).then((gltf: GLTF) => {
       if (!mounted) return;
       try {
-        // Clonar scene para no modificar el original (patrón Three.js)
         const clonedScene = gltf.scene.clone();
-        
-        // Box3.setFromObject() - calcular bounding box (patrón Three.js)
+
         const box = new THREE.Box3().setFromObject(clonedScene);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        
-        // Normalizar escala para que quepa en 3 unidades
         const scale = maxDim > 3 ? 3 / maxDim : 1;
 
-        // Aplicar transformaciones siguiendo patrón Three.js
         clonedScene.scale.setScalar(scale);
-        
-        // Centrar modelo usando Vector3.sub() y .multiplyScalar()
         const scaledCenter = center.multiplyScalar(scale);
         clonedScene.position.sub(scaledCenter);
-        clonedScene.position.y += box.min.y * scale; // Base en Y=0
-
-        // updateMatrix() actualiza la matriz local (patrón Three.js)
+        clonedScene.position.y += box.min.y * scale;
         clonedScene.updateMatrix();
+
+        // Animations: create mixer/actions when clips exist
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixerRef.current = new THREE.AnimationMixer(clonedScene);
+          const acts: Record<string, THREE.AnimationAction> = {};
+          gltf.animations.forEach((clip, idx) => {
+            if (!clip.name) clip.name = `clip-${idx}`;
+            const action = mixerRef.current!.clipAction(clip);
+            // set initial loop mode based on prop
+            action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 0);
+            acts[clip.name] = action;
+          });
+          actionsRef.current = acts;
+          onLoadedAnimations?.(gltf.animations);
+        }
 
         setModel(clonedScene);
       } catch (err) {
         console.error('Error procesando glTF:', err);
         setError('Error procesando modelo 3D');
       }
-        }).catch(() => {
+    }).catch(() => {
       setError('No se pudo cargar el modelo 3D');
     });
-    return () => { mounted = false; clearTimeout(_t); };
-  }, [url]);
+
+    return () => {
+      mounted = false;
+      clearTimeout(_t);
+      // cleanup mixer/actions
+      if (mixerRef.current) {
+        try { mixerRef.current.stopAllAction(); } catch { /* noop */ }
+        mixerRef.current = null;
+      }
+      actionsRef.current = {};
+    };
+  }, [url, onLoadedAnimations, loop]);
+
+  // advance mixer on each frame
+  useFrame((_, delta) => {
+    if (mixerRef.current) mixerRef.current.update(delta);
+  });
+
+  // react to animation selection changes
+  useEffect(() => {
+    const mixer = mixerRef.current;
+    if (!mixer) return;
+
+    const prev = prevClipRef.current;
+    if (prev && actionsRef.current[prev]) {
+      actionsRef.current[prev].fadeOut(0.25);
+    }
+
+    if (activeAnimationName && actionsRef.current[activeAnimationName]) {
+      const act = actionsRef.current[activeAnimationName];
+      act.reset().fadeIn(0.25).play();
+      act.timeScale = playing ? speed : 0;
+      prevClipRef.current = activeAnimationName;
+    }
+  }, [activeAnimationName]);
+
+  // play/pause & speed
+  useEffect(() => {
+    const name = prevClipRef.current;
+    if (!name) return;
+    const act = actionsRef.current[name];
+    if (!act) return;
+    act.timeScale = playing ? speed : 0;
+  }, [playing, speed]);
+
+  // update loop mode when prop changes
+  useEffect(() => {
+    const name = prevClipRef.current;
+    if (!name) return;
+    const act = actionsRef.current[name];
+    if (!act) return;
+    act.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 0);
+  }, [loop]);
 
   const loading = model === null && error === null;
 
   if (loading) {
     return (
-      <Text position={[0, 0, 0]} fontSize={0.3} color="#667eea">
-        Cargando modelo...
-      </Text>
+      <Text position={[0, 0, 0]} fontSize={0.3} color="#667eea">Cargando modelo...</Text>
     );
   }
 
   if (error) {
     return (
       <group>
-        <Text position={[0, 0.5, 0]} fontSize={0.3} color="red">
-          {error}
-        </Text>
+        <Text position={[0, 0.5, 0]} fontSize={0.3} color="red">{error}</Text>
         <Box args={[1, 1, 1]} position={[0, 0, 0]}>
           <meshStandardMaterial color="#ff6b6b" wireframe />
         </Box>
@@ -557,6 +627,22 @@ export default function ARPreview3D({
     y: 1,
     z: 1,
   });
+
+  // Animaciones (si el glTF incluye clips)
+  const [availableAnimations, setAvailableAnimations] = useState<THREE.AnimationClip[]>([]);
+  const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
+  const [animPlaying, setAnimPlaying] = useState(true);
+  const [animSpeed, setAnimSpeed] = useState<number>(1);
+  const [animLoop, setAnimLoop] = useState<boolean>(true);
+
+  // Reset animation list cuando cambia el modelo
+  useEffect(() => {
+    setAvailableAnimations([]);
+    setSelectedAnimation(null);
+    setAnimPlaying(true);
+    setAnimSpeed(1);
+    setAnimLoop(true);
+  }, [modelUrl]);
 
   // Opciones de calibración para la vista móvil (Phone Preview)
   // En WebXR real: la cámara está fija en (0, 1.6, 0) - nivel de ojos
@@ -1144,7 +1230,18 @@ export default function ARPreview3D({
                   scale={[modelScale.x, modelScale.y, modelScale.z]}
                   onClick={(e) => { e.stopPropagation(); setModelSelected(true); }}
                 >
-                  <Model url={modelUrl} />
+                  <Model
+                    url={modelUrl}
+                    activeAnimationName={selectedAnimation}
+                    playing={animPlaying}
+                    speed={animSpeed}
+                    loop={animLoop}
+                    onLoadedAnimations={(clips) => {
+                      const normalized = clips.map((c, i) => { if (!c.name) c.name = `clip-${i}`; return c; });
+                      setAvailableAnimations(normalized);
+                      if (!selectedAnimation && normalized.length > 0) setSelectedAnimation(normalized[0].name || null);
+                    }}
+                  />
                 </group>
               </TransformControls>
             ) : (
@@ -1155,7 +1252,18 @@ export default function ARPreview3D({
                 scale={[modelScale.x, modelScale.y, modelScale.z]}
                 onClick={(e) => { e.stopPropagation(); setModelSelected(true); }}
               >
-                <Model url={modelUrl} />
+                <Model
+                  url={modelUrl}
+                  activeAnimationName={selectedAnimation}
+                  playing={animPlaying}
+                  speed={animSpeed}
+                  loop={animLoop}
+                  onLoadedAnimations={(clips) => {
+                    const normalized = clips.map((c, i) => { if (!c.name) c.name = `clip-${i}`; return c; });
+                    setAvailableAnimations(normalized);
+                    if (!selectedAnimation && normalized.length > 0) setSelectedAnimation(normalized[0].name || null);
+                  }}
+                />
               </group>
             )}
           </Suspense>
@@ -1601,105 +1709,239 @@ export default function ARPreview3D({
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Transformaciones del modelo (debajo del canvas) */}
         {!lightMode && modelUrl && (
-          <div style={{ background: '#111', color: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
-            <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Modelo (Transform)</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              {(['x','y','z'] as const).map(axis => (
-                <input
-                  key={axis}
-                  type="number"
-                  step="0.1"
-                  value={modelPosition[axis].toFixed(2)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value) || 0;
-                    // Marcar que este cambio es local para no reaplicar desde props
-                    isTransformingRef.current = true;
-                    setModelPosition(prev => ({ ...prev, [axis]: v }));
-                    if (modelGroupRef.current) {
-                      if (axis === 'x') modelGroupRef.current.position.x = v;
-                      if (axis === 'y') modelGroupRef.current.position.y = v;
-                      if (axis === 'z') modelGroupRef.current.position.z = v;
-                    }
-                    // Resetear flag después de un frame para permitir sync
-                    requestAnimationFrame(() => {
-                      isTransformingRef.current = false;
-                    });
-                  }}
-                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
-                />
-              ))}
-            </div>
+          <div style={{ background: '#111', color: 'white', padding: '8px', borderRadius: '8px', border: '1px solid #333' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Modelo (Transform)</div>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              {(['x','y','z'] as const).map(axis => (
-                <input
-                  key={axis}
-                  type="number"
-                  step="0.1"
-                  min={0.1}
-                  value={modelScale[axis].toFixed(2)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value) || 0.1;
-                    isTransformingRef.current = true;
-                    setModelScale(prev => ({ ...prev, [axis]: v }));
-                    if (modelGroupRef.current) {
-                      if (axis === 'x') modelGroupRef.current.scale.x = v;
-                      if (axis === 'y') modelGroupRef.current.scale.y = v;
-                      if (axis === 'z') modelGroupRef.current.scale.z = v;
-                    }
-                    requestAnimationFrame(() => {
-                      isTransformingRef.current = false;
-                    });
-                  }}
-                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
-                />
-              ))}
-            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              {/* Left: compact grid for Pos/Rot/Scale */}
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '110px 60px 60px 60px 34px', gap: 8, alignItems: 'center' }}>
+                  {/* header */}
+                  <div />
+                  <div style={{ fontSize: '0.65rem', color: '#9ca3af', textAlign: 'center' }}>X</div>
+                  <div style={{ fontSize: '0.65rem', color: '#9ca3af', textAlign: 'center' }}>Y</div>
+                  <div style={{ fontSize: '0.65rem', color: '#9ca3af', textAlign: 'center' }}>Z</div>
+                  <div />
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              {(['x','y','z'] as const).map(axis => (
-                <input
-                  key={axis}
-                  type="number"
-                  step="0.1"
-                  value={modelRotation[axis].toFixed(2)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value) || 0;
-                    isTransformingRef.current = true;
-                    setModelRotation(prev => ({ ...prev, [axis]: v }));
-                    if (modelGroupRef.current) {
-                      if (axis === 'x') modelGroupRef.current.rotation.x = v;
-                      if (axis === 'y') modelGroupRef.current.rotation.y = v;
-                      if (axis === 'z') modelGroupRef.current.rotation.z = v;
-                    }
-                    requestAnimationFrame(() => {
-                      isTransformingRef.current = false;
-                    });
-                  }}
-                  style={{ width: '33%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: 'white' }}
-                />
-              ))}
-            </div>
+                  {/* Posición */}
+                  <div style={{ fontSize: '0.75rem', color: '#e5e7eb' }}>Posición</div>
+                  <input
+                    aria-label="Posición X"
+                    type="number"
+                    step="0.1"
+                    value={modelPosition.x.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelPosition(prev => ({ ...prev, x: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.position.x = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Posición Y"
+                    type="number"
+                    step="0.1"
+                    value={modelPosition.y.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelPosition(prev => ({ ...prev, y: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.position.y = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Posición Z"
+                    type="number"
+                    step="0.1"
+                    value={modelPosition.z.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelPosition(prev => ({ ...prev, z: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.position.z = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <button
+                    title="Reset posición"
+                    aria-label="Reset posición"
+                    onClick={() => {
+                      isTransformingRef.current = true;
+                      setModelPosition({ x: 0, y: 0, z: 0 });
+                      if (modelGroupRef.current) modelGroupRef.current.position.set(0,0,0);
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 28, height: 28, padding: 0, background: '#374151', border: 'none', borderRadius: 6, color: 'white', fontSize: '0.95rem' }}
+                  >⟲</button>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { 
-                isTransformingRef.current = true;
-                setModelPosition({ x: 0, y: 0, z: 0 }); 
-                if (modelGroupRef.current) modelGroupRef.current.position.set(0,0,0);
-                requestAnimationFrame(() => { isTransformingRef.current = false; });
-              }} style={{ padding: '6px 10px', background: '#374151', border: 'none', borderRadius: 6, color: 'white' }}>Resetear posición</button>
-              <button onClick={() => { 
-                isTransformingRef.current = true;
-                setModelRotation({ x:0,y:0,z:0 }); 
-                if (modelGroupRef.current) modelGroupRef.current.rotation.set(0,0,0);
-                requestAnimationFrame(() => { isTransformingRef.current = false; });
-              }} style={{ padding: '6px 10px', background: '#6b21a8', border: 'none', borderRadius: 6, color: 'white' }}>Resetear rotación</button>
-              <button onClick={() => { 
-                isTransformingRef.current = true;
-                setModelScale({ x:1,y:1,z:1 }); 
-                if (modelGroupRef.current) modelGroupRef.current.scale.set(1,1,1);
-                requestAnimationFrame(() => { isTransformingRef.current = false; });
-              }} style={{ padding: '6px 10px', background: '#0ea5a0', border: 'none', borderRadius: 6, color: 'white' }}>Resetear escala</button>
+                  {/* Rotación */}
+                  <div style={{ fontSize: '0.75rem', color: '#e5e7eb' }}>Rotación</div>
+                  <input
+                    aria-label="Rotación X"
+                    type="number"
+                    step="0.1"
+                    value={modelRotation.x.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelRotation(prev => ({ ...prev, x: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.rotation.x = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Rotación Y"
+                    type="number"
+                    step="0.1"
+                    value={modelRotation.y.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelRotation(prev => ({ ...prev, y: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.rotation.y = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Rotación Z"
+                    type="number"
+                    step="0.1"
+                    value={modelRotation.z.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      isTransformingRef.current = true;
+                      setModelRotation(prev => ({ ...prev, z: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.rotation.z = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <button
+                    title="Reset rotación"
+                    aria-label="Reset rotación"
+                    onClick={() => {
+                      isTransformingRef.current = true;
+                      setModelRotation({ x:0,y:0,z:0 });
+                      if (modelGroupRef.current) modelGroupRef.current.rotation.set(0,0,0);
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 28, height: 28, padding: 0, background: '#6b21a8', border: 'none', borderRadius: 6, color: 'white', fontSize: '0.95rem' }}
+                  >⟲</button>
+
+                  {/* Escala */}
+                  <div style={{ fontSize: '0.75rem', color: '#e5e7eb' }}>Escala</div>
+                  <input
+                    aria-label="Escala X"
+                    type="number"
+                    step="0.1"
+                    min={0.1}
+                    value={modelScale.x.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0.1;
+                      isTransformingRef.current = true;
+                      setModelScale(prev => ({ ...prev, x: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.scale.x = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Escala Y"
+                    type="number"
+                    step="0.1"
+                    min={0.1}
+                    value={modelScale.y.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0.1;
+                      isTransformingRef.current = true;
+                      setModelScale(prev => ({ ...prev, y: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.scale.y = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <input
+                    aria-label="Escala Z"
+                    type="number"
+                    step="0.1"
+                    min={0.1}
+                    value={modelScale.z.toFixed(2)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0.1;
+                      isTransformingRef.current = true;
+                      setModelScale(prev => ({ ...prev, z: v }));
+                      if (modelGroupRef.current) modelGroupRef.current.scale.z = v;
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 58, padding: '3px 6px', borderRadius: 4, border: '1px solid #444', background: '#0b0b0b', color: 'white', fontSize: '0.75rem', textAlign: 'right' }}
+                  />
+                  <button
+                    title="Reset escala"
+                    aria-label="Reset escala"
+                    onClick={() => {
+                      isTransformingRef.current = true;
+                      setModelScale({ x:1,y:1,z:1 });
+                      if (modelGroupRef.current) modelGroupRef.current.scale.set(1,1,1);
+                      requestAnimationFrame(() => { isTransformingRef.current = false; });
+                    }}
+                    style={{ width: 28, height: 28, padding: 0, background: '#0ea5a0', border: 'none', borderRadius: 6, color: 'white', fontSize: '0.95rem' }}
+                  >⟲</button>
+                </div>
+              </div>
+
+              {/* Right: animation controls moved here */}
+              <div style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontWeight: 'bold' }}>Animaciones</div>
+
+                {availableAnimations.length === 0 ? (
+                  <div style={{ opacity: 0.7, fontSize: '0.85rem' }}>Sin animaciones en este modelo</div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <select
+                        value={selectedAnimation ?? ''}
+                        onChange={(e) => setSelectedAnimation(e.target.value || null)}
+                        style={{ flex: 1, padding: '6px', borderRadius: 6, background: '#111', color: 'white', border: '1px solid #333' }}
+                      >
+                        {availableAnimations.map((clip) => (
+                          <option key={clip.name} value={clip.name}>{clip.name}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => setAnimPlaying(p => !p)}
+                        title={animPlaying ? 'Pausar' : 'Reproducir'}
+                        style={{ padding: '6px 8px', borderRadius: 6, border: 'none', background: animPlaying ? '#f97316' : '#6b7280', color: 'white' }}
+                      >
+                        {animPlaying ? '⏸' : '▶'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        onClick={() => setAnimLoop(l => !l)}
+                        title="Loop"
+                        style={{ padding: '6px 8px', borderRadius: 6, border: 'none', background: animLoop ? '#10b981' : '#374151', color: 'white' }}
+                      >
+                        {animLoop ? 'Loop' : 'No'}
+                      </button>
+
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'white', flex: 1 }}>
+                        <span style={{ fontSize: '0.75rem' }}>Vel</span>
+                        <input type="range" min={0.1} max={2} step={0.1} value={animSpeed} onChange={(e) => setAnimSpeed(parseFloat(e.target.value))} style={{ flex: 1 }} />
+                        <span style={{ width: 40, textAlign: 'right' }}>{animSpeed.toFixed(1)}x</span>
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1847,7 +2089,7 @@ export default function ARPreview3D({
             <div style={{ padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
               <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Cámara</button>
+                <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '4px 8px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Cámara</button>
                 <button onClick={() => { 
                   if (confirm('¿Resetear posición/rot/escala?')) { 
                     isTransformingRef.current = true;
@@ -1861,7 +2103,7 @@ export default function ARPreview3D({
                     }
                     requestAnimationFrame(() => { isTransformingRef.current = false; });
                   } 
-                }} style={{ padding: '6px 10px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white' }}>Resetear Modelo</button>
+                }} style={{ padding: '4px 8px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Modelo</button>
                 <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
 
                 {/* Calibración AR - Conceptos WebXR */}
