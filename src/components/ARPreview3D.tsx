@@ -88,11 +88,20 @@ function Model({
     let mounted = true;
     const _t = setTimeout(() => setError(null), 0);
 
-    loadGLTF(url).then((gltf: GLTF) => {
+    loadGLTF(url).then(async (gltf: GLTF) => {
       if (!mounted) return;
       try {
-        const clonedScene = gltf.scene.clone();
+        // Prefer SkeletonUtils.clone for glTF with SkinnedMesh (preserves skeleton bindings).
+        // Fall back to simple clone if the helper is not available.
+        let clonedScene: THREE.Object3D;
+        try {
+          const mod = (await import('three/examples/jsm/utils/SkeletonUtils.js')) as { clone?: (object: unknown) => unknown };
+          clonedScene = typeof mod.clone === 'function' ? (mod.clone(gltf.scene) as THREE.Object3D) : gltf.scene.clone();
+        } catch {
+          clonedScene = gltf.scene.clone();
+        }
 
+        // @ts-expect-error - cross-module declaration mismatch (examples vs core types); runtime value is valid
         const box = new THREE.Box3().setFromObject(clonedScene);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
@@ -107,7 +116,8 @@ function Model({
 
         // Animations: create mixer/actions when clips exist
         if (gltf.animations && gltf.animations.length > 0) {
-          mixerRef.current = new THREE.AnimationMixer(clonedScene);
+          // @ts-expect-error - cross-module declaration mismatch (examples vs core types); runtime value is valid
+          mixerRef.current = new THREE.AnimationMixer(clonedScene as unknown as THREE.Object3D);
           const acts: Record<string, THREE.AnimationAction> = {};
           gltf.animations.forEach((clip, idx) => {
             if (!clip.name) clip.name = `clip-${idx}`;
@@ -118,6 +128,13 @@ function Model({
           });
           actionsRef.current = acts;
           onLoadedAnimations?.(gltf.animations);
+
+          // Auto-play the first clip if parent hasn't selected any animation yet.
+          if (gltf.animations && gltf.animations.length > 0 && !activeAnimationName) {
+            const firstName = gltf.animations[0].name || `clip-0`;
+            const a = acts[firstName];
+            try { a.reset().play(); a.timeScale = playing ? speed : 0; prevClipRef.current = firstName; } catch { /* noop */ }
+          }
         }
 
         setModel(clonedScene);
