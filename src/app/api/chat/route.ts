@@ -485,9 +485,9 @@ export async function POST(req: Request) {
         let placeDescription = null;
         let isRouteOnly = false; // Flag para indicar que solo se debe mostrar ruta
         
-        // Detectar si el usuario pregunta explícitamente por videos
+        // Detectar si el usuario pregunta explícitamente por videos/imágenes
         const userMessage = lastMessage?.content?.toLowerCase() || '';
-        const isVideoRequest = /\b(video|videos|ver video|mostrame video|muestra video|quiero ver)\b/.test(userMessage);
+        const isVideoRequest = /\b(video|videos|ver video|mostrame video|muestra video|quiero ver|imagen|imagenes|foto|fotos|ver fotos)\b/.test(userMessage);
         
         // Debug: Log what type of query was detected
         if (isInfoQuery) {
@@ -495,7 +495,7 @@ export async function POST(req: Request) {
         }
         
         if (isVideoRequest) {
-            console.log('🎥 VIDEO request detected, will skip PlaceDetail navigation');
+            console.log('🎥 VIDEO/IMAGEN request detected, will search YouTube');
         }
         
         // Si es consulta de ruta, marcar como tal pero SÍ extraer placeName para trazar ruta
@@ -530,8 +530,9 @@ export async function POST(req: Request) {
                 }
             }
         }
-        else if (reply && !isVideoRequest) {
-            // Solo buscar placeId si NO es consulta de ruta Y NO es solicitud de video
+        else if (reply) {
+            // SIEMPRE buscar placeId si NO es consulta de ruta
+            // Esto permite mostrar la card del lugar incluso si el usuario pide videos
             // Check attractions first
             for (const attraction of (attractions || [])) {
                 const name = attraction.name as string;
@@ -539,6 +540,7 @@ export async function POST(req: Request) {
                 if (reply.toLowerCase().includes(name.toLowerCase())) {
                     placeId = attraction.id;
                     placeName = name;
+                    console.log(`📍 Lugar identificado: "${placeName}" (ID: ${placeId})`);
                     break;
                 }
             }
@@ -550,6 +552,7 @@ export async function POST(req: Request) {
                     if (reply.toLowerCase().includes(name.toLowerCase())) {
                         placeId = business.id;
                         placeName = name;
+                        console.log(`🏢 Negocio identificado: "${placeName}" (ID: ${placeId})`);
                         break;
                     }
                 }
@@ -659,20 +662,12 @@ export async function POST(req: Request) {
                 };
                 console.log(`📹 Video local encontrado: "${bestMatch.video.title}" (score: ${bestMatch.score})`);
             } else {
-                // Si no hay video local, detectar si la consulta es sobre un evento/tema que podría tener video
-                const videoKeywords = [
-                    'video', 'ver', 'muestra', 'muéstrame', 'mostrame', 'mira',
-                    'marcha', 'festival', 'evento', 'fiesta', 'celebración', 'celebracion',
-                    'baile', 'danza', 'música', 'musica', 'folklore', 'folclore',
-                    'bombos', 'chacarera', 'carnaval', 'procesión', 'procesion'
-                ];
+                // PASO 3: Solo buscar en YouTube si el usuario EXPLÍCITAMENTE pidió videos/imágenes
+                // NO buscar automáticamente solo porque mencionó palabras como "bailar" o "folklore"
                 
-                const hasVideoIntent = videoKeywords.some(keyword => 
-                    normalizedSearch.includes(keyword)
-                );
-                
-                // Si la consulta sugiere búsqueda de video, buscar en YouTube usando la API
-                if (hasVideoIntent) {
+                // Si el usuario pidió explícitamente videos/imágenes, buscar en YouTube usando la API
+                if (isVideoRequest) {
+                    console.log('🎬 Usuario solicitó videos/imágenes explícitamente, buscando en YouTube...');
                     try {
                         let youtubeSearchQuery = '';
                         
