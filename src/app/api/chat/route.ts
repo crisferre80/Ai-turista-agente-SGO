@@ -306,12 +306,14 @@ export async function POST(req: Request) {
             
             // Generar respuesta simple sobre el lugar encontrado
             if (foundPlaceType === 'attraction') {
-                placeDescription = (foundPlace.description as string) || `Descubre ${placeName}, un atractivo en la categoría ${foundPlace.category}.`;
+                const attraction = foundPlace as any;
+                placeDescription = attraction.description || `Descubre ${placeName}, un atractivo en la categoría ${attraction.category}.`;
                 reply = `¡Hola, chango! Te cuento sobre **${placeName}**.\n\n${placeDescription}`;
             } else {
-                placeDescription = `Conoce ${placeName}, un negocio en la categoría ${foundPlace.category}.`;
-                const contactInfo = (foundPlace as any).contact_info;
-                reply = `¡Hola! Te recomiendo **${placeName}**, un lugar en la categoría ${foundPlace.category}.`;
+                const business = foundPlace as any;
+                placeDescription = `Conoce ${placeName}, un negocio en la categoría ${business.category}.`;
+                const contactInfo = business.contact_info;
+                reply = `¡Hola! Te recomiendo **${placeName}**, un lugar en la categoría ${business.category}.`;
                 if (contactInfo) {
                     reply += `\n\nContacto: ${contactInfo}`;
                 }
