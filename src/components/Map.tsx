@@ -53,6 +53,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const startTimeRef = useRef(Date.now());
     const pausedElapsedRef = useRef(0);
     const isOrbitingRef = useRef(false);
+    // Refs para evitar capturas en efectos pesados
+    const attractionsRef = useRef(attractions);
+    const parentUserLocationRef = useRef(parentUserLocation);
+    const tourEnabledRef = useRef(true); // Ref para acceder desde funciones globales
     // Inicializar ubicación local con la del parent si existe
     const [userLocation, setUserLocation] = useState<[number, number] | null>(
         parentUserLocation ? [parentUserLocation.longitude, parentUserLocation.latitude] : null
@@ -73,7 +77,13 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const [activeRoute, setActiveRoute] = useState<{ start: [number, number], end: [number, number], name: string } | null>(null);
+    const [tourEnabled, setTourEnabled] = useState(true); // Control manual del tour
     const markersRef = useRef<mapboxgl.Marker[]>([]);
+
+    // Actualizar ref cuando cambia el estado
+    useEffect(() => {
+        tourEnabledRef.current = tourEnabled;
+    }, [tourEnabled]);
 
     // Refs para callbacks para evitar re-renders por cambios en props
     const onNarrateRef = useRef(onNarrate);
@@ -97,6 +107,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     useEffect(() => {
         onStoryPlayRef.current = onStoryPlay;
     }, [onStoryPlay]);
+
+    // Mantener refs actualizadas para evitar re-inicializar el mapa
+    useEffect(() => { attractionsRef.current = attractions; }, [attractions]);
+    useEffect(() => { parentUserLocationRef.current = parentUserLocation; }, [parentUserLocation]);
 
     const [lng] = useState(-64.2599);
     const [lat] = useState(-27.7834);
@@ -147,7 +161,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 // Emit location to parent component
                 onLocationChangeRef.current?.(loc);
 
-                if (!hasGreetedRef.current && !parentUserLocation) {
+                if (!hasGreetedRef.current && !parentUserLocationRef.current) {
                     // Solo saludar si es la primera vez y no ya teníamos ubicación
                     // Enviar evento para que ChatInterface narre
                     if (typeof window !== 'undefined') {
@@ -179,18 +193,15 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 // Animación de dron: tour por marcadores con órbita
                 let animationId: number | null = null;
                 let inactivityTimer: NodeJS.Timeout | null = null;
-                let startTime = Date.now();
-                let pausedElapsed = 0;
-                const tourDuration = 10000; // 10 segundos por marcador
                 const orbitDuration = 8000; // 8 segundos de órbita
-                const inactivityDelay = 10000;
+                const inactivityDelay = 120000; // 2 minutos de inactividad
                 
                 // Crear waypoints de attractions
-                const waypoints = attractions.map(attr => ({
+                const waypoints = attractionsRef.current.map((attr, idx) => ({
                     center: attr.coords as [number, number],
                     zoom: 16,
                     name: attr.name,
-                    markerIndex: attractions.indexOf(attr)
+                    markerIndex: idx
                 }));
                 
                 let currentWaypointIndex = 0;
@@ -198,7 +209,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 let orbitStartTime = 0;
                 
                 const animateTour = () => {
-                    if (!map.current || !isAnimatingRef.current || waypoints.length === 0) return;
+                    if (!map.current || !isAnimatingRef.current || waypoints.length === 0 || !tourEnabledRef.current) return;
                     
                     const currentTime = Date.now();
                     
@@ -288,7 +299,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 };
                 
                 const startAnimation = () => {
-                    if (isAnimatingRef.current) return;
+                    if (isAnimatingRef.current || !tourEnabledRef.current) return;
                     isAnimatingRef.current = true;
                     console.log('🎬 Iniciando tour de dron con órbitas');
                     animateTour();
@@ -297,7 +308,6 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 const stopAnimation = () => {
                     if (!isAnimatingRef.current) return;
                     isAnimatingRef.current = false;
-                    pausedElapsed += Date.now() - startTime;
                     isOrbitingRef.current = false;
                     if (animationId !== null) {
                         cancelAnimationFrame(animationId);
@@ -315,25 +325,24 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         clearTimeout(inactivityTimer);
                     }
                     
-                    // Configurar nuevo timer de inactividad
-                    inactivityTimer = setTimeout(() => {
-                        startAnimation();
-                    }, inactivityDelay);
+                    // Solo configurar nuevo timer si el tour está habilitado
+                    if (tourEnabledRef.current) {
+                        inactivityTimer = setTimeout(() => {
+                            startAnimation();
+                        }, inactivityDelay);
+                    }
                 };
                 
                 // Detectar interacciones del usuario que detienen la animación temporalmente
-                const interactionEvents = [
-                    'click', 'touchstart',  // Interacción principal
-                    'wheel'                 // Zoom con rueda (manual)
-                ];
+                const interactionEvents = ['click', 'touchstart', 'wheel'] as const;
                 
                 interactionEvents.forEach(event => {
-                    m.on(event as any, resetInactivityTimer);
+                    m.on(event, resetInactivityTimer);
                 });
                 
-                // Iniciar animación automáticamente después de 2 segundos
+                // Iniciar animación automáticamente después de 2 segundos solo si está habilitado
                 setTimeout(() => {
-                    if (map.current) {
+                    if (map.current && tourEnabledRef.current) {
                         startAnimation();
                     }
                 }, 2000);
@@ -347,7 +356,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                     // Remover event listeners
                     interactionEvents.forEach(event => {
-                        m.off(event as any, resetInactivityTimer);
+                        m.off(event, resetInactivityTimer);
                     });
                     originalRemove();
                 };
@@ -835,6 +844,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 cancelAnimationFrame(animationIdRef.current);
                 animationIdRef.current = null;
             }
+            // Desactivar el tour cuando el usuario interactúa
+            setTourEnabled(false);
             console.log('⏸️ Map animation stopped by user interaction (chat focus)');
         };
 
@@ -914,8 +925,67 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                 }}
             />
-            
-            {/* Overlay de Google Maps cuando hay ruta activa */}
+                        {/* Bot\u00f3n de control del tour (play/pause) */}
+            <button
+                onClick={() => {
+                    const newTourEnabled = !tourEnabled;
+                    setTourEnabled(newTourEnabled);
+                    
+                    if (newTourEnabled) {
+                        console.log('\u25b6\ufe0f Tour del mapa activado');
+                        // Iniciar el tour si est\u00e1 habilitado
+                        if (typeof window !== 'undefined' && map.current) {
+                            // Reiniciar timer de inactividad
+                            setTimeout(() => {
+                                if (isAnimatingRef.current === false && tourEnabled) {
+                                    isAnimatingRef.current = true;
+                                    console.log('\ud83c\udfac Reiniciando tour...');
+                                }
+                            }, 2000);
+                        }
+                    } else {
+                        console.log('\u23f8\ufe0f Tour del mapa pausado');
+                        // Detener animaci\u00f3n inmediatamente
+                        if (typeof window !== 'undefined' && window.stopMapAnimation) {
+                            window.stopMapAnimation();
+                        }
+                    }
+                }}
+                style={{
+                    position: 'absolute',
+                    top: '20px',
+                    left: '20px',
+                    background: tourEnabled ? 'rgba(255,255,255,0.95)' : 'rgba(255,193,7,0.95)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '12px',
+                    padding: '12px 16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    border: tourEnabled ? '2px solid #4CAF50' : '2px solid #FF9800',
+                    zIndex: 1000,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#1A3A6C',
+                    transition: 'all 0.3s ease',
+                    outline: 'none'
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 6px 25px rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+                }}
+                title={tourEnabled ? 'Pausar tour autom\u00e1tico' : 'Activar tour autom\u00e1tico'}
+            >
+                <span style={{ fontSize: '18px' }}>{tourEnabled ? '\u23f8\ufe0f' : '\u25b6\ufe0f'}</span>
+                <span>{tourEnabled ? 'Pausar Tour' : 'Activar Tour'}</span>
+            </button>
+                        {/* Overlay de Google Maps cuando hay ruta activa */}
             {activeRoute && (
                 <div style={{
                     position: 'absolute',

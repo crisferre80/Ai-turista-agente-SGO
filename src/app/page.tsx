@@ -380,6 +380,34 @@ export default function Home() {
     }
   }, [activePlace]);
 
+  // Listen for Santi requests to explicitly open a place modal (e.g. "¿Cómo llego a X?")
+  useEffect(() => {
+    const onShowPlace = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent).detail as { attraction?: any } | undefined;
+        if (!detail || !detail.attraction) return;
+        const a = detail.attraction;
+        const normalized = {
+          id: a.id,
+          name: a.name,
+          description: a.description || a.info || '',
+          image: a.image || a.image_url || IMG_PATTERN,
+          info: a.info || a.info_extra || '',
+          gallery_urls: a.gallery_urls || [],
+          coords: a.coords || (a.lng && a.lat ? [a.lng, a.lat] : [0, 0]),
+          isBusiness: !!a.isBusiness,
+          category: a.category || ''
+        } as any;
+        setActivePlace(normalized);
+      } catch (err) {
+        console.warn('santi:showPlace handler error', err);
+      }
+    };
+
+    window.addEventListener('santi:showPlace', onShowPlace as EventListener);
+    return () => window.removeEventListener('santi:showPlace', onShowPlace as EventListener);
+  }, []);
+
   // Handle touch gestures for mobile panel
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.touches[0].clientY);

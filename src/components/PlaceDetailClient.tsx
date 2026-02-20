@@ -47,6 +47,11 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   // Keep a very flexible reference to the map. We'll cast locally when needed.
   const mapRef = useRef<unknown>(null);
+
+  // Video modal focus-management refs
+  const videoModalRef = useRef<HTMLDivElement | null>(null);
+  const videoModalCloseRef = useRef<HTMLButtonElement | null>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
   
   // Rating promedio state
   const [averageRating, setAverageRating] = useState<number | null>(null);
@@ -57,8 +62,26 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   const openGallery = (index = 0) => setGalleryOpen({ open: true, index });
   const closeGallery = () => setGalleryOpen({ open: false, index: 0 });
-  const openVideo = (src?: string) => setVideoOpen({ open: true, src });
-  const closeVideo = () => setVideoOpen({ open: false, src: undefined });
+  const openVideo = (src?: string) => {
+    // save previously focused element so we can restore it when modal closes
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    setVideoOpen({ open: true, src });
+    // focus the modal close button after it's mounted
+    setTimeout(() => videoModalCloseRef.current?.focus(), 0);
+  };
+
+  const closeVideo = () => {
+    // If focus is inside the modal (for example the iframe), blur it first to avoid
+    // hiding a focused element (prevents aria-hidden warnings from the browser).
+    const active = document.activeElement as HTMLElement | null;
+    if (active && videoModalRef.current && videoModalRef.current.contains(active)) {
+      try { active.blur(); } catch { /* noop */ }
+    }
+
+    setVideoOpen({ open: false, src: undefined });
+    // restore previously focused element if still available
+    try { prevFocusRef.current?.focus?.(); } catch { /* noop */ }
+  };
 
   const getYoutubeEmbedUrl = (url: string) => {
     const trimmedUrl = url.trim();
@@ -801,7 +824,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
       {/* Video Modal */}
       {videoOpen.open && videoOpen.src && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeVideo}>
+        <div ref={videoModalRef} role="dialog" aria-modal="true" aria-label="Video" style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeVideo}>
           <div style={{ width: '90%', maxWidth: 1000, height: '70%', position: 'relative' }} className="modal-content" onClick={(e) => e.stopPropagation()}>
             {isYoutubeUrl(videoOpen.src) ? (
               <iframe
@@ -814,7 +837,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             ) : (
               <video src={videoOpen.src} controls style={{ width: '100%', height: '100%', background: '#000' }} />
             )}
-            <button onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
+            <button ref={videoModalCloseRef} aria-label="Cerrar video" onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
           </div>
         </div>
       )}

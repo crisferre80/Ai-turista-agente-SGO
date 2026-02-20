@@ -58,6 +58,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const inputRef = useRef<HTMLInputElement>(null);
     const lastInteractionRef = useRef(Date.now()); // Track inactivity
     const micHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout to auto-hide mic legend on touch
+    const videoModalRef = useRef<HTMLDivElement>(null); // Ref for video modal container
+    const videoModalCloseRef = useRef<HTMLButtonElement>(null); // Ref for video modal close button
+    const prevVideoFocusRef = useRef<HTMLElement | null>(null); // Store previous focus before modal opens
 
     const [engagementPrompts, setEngagementPrompts] = useState<string[]>([]);
 
@@ -66,6 +69,31 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
         fetchCloudPhrases();
         fetchPromotionalMessages();
     }, []);
+
+    // Ensure video modal focus is managed: save previous focus, focus close button on open,
+    // blur any focused element inside modal before closing and restore previous focus.
+    useEffect(() => {
+        if (showVideoModal) {
+            prevVideoFocusRef.current = document.activeElement as HTMLElement | null;
+            // give browser a tick so the close button exists in DOM
+            setTimeout(() => videoModalCloseRef.current?.focus(), 0);
+        } else {
+            // restore previous focus if possible
+            try { prevVideoFocusRef.current?.focus?.(); } catch { /* noop */ }
+        }
+    }, [showVideoModal]);
+
+    const closeVideoModal = () => {
+        // If the currently focused element is inside the modal (iframe/button), blur it
+        const active = document.activeElement as HTMLElement | null;
+        if (active && videoModalRef.current && videoModalRef.current.contains(active)) {
+            try { active.blur(); } catch { /* noop */ }
+        }
+
+        setShowVideoModal(false);
+        setCurrentVideo(null);
+        setShowVideoList(false);
+    };
 
     const loadGuestPrompts = () => {
         // Frases para visitantes no registrados (incluyen preguntas personales)
@@ -393,6 +421,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             const placeId = data.placeId;
             const placeName = data.placeName;
             const isRouteOnly = data.isRouteOnly; // Flag para indicar consulta de ruta únicamente
+            const isInfoQuery = data.isInfoQuery; // Flag para preguntas informativas (no navegar automáticamente)
             const relevantVideo = data.relevantVideo; // Video relevante si existe
 
             // Si hay video relevante, modificar la respuesta y preparar modal
@@ -429,9 +458,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             // Add Assistant Message
             setMessages(prev => [...prev, { role: 'assistant', content: botReply }]);
 
-            // Si es consulta de ruta (isRouteOnly), desactivar thinking inmediatamente
+            // Si es consulta de ruta o info query, desactivar thinking inmediatamente
             // y NO navegar a la página de detalles
-            if (isRouteOnly) {
+            if (isRouteOnly || isInfoQuery) {
                 setTimeout(() => {
                     setIsThinking(false);
                 }, 600);
@@ -441,17 +470,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     setIsThinking(false);
                 }, 600);
             }
-            // Si hay placeId y NO es isRouteOnly, isThinking se apagará con narration:start
+            // Si hay placeId y NO es isRouteOnly ni isInfoQuery, isThinking se apagará con narration:start
 
-            console.log('🎵 ChatInterface: Checking isRouteOnly flag:', isRouteOnly, 'botReply preview:', botReply.substring(0, 50));
+            console.log('🎵 ChatInterface: Checking isRouteOnly flag:', isRouteOnly, 'isInfoQuery:', isInfoQuery, 'botReply preview:', botReply.substring(0, 50));
             
             // Siempre reproducir la respuesta del asistente, incluso para consultas de ruta
             // El mapa agregará después las instrucciones detalladas mediante eventos
-            console.log('🎵 ChatInterface: Playing audio response for:', isRouteOnly ? 'route query' : 'normal query');
+            console.log('🎵 ChatInterface: Playing audio response for:', isRouteOnly ? 'route query' : isInfoQuery ? 'info query' : 'normal query');
             playAudioResponse(botReply);
             
-            // Solo navegar a detail page si hay placeId Y NO es consulta de ruta
-            if (placeId && !isRouteOnly && typeof window !== 'undefined') {
+            // Solo navegar a detail page si hay placeId Y NO es consulta de ruta Y NO es consulta informativa
+            if (placeId && !isRouteOnly && !isInfoQuery && typeof window !== 'undefined') {
                 // Store that we're narrating about this place
                 // Use sessionStorage as fallback if localStorage is blocked
                 const setStorage = (key: string, value: string) => {
@@ -489,6 +518,48 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                 if (placeName) {
                     console.log('Route query: Focusing map on place from API:', placeName);
                     (window as Window & typeof globalThis).focusPlaceOnMap!(placeName);
+
+                    // --- NEW: try to find the attraction in our DB and explicitly open modal + draw route ---
+                    (async () => {
+                        try {
+                            const q = placeName.trim();
+                            if (!q) return;
+                            const { data: matches } = await supabase
+                                .from('attractions')
+                                .select('id, name, description, image_url, info_extra, gallery_urls, lat, lng, category')
+                                .ilike('name', `%${q}%`)
+                                .limit(1);
+
+                            if (matches && matches.length > 0) {
+                                const a: any = matches[0];
+                                const normalized = {
+                                    id: a.id,
+                                    name: a.name,
+                                    description: a.description || '',
+                                    image: a.image_url || '',
+                                    info: a.info_extra || '',
+                                    gallery_urls: a.gallery_urls || [],
+                                    coords: [a.lng, a.lat],
+                                    category: a.category || ''
+                                };
+
+                                // Request the map to draw the route (if map is ready)
+                                if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as any).requestRoute === 'function') {
+                                    try {
+                                        window.requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name);
+                                    } catch (err) {
+                                        console.warn('requestRoute failed:', err);
+                                    }
+                                }
+
+                                // Dispatch an event so the page can open the Android-style modal with attraction info
+                                window.dispatchEvent(new CustomEvent('santi:showPlace', { detail: { attraction: normalized } }));
+                            }
+                        } catch (err) {
+                            console.warn('DB lookup for route query failed:', err);
+                        }
+                    })();
+
                     // Restaurar foco al input del chat después de la animación del mapa
                     setTimeout(() => {
                         if (inputRef.current) {
@@ -504,6 +575,42 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         const extractedPlace = placeMatch[1].trim();
                         console.log('Route query: Extracted place from user message:', extractedPlace);
                         (window as Window & typeof globalThis).focusPlaceOnMap!(extractedPlace);
+
+                        // Also try DB lookup for the extracted place name (same behavior as above)
+                        (async () => {
+                            try {
+                                const q = extractedPlace.trim();
+                                if (!q) return;
+                                const { data: matches } = await supabase
+                                    .from('attractions')
+                                    .select('id, name, description, image_url, info_extra, gallery_urls, lat, lng, category')
+                                    .ilike('name', `%${q}%`)
+                                    .limit(1);
+
+                                if (matches && matches.length > 0) {
+                                    const a: any = matches[0];
+                                    const normalized = {
+                                        id: a.id,
+                                        name: a.name,
+                                        description: a.description || '',
+                                        image: a.image_url || '',
+                                        info: a.info_extra || '',
+                                        gallery_urls: a.gallery_urls || [],
+                                        coords: [a.lng, a.lat],
+                                        category: a.category || ''
+                                    };
+
+                                    if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as any).requestRoute === 'function') {
+                                        try { window.requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name); } catch (err) { /* noop */ }
+                                    }
+
+                                    window.dispatchEvent(new CustomEvent('santi:showPlace', { detail: { attraction: normalized } }));
+                                }
+                            } catch (err) {
+                                console.warn('DB lookup for extracted place failed:', err);
+                            }
+                        })();
+
                         // Restaurar foco al input del chat después de la animación del mapa
                         setTimeout(() => {
                             if (inputRef.current) {
@@ -1176,7 +1283,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
 
             {/* VIDEO MODAL */}
             {showVideoModal && currentVideo && (
-                <div style={{
+                <div ref={videoModalRef} role="dialog" aria-modal="true" aria-label="Video" style={{
                     position: 'fixed',
                     inset: 0,
                     zIndex: 30000,
@@ -1188,11 +1295,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     animation: 'fadeIn 0.3s ease-out',
                     padding: window.innerWidth < 768 ? '10px' : '20px'
                 }}
-                onClick={() => {
-                    setShowVideoModal(false);
-                    setCurrentVideo(null);
-                    setShowVideoList(false);
-                }}
+                onClick={() => closeVideoModal()}
                 >
                     <div style={{
                         background: 'white',
@@ -1213,10 +1316,9 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                     >
                         {/* Botón cerrar */}
                         <button
-                            onClick={() => {
-                                setShowVideoModal(false);
-                                setCurrentVideo(null);
-                            }}
+                            ref={videoModalCloseRef}
+                            onClick={() => closeVideoModal()}
+                            aria-label="Cerrar video"
                             style={{
                                 position: 'absolute',
                                 top: window.innerWidth < 768 ? 8 : 15,

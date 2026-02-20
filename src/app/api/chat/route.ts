@@ -186,8 +186,8 @@ export async function POST(req: Request) {
 
         // 1. Fetch Local Data for Context
         console.log('🔍 Fetching data from Supabase...');
-        const { data: attractions, error: attractionsError } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng');
-        const { data: businesses, error: businessesError } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng');
+        const { data: attractions, error: attractionsError } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng, video_urls');
+        const { data: businesses, error: businessesError } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng, video_urls');
         const { data: videos } = await supabase.from('app_videos').select('id, title, video_url');
 
         // Debug logging
@@ -291,7 +291,7 @@ export async function POST(req: Request) {
         const iaProvider = settings?.ia_provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'openai');
         const iaModel = settings?.ia_model || undefined;
 
-        let reply: string;
+        let reply: string = ''; // Inicializar vacío para evitar undefined
 
         if (iaProvider === 'openai') {
             const openai = (await import('@/lib/openai')).default;
@@ -307,6 +307,7 @@ export async function POST(req: Request) {
             });
 
             reply = response.choices[0].message.content || 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?';
+            console.log('✅ OpenAI response:', reply.substring(0, 100));
         } else {
             // Gemini
             try {
@@ -349,9 +350,37 @@ export async function POST(req: Request) {
                     generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
                 });
                 const result = await chat.sendMessage(messageToSend);
+                
+                // Debug: Inspeccionar el resultado completo
+                console.log('🔍 Gemini result object:', {
+                    hasResponse: !!result.response,
+                    hasText: typeof result.response?.text === 'function',
+                    candidatesLength: result.response?.candidates?.length || 0,
+                    finishReason: result.response?.candidates?.[0]?.finishReason || 'unknown'
+                });
+                
                 reply = result.response.text();
+                console.log('✅ Gemini response length:', reply?.length || 0, 'Preview:', reply?.substring(0, 100));
+                
+                // Si la respuesta está vacía, intentar obtener el texto directamente
+                if (!reply || reply.trim().length === 0) {
+                    console.warn('⚠️ Gemini returned empty response, checking candidates...');
+                    const candidate = result.response?.candidates?.[0];
+                    if (candidate) {
+                        console.log('Candidate:', {
+                            finishReason: candidate.finishReason,
+                            hasContent: !!candidate.content,
+                            partsLength: candidate.content?.parts?.length || 0
+                        });
+                        // Intentar extraer texto de las partes
+                        if (candidate.content?.parts && candidate.content.parts.length > 0) {
+                            reply = candidate.content.parts.map((p: any) => p.text || '').join('');
+                            console.log('Extracted reply from parts:', reply.substring(0, 100));
+                        }
+                    }
+                }
             } catch (err) {
-                console.error('Gemini error:', err);
+                console.error('❌ Gemini error:', err);
                 
                 // Extract last user message for fallback use
                 const lastUserMessage = messages[messages.length - 1].content;
@@ -475,8 +504,8 @@ export async function POST(req: Request) {
             console.log('🗺️  ROUTE query detected:', lastMessage.content);
             console.log('Route query detected, extracting placeName but not setting placeId');
             
-        // Buscar el nombre del lugar en la respuesta de la IA (para rutas y lugares mencionados)
-        if (reply) {
+            // Buscar el nombre del lugar en la respuesta de la IA (para rutas y lugares mencionados)
+            if (reply) {
                 // Check attractions first
                 for (const attraction of (attractions || [])) {
                     const name = attraction.name as string;
@@ -543,7 +572,31 @@ export async function POST(req: Request) {
         // Buscar video relevante basado en el contenido del mensaje del usuario y la respuesta
         let relevantVideo = null;
         if (!isRouteOnly) {
-            const searchText = (lastMessage?.content + ' ' + reply).toLowerCase();
+            // PASO 1: Si se identificó un lugar específico (placeId), verificar si tiene video_url en la DB
+            if (placeId && placeName) {
+                const attraction = attractions?.find(a => a.id === placeId);
+                const business = businesses?.find(b => b.id === placeId);
+                const placeWithVideo = attraction || business;
+                
+                // Verificar si tiene video_urls (puede ser un array o string)
+                const videoUrls = (placeWithVideo as any)?.video_urls;
+                if (videoUrls) {
+                    // Si es array, tomar el primero; si es string, usarlo directamente
+                    const videoUrl = Array.isArray(videoUrls) ? videoUrls[0] : videoUrls;
+                    if (videoUrl) {
+                        relevantVideo = {
+                            id: placeId,
+                            title: placeName,
+                            url: videoUrl
+                        };
+                        console.log(`📹 Video del atractivo/negocio encontrado: "${placeName}"`);
+                    }
+                }
+            }
+            
+            // PASO 2: Si no hay video del lugar, buscar en videos locales de la app
+            if (!relevantVideo) {
+                const searchText = (lastMessage?.content + ' ' + reply).toLowerCase();
             
             // Normalizar texto para búsqueda (remover acentos y caracteres especiales)
             const normalizeText = (text: string) => {
@@ -621,55 +674,72 @@ export async function POST(req: Request) {
                 // Si la consulta sugiere búsqueda de video, buscar en YouTube usando la API
                 if (hasVideoIntent) {
                     try {
-                        // Términos compuestos que deben mantenerse juntos
-                        const compoundTerms: { [key: string]: string } = {
-                            'motogp': 'MotoGP',
-                            'moto gp': 'MotoGP',
-                            'formula 1': 'Formula 1',
-                            'formula1': 'Formula 1',
-                            'champions league': 'Champions League',
-                            'copa america': 'Copa America',
-                            'marcha bombos': 'marcha de los bombos',
-                            'santiago estero': 'Santiago del Estero'
-                        };
+                        let youtubeSearchQuery = '';
                         
-                        // Buscar términos compuestos en la consulta
-                        let youtubeSearchQuery = normalizedSearch;
-                        for (const [key, value] of Object.entries(compoundTerms)) {
-                            if (normalizedSearch.includes(key)) {
-                                youtubeSearchQuery = value;
-                                break;
+                        // Debug: verificar si placeName está disponible
+                        console.log(`🔍 DEBUG YouTube search - placeName disponible: "${placeName || 'NO DISPONIBLE'}"`);
+                        
+                        // PRIORIDAD 1: Si ya identificamos un lugar específico, usar su nombre
+                        if (placeName) {
+                            youtubeSearchQuery = `${placeName} Santiago del Estero`;
+                            console.log(`🎯 Usando nombre del lugar identificado para YouTube: "${youtubeSearchQuery}"`);
+                        } else {
+                            // PRIORIDAD 2: Términos compuestos que deben mantenerse juntos
+                            const compoundTerms: { [key: string]: string } = {
+                                'motogp': 'MotoGP',
+                                'moto gp': 'MotoGP',
+                                'formula 1': 'Formula 1',
+                                'formula1': 'Formula 1',
+                                'champions league': 'Champions League',
+                                'copa america': 'Copa America',
+                                'marcha bombos': 'marcha de los bombos',
+                                'santiago estero': 'Santiago del Estero'
+                            };
+                            
+                            // Buscar términos compuestos en la consulta
+                            let foundCompound = false;
+                            for (const [key, value] of Object.entries(compoundTerms)) {
+                                if (normalizedSearch.includes(key)) {
+                                    youtubeSearchQuery = value;
+                                    foundCompound = true;
+                                    break;
+                                }
+                            }
+                            
+                            // PRIORIDAD 3: Si no se encontró término compuesto, extraer palabras relevantes
+                            if (!foundCompound) {
+                                const searchWords = normalizedSearch
+                                    .split(/\s+/)
+                                    .filter(w => w.length > 3 && !commonWords.has(w))
+                                    .slice(0, 5);
+                                youtubeSearchQuery = searchWords.join(' ');
+                            }
+                            
+                            // Detectar si es una búsqueda sobre Santiago del Estero o tema general
+                            const localKeywords = [
+                                'santiago', 'estero', 'termas', 'bombos', 'chacarera', 'folklore', 'folclore',
+                                'carnaval', 'dique', 'frontal', 'casino', 'catedral', 'plaza', 'libertad',
+                                'nodo', 'tecnologico', 'parque', 'santiagueño', 'santiagueno', 'copo',
+                                'banda', 'loreto', 'atamisqui', 'salinas', 'grandes', 'patio', 'froilan'
+                            ];
+                            
+                            const isLocalSearch = localKeywords.some(keyword => 
+                                normalizedSearch.includes(keyword)
+                            );
+                            
+                            // Construir query final: agregar "Santiago del Estero" solo si es búsqueda local
+                            // y no está ya incluido
+                            if (isLocalSearch && !youtubeSearchQuery.toLowerCase().includes('santiago del estero')) {
+                                youtubeSearchQuery = `${youtubeSearchQuery} Santiago del Estero`;
                             }
                         }
                         
-                        // Si no se encontró término compuesto, extraer palabras relevantes
-                        if (youtubeSearchQuery === normalizedSearch) {
-                            const searchWords = normalizedSearch
-                                .split(/\s+/)
-                                .filter(w => w.length > 3 && !commonWords.has(w))
-                                .slice(0, 5);
-                            youtubeSearchQuery = searchWords.join(' ');
+                        // Si no hay query después de todos los intentos, usar términos básicos
+                        if (!youtubeSearchQuery || youtubeSearchQuery.trim().length === 0) {
+                            youtubeSearchQuery = normalizedSearch.split(/\s+/).slice(0, 5).join(' ') + ' Santiago del Estero';
                         }
                         
-                        // Detectar si es una búsqueda sobre Santiago del Estero o tema general
-                        const localKeywords = [
-                            'santiago', 'estero', 'termas', 'bombos', 'chacarera', 'folklore', 'folclore',
-                            'carnaval', 'dique', 'frontal', 'casino', 'catedral', 'plaza', 'libertad',
-                            'nodo', 'tecnologico', 'parque', 'santiagueño', 'santiagueno', 'copo',
-                            'banda', 'loreto', 'atamisqui', 'salinas', 'grandes'
-                        ];
-                        
-                        const isLocalSearch = localKeywords.some(keyword => 
-                            normalizedSearch.includes(keyword)
-                        );
-                        
-                        // Construir query final: agregar "Santiago del Estero" solo si es búsqueda local
-                        // y no está ya incluido en el término compuesto
-                        if (isLocalSearch && !youtubeSearchQuery.toLowerCase().includes('santiago del estero')) {
-                            youtubeSearchQuery = `${youtubeSearchQuery} Santiago del Estero`;
-                        }
-                        
-                        console.log(`🔍 Buscando en YouTube: "${youtubeSearchQuery}" (${isLocalSearch ? 'local' : 'general'})`);
+                        console.log(`🔍 Buscando en YouTube: "${youtubeSearchQuery}"`);
                         
                         // Usar YouTube Data API v3 para buscar videos
                         const youtubeApiKey = process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY;
@@ -715,7 +785,8 @@ export async function POST(req: Request) {
                     }
                 }
             }
-        }
+            } // Cierre del if (!relevantVideo)
+        } // Cierre del if (!isRouteOnly)
         
         // Si es consulta de ruta, forzar respuesta concisa y directa
         if (isRouteOnly && placeName) {
@@ -733,12 +804,23 @@ export async function POST(req: Request) {
             console.log('🗺️ Route query: Forced concise response:', reply);
         }
 
+        // Debug: Log final response before returning
+        console.log('📤 API Response:', {
+            replyLength: reply?.length || 0,
+            replyPreview: reply?.substring(0, 100) || 'UNDEFINED',
+            placeId,
+            placeName,
+            isRouteOnly,
+            isInfoQuery
+        });
+
         return NextResponse.json({ 
             reply, 
             placeId, 
             placeName, 
             placeDescription,
             isRouteOnly,
+            isInfoQuery, // Agregar flag para preguntas informativas
             relevantVideo,
             remainingRequests: rateLimit.remainingRequests
         });
