@@ -425,7 +425,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             const relevantVideo = data.relevantVideo; // Video relevante si existe
 
             // Si hay video relevante, modificar la respuesta y preparar modal
-            if (relevantVideo) {
+            // Verificar que relevantVideo existe Y tiene contenido válido (url o videos)
+            if (relevantVideo && (relevantVideo.url || (relevantVideo.videos && relevantVideo.videos.length > 0))) {
                 // Verificar si es una lista de videos de YouTube
                 if (relevantVideo.isYouTubeList && relevantVideo.videos && relevantVideo.videos.length > 0) {
                     const videoCount = relevantVideo.videos.length;

@@ -123,7 +123,7 @@ export async function POST(req: Request) {
             'conoces algún', 'conoces algun', 'me sugieres', 'sugerencias'
         ];
         
-        const isInfoQuery = lastMessage && 
+        let isInfoQuery = lastMessage && 
             typeof lastMessage.content === 'string' &&
             infoKeywords.some(keyword => 
                 lastMessage.content.toLowerCase().includes(keyword)
@@ -187,7 +187,7 @@ export async function POST(req: Request) {
         // 1. Fetch Local Data for Context
         console.log('🔍 Fetching data from Supabase...');
         const { data: attractions, error: attractionsError } = await supabase.from('attractions').select('id, name, description, info_extra, category, lat, lng, video_urls');
-        const { data: businesses, error: businessesError } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng, video_urls');
+        const { data: businesses, error: businessesError } = await supabase.from('businesses').select('id, name, category, website_url, contact_info, lat, lng');
         const { data: videos } = await supabase.from('app_videos').select('id, title, video_url');
 
         // Debug logging
@@ -201,6 +201,132 @@ export async function POST(req: Request) {
             error: businessesError,
             sample: businesses?.slice(0, 2)
         });
+
+        // ============================================================
+        // PASO 1: BUSCAR DIRECTAMENTE EN LA BASE DE DATOS LOCAL
+        // Antes de llamar a Gemini, intentar encontrar un lugar en la BD
+        // ============================================================
+        
+        const userQuery = lastMessage?.content?.toLowerCase() || '';
+        
+        console.log('🔍 PASO 1: Buscando en BD local antes de usar Gemini...');
+        console.log('📝 Consulta del usuario:', userQuery);
+        
+        // Función para normalizar texto (remover acentos y caracteres especiales)
+        const normalizeText = (text: string) => {
+            return text
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+        
+        const normalizedQuery = normalizeText(userQuery);
+        
+        // Extraer palabras clave significativas (más de 3 letras)
+        const commonWords = new Set(['donde', 'puedo', 'quiero', 'como', 'cual', 'para', 'con', 'sin', 'sobre', 'desde', 'hasta', 'entre', 'hay', 'esta', 'son', 'tiene', 'hacer', 'lugar', 'lugares', 'sitio', 'sitios', 'conocer', 'ver', 'visitar', 'que', 'del', 'las', 'los', 'una', 'uno']);
+        const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 3 && !commonWords.has(w));
+        
+        console.log('🔑 Palabras clave extraídas:', queryWords.join(', '));
+        
+        // Buscar coincidencias en attractions
+        let foundPlace = null;
+        let foundPlaceType = null;
+        let bestScore = 0;
+        
+        if (attractions && attractions.length > 0) {
+            for (const attraction of attractions) {
+                const name = normalizeText(attraction.name as string);
+                const description = normalizeText((attraction.description as string) || '');
+                const category = normalizeText((attraction.category as string) || '');
+                
+                let score = 0;
+                
+                // Coincidencia exacta en el nombre (máxima prioridad)
+                if (name === normalizedQuery) {
+                    score = 100;
+                } else {
+                    // Contar cuántas palabras clave coinciden
+                    for (const word of queryWords) {
+                        if (name.includes(word)) score += 10;
+                        if (description.includes(word)) score += 3;
+                        if (category.includes(word)) score += 5;
+                    }
+                }
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    foundPlace = attraction;
+                    foundPlaceType = 'attraction';
+                }
+            }
+        }
+        
+        // Buscar en businesses si no encontró buena coincidencia en attractions
+        if (bestScore < 10 && businesses && businesses.length > 0) {
+            for (const business of businesses) {
+                const name = normalizeText(business.name as string);
+                const category = normalizeText((business.category as string) || '');
+                
+                let score = 0;
+                
+                if (name === normalizedQuery) {
+                    score = 100;
+                } else {
+                    for (const word of queryWords) {
+                        if (name.includes(word)) score += 10;
+                        if (category.includes(word)) score += 5;
+                    }
+                }
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    foundPlace = business;
+                    foundPlaceType = 'business';
+                }
+            }
+        }
+        
+        console.log(`🎯 Mejor coincidencia: ${foundPlace ? (foundPlace.name as string) : 'NINGUNA'} (score: ${bestScore})`);
+        
+        // Si encontramos un lugar con suficiente confianza (score >= 5), responder directamente sin Gemini
+        let reply: string = '';
+        let placeId: string | null = null;
+        let placeName: string | null = null;
+        let placeDescription: string | null = null;
+        let skipGemini = false;
+        
+        if (foundPlace && bestScore >= 5) {
+            console.log('✅ Lugar encontrado en BD local:', foundPlace.name);
+            placeId = foundPlace.id;
+            placeName = foundPlace.name as string;
+            skipGemini = true;
+            
+            // Generar respuesta simple sobre el lugar encontrado
+            if (foundPlaceType === 'attraction') {
+                placeDescription = (foundPlace.description as string) || `Descubre ${placeName}, un atractivo en la categoría ${foundPlace.category}.`;
+                reply = `¡Hola, chango! Te cuento sobre **${placeName}**.\n\n${placeDescription}`;
+            } else {
+                placeDescription = `Conoce ${placeName}, un negocio en la categoría ${foundPlace.category}.`;
+                const contactInfo = (foundPlace as any).contact_info;
+                reply = `¡Hola! Te recomiendo **${placeName}**, un lugar en la categoría ${foundPlace.category}.`;
+                if (contactInfo) {
+                    reply += `\n\nContacto: ${contactInfo}`;
+                }
+            }
+            
+            console.log('💬 Respuesta generada desde BD local (sin Gemini)');
+        } else {
+            console.log('❌ No se encontró lugar en BD local, usando Gemini para búsqueda global...');
+        }
+        
+        // ============================================================
+        // PASO 2: SI NO ENCONTRÓ EN BD LOCAL, USAR GEMINI
+        // ============================================================
+        
+        if (!skipGemini) {
 
         // Format data in a more readable way for the AI
         const formatAttractions = (attractions || []).map((a: any) => 
@@ -291,7 +417,8 @@ export async function POST(req: Request) {
         const iaProvider = settings?.ia_provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'openai');
         const iaModel = settings?.ia_model || undefined;
 
-        let reply: string = ''; // Inicializar vacío para evitar undefined
+        // NOTE: reply ya está declarado arriba (línea 295), NO redeclarar aquí
+        if (!reply) reply = ''; // Solo inicializar si aún está vacío
 
         if (iaProvider === 'openai') {
             const openai = (await import('@/lib/openai')).default;
@@ -338,16 +465,24 @@ export async function POST(req: Request) {
                     }
                 }
                 
+                // Limitar historial a los últimos 10 mensajes (5 intercambios user/model)
+                // para evitar que el contexto sea muy largo y se agote maxOutputTokens
+                const maxHistoryMessages = 10;
+                const limitedHistory = validHistory.length > maxHistoryMessages 
+                    ? validHistory.slice(-maxHistoryMessages) 
+                    : validHistory;
+                console.log(`📜 Historia: ${validHistory.length} mensajes totales, usando últimos ${limitedHistory.length}`);
+                
                 const lastUserMessage = messages[messages.length - 1].content;
                 
                 // Include system prompt in the first user message if history is empty
-                const messageToSend = validHistory.length === 0 
+                const messageToSend = limitedHistory.length === 0 
                     ? `${systemPrompt}\n\nUsuario: ${lastUserMessage}`
                     : lastUserMessage;
                 
                 const chat = model.startChat({ 
-                    history: validHistory, 
-                    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+                    history: limitedHistory, 
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
                 });
                 const result = await chat.sendMessage(messageToSend);
                 
@@ -436,14 +571,20 @@ export async function POST(req: Request) {
                             }
                         }
                         
+                        // Limitar historial a los últimos 10 mensajes
+                        const maxHistoryMessages = 10;
+                        const limitedFallbackHistory = validFallbackHistory.length > maxHistoryMessages 
+                            ? validFallbackHistory.slice(-maxHistoryMessages) 
+                            : validFallbackHistory;
+                        
                         // Include system prompt in first message if needed
-                        const messageToSend = validFallbackHistory.length === 0 
+                        const messageToSend = limitedFallbackHistory.length === 0 
                             ? `${systemPrompt}\n\nUsuario: ${lastUserMessage}`
                             : lastUserMessage;
                         
                         const chat = fallbackModel.startChat({ 
-                            history: validFallbackHistory, 
-                            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+                            history: limitedFallbackHistory, 
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
                         });
                         const result = await chat.sendMessage(messageToSend);
                         reply = result.response.text();
@@ -478,12 +619,56 @@ export async function POST(req: Request) {
                 }
             }
         }
+        } // Cierre del if (!skipGemini) - TERMINA BÚSQUEDA EN GEMINI
         
-        // Detect if a specific place is mentioned in the reply
-        let placeId: string | null = null;
-        let placeName = null;
-        let placeDescription = null;
-        let isRouteOnly = false; // Flag para indicar que solo se debe mostrar ruta
+        // ============================================================
+        // PASO 3: IDENTIFICAR LUGAR EN LA RESPUESTA (SOLO SI NO SE ENCONTRÓ EN BD LOCAL)
+        // ============================================================
+        
+        // Si no encontramos lugar en BD local, intentar extraerlo de la respuesta de Gemini
+        if (!placeId && reply) {
+            console.log('🔍 Lugar no encontrado en BD local, intentando extraer de respuesta de Gemini...');
+            
+            // Buscar el nombre del lugar en la respuesta de la IA
+            for (const attraction of (attractions || [])) {
+                const name = attraction.name as string;
+                if (reply.toLowerCase().includes(name.toLowerCase())) {
+                    placeId = attraction.id;
+                    placeName = name;
+                    console.log(`📍 Lugar identificado en respuesta de Gemini: "${placeName}" (ID: ${placeId})`);
+                    break;
+                }
+            }
+            
+            // If not found in attractions, check businesses
+            if (!placeId) {
+                for (const business of (businesses || [])) {
+                    const name = business.name as string;
+                    if (reply.toLowerCase().includes(name.toLowerCase())) {
+                        placeId = business.id;
+                        placeName = name;
+                        console.log(`🏢 Negocio identificado en respuesta de Gemini: "${placeName}" (ID: ${placeId})`);
+                        break;
+                    }
+                }
+            }
+            
+            // Get description if place found
+            if (placeId && !placeDescription) {
+                const attraction = attractions?.find(a => a.id === placeId);
+                if (attraction) {
+                    placeDescription = attraction.description || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
+                } else {
+                    const business = businesses?.find(b => b.id === placeId);
+                    if (business) {
+                        placeDescription = `Conoce ${business.name}, un negocio en la categoría ${business.category}.`;
+                    }
+                }
+            }
+        }
+        
+        // Variables para control de flujo
+        let isRouteOnly = false;
         
         // Detectar si el usuario pregunta explícitamente por videos/imágenes
         const userMessage = lastMessage?.content?.toLowerCase() || '';
@@ -498,101 +683,42 @@ export async function POST(req: Request) {
             console.log('🎥 VIDEO/IMAGEN request detected, will search YouTube');
         }
         
-        // Si es consulta de ruta, marcar como tal pero SÍ extraer placeName para trazar ruta
+        // Si es consulta de ruta, marcar como tal
         if (isRouteQuery) {
             isRouteOnly = true;
             console.log('🗺️  ROUTE query detected:', lastMessage.content);
-            console.log('Route query detected, extracting placeName but not setting placeId');
-            
-            // Buscar el nombre del lugar en la respuesta de la IA (para rutas y lugares mencionados)
-            if (reply) {
-                // Check attractions first
-                for (const attraction of (attractions || [])) {
-                    const name = attraction.name as string;
-                    // Case-insensitive partial match
-                    if (reply.toLowerCase().includes(name.toLowerCase())) {
-                        placeName = name;
-                        console.log('Place found for route:', placeName);
-                        break;
-                    }
-                }
-                
-                // If not found in attractions, check businesses
-                if (!placeName) {
-                    for (const business of (businesses || [])) {
-                        const name = business.name as string;
-                        if (reply.toLowerCase().includes(name.toLowerCase())) {
-                            placeName = name;
-                            console.log('Business found for route:', placeName);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        else if (reply) {
-            // SIEMPRE buscar placeId si NO es consulta de ruta
-            // Esto permite mostrar la card del lugar incluso si el usuario pide videos
-            // Check attractions first
-            for (const attraction of (attractions || [])) {
-                const name = attraction.name as string;
-                // Case-insensitive partial match
-                if (reply.toLowerCase().includes(name.toLowerCase())) {
-                    placeId = attraction.id;
-                    placeName = name;
-                    console.log(`📍 Lugar identificado: "${placeName}" (ID: ${placeId})`);
-                    break;
-                }
-            }
-            
-            // If not found in attractions, check businesses
-            if (!placeId) {
-                for (const business of (businesses || [])) {
-                    const name = business.name as string;
-                    if (reply.toLowerCase().includes(name.toLowerCase())) {
-                        placeId = business.id;
-                        placeName = name;
-                        console.log(`🏢 Negocio identificado: "${placeName}" (ID: ${placeId})`);
-                        break;
-                    }
-                }
-            }
-            
-            // Get description if place found
-            if (placeId) {
-                const attraction = attractions?.find(a => a.id === placeId);
-                if (attraction) {
-                    placeDescription = attraction.description || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
-                } else {
-                    const business = businesses?.find(b => b.id === placeId);
-                    if (business) {
-                        placeDescription = `Conoce ${business.name}, un negocio en la categoría ${business.category}.`;
-                    }
-                }
-            }
         }
         
-        // Buscar video relevante basado en el contenido del mensaje del usuario y la respuesta
+        // IMPORTANTE: Si encontramos un lugar específico en la BD, 
+        // NO es una consulta informativa genérica, debe mostrar la card
+        if (placeId && isInfoQuery) {
+            console.log('✅ Lugar específico encontrado, cambiando isInfoQuery de true → false para mostrar card');
+            isInfoQuery = false;
+        }
+        
+        // Buscar video relevante SOLO si el usuario explícitamente pidió videos/imágenes
         let relevantVideo = null;
-        if (!isRouteOnly) {
-            // PASO 1: Si se identificó un lugar específico (placeId), verificar si tiene video_url en la DB
+        if (!isRouteOnly && isVideoRequest) {
+            console.log('🎬 Usuario pidió videos, iniciando búsqueda...');
+            
+            // PASO 1: Si se identificó un lugar específico (placeId), verificar si tiene video_urls en la DB
             if (placeId && placeName) {
                 const attraction = attractions?.find(a => a.id === placeId);
-                const business = businesses?.find(b => b.id === placeId);
-                const placeWithVideo = attraction || business;
                 
-                // Verificar si tiene video_urls (puede ser un array o string)
-                const videoUrls = (placeWithVideo as any)?.video_urls;
-                if (videoUrls) {
-                    // Si es array, tomar el primero; si es string, usarlo directamente
-                    const videoUrl = Array.isArray(videoUrls) ? videoUrls[0] : videoUrls;
-                    if (videoUrl) {
-                        relevantVideo = {
-                            id: placeId,
-                            title: placeName,
-                            url: videoUrl
-                        };
-                        console.log(`📹 Video del atractivo/negocio encontrado: "${placeName}"`);
+                // Solo attractions tienen video_urls, businesses no
+                if (attraction) {
+                    const videoUrls = (attraction as any)?.video_urls;
+                    if (videoUrls) {
+                        // Si es array, tomar el primero; si es string, usarlo directamente
+                        const videoUrl = Array.isArray(videoUrls) ? videoUrls[0] : videoUrls;
+                        if (videoUrl) {
+                            relevantVideo = {
+                                id: placeId,
+                                title: placeName,
+                                url: videoUrl
+                            };
+                            console.log(`📹 Video del atractivo encontrado: "${placeName}"`);
+                        }
                     }
                 }
             }
@@ -662,13 +788,9 @@ export async function POST(req: Request) {
                 };
                 console.log(`📹 Video local encontrado: "${bestMatch.video.title}" (score: ${bestMatch.score})`);
             } else {
-                // PASO 3: Solo buscar en YouTube si el usuario EXPLÍCITAMENTE pidió videos/imágenes
-                // NO buscar automáticamente solo porque mencionó palabras como "bailar" o "folklore"
-                
-                // Si el usuario pidió explícitamente videos/imágenes, buscar en YouTube usando la API
-                if (isVideoRequest) {
-                    console.log('🎬 Usuario solicitó videos/imágenes explícitamente, buscando en YouTube...');
-                    try {
+                // PASO 3: Buscar en YouTube
+                console.log('🎬 Buscando en YouTube...');
+                try {
                         let youtubeSearchQuery = '';
                         
                         // Debug: verificar si placeName está disponible
@@ -778,10 +900,9 @@ export async function POST(req: Request) {
                     } catch (youtubeError) {
                         console.error('Error buscando en YouTube:', youtubeError);
                     }
-                }
-            }
-            } // Cierre del if (!relevantVideo)
-        } // Cierre del if (!isRouteOnly)
+                } // Cierre del else (búsqueda YouTube)
+            } // Cierre del if (!relevantVideo) - búsqueda app_videos
+        } // Cierre del if (!isRouteOnly && isVideoRequest)
         
         // Si es consulta de ruta, forzar respuesta concisa y directa
         if (isRouteOnly && placeName) {
@@ -806,19 +927,30 @@ export async function POST(req: Request) {
             placeId,
             placeName,
             isRouteOnly,
-            isInfoQuery
+            isInfoQuery,
+            hasVideo: !!relevantVideo
         });
 
-        return NextResponse.json({ 
+        // Construir respuesta - solo incluir relevantVideo si existe
+        const response: any = { 
             reply, 
             placeId, 
             placeName, 
             placeDescription,
             isRouteOnly,
-            isInfoQuery, // Agregar flag para preguntas informativas
-            relevantVideo,
+            isInfoQuery,
             remainingRequests: rateLimit.remainingRequests
-        });
+        };
+        
+        // Solo agregar relevantVideo si tiene contenido válido
+        if (relevantVideo && (relevantVideo.url || relevantVideo.videos)) {
+            response.relevantVideo = relevantVideo;
+            console.log('✅ Incluyendo video en respuesta:', relevantVideo.isYouTubeList ? `Lista de ${relevantVideo.videos?.length} videos` : relevantVideo.title);
+        } else {
+            console.log('ℹ️  No hay video para incluir en respuesta');
+        }
+
+        return NextResponse.json(response);
     } catch (error) {
         console.error('Error in chat route:', error);
         const message = error instanceof Error ? error.message : String(error);
