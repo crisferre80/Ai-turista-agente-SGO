@@ -15,6 +15,8 @@ Reemplacé el sistema complejo de **auto-promociones con scheduler** por un sist
   - `category`: Categoría (gastronomía, tecnología, general, etc.)
   - `priority`: Prioridad (0-10, mayor = más probabilidad)
   - `show_probability`: % de probabilidad cuando se muestra (default 25%)
+  - `image_url`: (opcional) URL de una imagen que se mostrará en un modal junto al mensaje
+  - `video_url`: (opcional) URL de un video que se reproducirá en un modal junto al mensaje
 
 ### 2. **Panel de Admin - Nueva Sección**
 - Ubicación: `/admin` → Pestaña **"💼 Mensajes Promocionales"**
@@ -55,6 +57,8 @@ Reemplacé el sistema complejo de **auto-promociones con scheduler** por un sist
    - **Categoría**: tecnologia, gastronomia, etc.
    - **Prioridad**: 0-10 (mayor número = más importante)
    - **Probabilidad**: 0-100% (default 25%)
+   - **Imagen (URL o archivo)**: opcional, se mostrará en un modal cuando Santi diga el mensaje
+   - **Video (URL o archivo)**: opcional, se mostrará en un modal cuando Santi diga el mensaje
 4. Clic en **"✅ Agregar Mensaje Promocional"**
 
 ### Paso 3: Gestionar Mensajes Existentes
@@ -86,6 +90,7 @@ Santi dice el mensaje con voz
 ¿Sabías que en Nodo Tecnológico podés encontrar servicio técnico, 
 reparación de PC, venta de equipos y más? ¡Visitanos en nuestra sucursal!
 ```
+*Ejemplo con imagen/video: añade una URL de imagen o video en el formulario y se mostrará en un modal cuando Santi lo lea.*
 
 ### Restaurante (Gastronomía)
 ```

@@ -688,9 +688,9 @@ export default function ARConfigPage() {
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr 360px', gap: '20px', height: 'calc(100vh - 180px)' }}>
+        <div className="ar-config-grid" style={{ gap: '20px' }}>
           {/* Columna Izquierda: Selector y Configuración Básica */}
-          <div style={{
+          <div className="ar-config-left" style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '16px'
@@ -1088,7 +1088,7 @@ export default function ARConfigPage() {
           </div>
 
           {/* Columna Central: Canvas 3D */}
-          <div style={{
+          <div className="ar-config-center" style={{
             background: 'white',
             borderRadius: '16px',
             padding: '20px',
@@ -1127,7 +1127,7 @@ export default function ARConfigPage() {
                   👁️ Vista Previa 3D
                 </h3>
                 
-                <div style={{ 
+                <div className="preview-wrapper" style={{ 
                   flex: 1,
                   minHeight: '400px',
                   background: '#f8f9fa',
@@ -1218,7 +1218,7 @@ export default function ARConfigPage() {
           </div>
 
           {/* Columna Derecha: Herramientas y Controles */}
-          <div style={{
+          <div className="ar-config-right" style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '16px'
@@ -1333,7 +1333,7 @@ export default function ARConfigPage() {
                         }}>
                           Posición:
                         </label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                        <div className="three-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
                           <input
                             type="number"
                             step="0.1"
@@ -1459,7 +1459,7 @@ export default function ARConfigPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
                     <div>
                       <label>Posición del modelo:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                      <div className="three-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
                         <span>X: {modelTransform.position.x.toFixed(2)}</span>
                         <span>Y: {modelTransform.position.y.toFixed(2)}</span>
                         <span>Z: {modelTransform.position.z.toFixed(2)}</span>
@@ -1468,7 +1468,7 @@ export default function ARConfigPage() {
 
                     <div>
                       <label>Rotación del modelo:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                      <div className="three-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
                         <span>X: {modelTransform.rotation.x.toFixed(2)}</span>
                         <span>Y: {modelTransform.rotation.y.toFixed(2)}</span>
                         <span>Z: {modelTransform.rotation.z.toFixed(2)}</span>
@@ -1477,7 +1477,7 @@ export default function ARConfigPage() {
 
                     <div>
                       <label>Escala del modelo:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                      <div className="three-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginTop: '4px' }}>
                         <span>X: {modelTransform.scale.x.toFixed(2)}</span>
                         <span>Y: {modelTransform.scale.y.toFixed(2)}</span>
                         <span>Z: {modelTransform.scale.z.toFixed(2)}</span>

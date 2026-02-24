@@ -110,6 +110,9 @@ button:active {
   box-shadow: var(--shadow-heavy);
 }
 
+/* Mobile header hidden by default, shown only on small screens */
+.mobile-only-header { display: none; }
+
 /* Responsive */
 @media (max-width: 768px) {
   html, body {
@@ -164,13 +167,29 @@ button:active {
 .admin-main {
   flex: 1 1 0;
   min-width: 0; /* allow children to shrink properly */
-  padding: var(--spacing-md);
+  padding: 120px 50px 50px 50px;
 }
 
 .admin-sidebar {
   flex: 0 0 320px;
   width: 320px;
   min-width: 220px;
+}
+
+/* WebXR tools responsive helpers */
+.webxr-container { display: flex; gap: 20px; }
+.webxr-sidebar { flex: 0 0 280px; }
+.webxr-overlay { display: none; }
+.webxr-hamburger { display: none; }
+
+@media (max-width: 768px) {
+  .webxr-container { flex-direction: column; }
+  .webxr-sidebar { display: none; width: 100%; }
+  .webxr-sidebar.open { display: block; position: fixed; z-index: 2200; left: 0; top: 90px; bottom: 0; width: 100%; padding: 16px; background: white; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+  .webxr-overlay { display: block; position: fixed; left: 0; top: 90px; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 2100; }
+  .webxr-hamburger { display: inline-block; }
+  .webxr-hamburger { background: transparent; border: none; }
+  .webxr-sidebar button { font-size: 16px; padding: 12px 14px; text-align: left; }
 }
 
 /* Utility row that wraps on small screens */
@@ -226,3 +245,84 @@ pre, code {
   .responsive-row { flex-direction: column; }
   .list-item { justify-content: flex-start; }
 }
+
+/* AR Config responsive grid */
+.ar-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0,320px) 1fr minmax(0,360px);
+  gap: 20px;
+  height: calc(100vh - 180px);
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 12px; /* lateral padding container to avoid edge overflow */
+}
+.ar-config-left { overflow: auto; max-height: calc(100vh - 220px); box-sizing: border-box; padding: 0; }
+.ar-config-center { min-height: 400px; display: flex; flex-direction: column; box-sizing: border-box; padding: 0; }
+.ar-config-right { overflow: auto; max-height: calc(100vh - 220px); box-sizing: border-box; padding: 0; }
+
+/* Ensure children in right panel can shrink and don't force width */
+.ar-config-right * { min-width: 0; }
+.ar-config-right input, .ar-config-right select, .ar-config-right textarea { width: 100%; max-width: 100%; box-sizing: border-box; }
+
+/* tools container layout for ARPreview3D */
+.tools-container { display: flex; gap: 12px; align-items: flex-start; }
+.tools-container .preview-area { flex: 1; }
+.tools-container .ar-tools-panel { flex: 0 0 360px; }
+@media (max-width: 1024px) { .tools-container { flex-direction: column; } }
+
+/* Three-column grids used in forms: collapse to single column on small screens */
+.three-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+@media (max-width: 720px) {
+  .three-cols { grid-template-columns: 1fr !important; gap: 8px !important; }
+}
+
+/* ARPreview3D tools responsive: convert floating fixed panel into inline panel under preview on small screens */
+.ar-tools-button { position: fixed; right: 20px; top: 80px; z-index: 80; }
+.ar-tools-panel { position: fixed; right: 20px; top: 120px; width: 360px; max-height: 70vh; overflow-y: auto; background: #111; color: white; padding: 12px; border-radius: 8px; border: 1px solid #333; z-index: 79; }
+/* hide duplicate panel (generated earlier) */
+.duplicate-panel { display: none !important; }
+
+@media (max-width: 1024px) {
+  .ar-tools-button { right: 12px; top: 90px; }
+  .ar-tools-panel { right: 12px; width: 320px; }
+}
+
+@media (max-width: 1024px) {
+  /* On tablets and small laptops, make the tools panel inline under the preview */
+  .ar-tools-button { display: none !important; }
+  .ar-tools-panel { position: static !important; width: 100% !important; max-height: none !important; margin-top: 12px; border-radius: 8px; box-shadow: none; border: 1px solid #e5e7eb; background: white; color: #111; padding: 12px; }
+  .ar-tools-panel button { white-space: normal; }
+}
+
+@media (max-width: 1024px) {
+  .ar-config-grid { grid-template-columns: 1fr; height: auto; padding: 0 10px; }
+  .ar-config-left, .ar-config-right { max-height: none; padding: 0; }
+  .ar-config-center { min-height: 360px; padding: 0; }
+}
+
+@media (max-width: 480px) {
+  .ar-config-grid { padding: 8px; gap: 12px; }
+  .ar-config-center { min-height: 300px; padding: 8px; }
+  .ar-config-left, .ar-config-right { padding: 8px; }
+  /* Reduce card paddings globally on very small screens */
+  .card-hover, .glass-panel, .card-style, .card { padding: 8px !important; }
+}
+
+/* Prevent preview and other heavy elements from overflowing */
+.preview-wrapper { width: 100%; max-width: 100%; overflow: hidden; }
+.preview-wrapper > canvas, .preview-wrapper canvas, .preview-wrapper canvas :is(canvas) { display: block; width: 100% !important; height: auto !important; max-height: 60vh; }
+
+/* Ensure inputs, selects and media scale down inside admin panels */
+.admin-main input, .admin-main textarea, .admin-main select, .admin-main button, .ar-config-left select, .ar-config-left input {
+  max-width: 100%;
+}
+
+/* Tighter limits on very small screens */
+@media (max-width: 480px) {
+  .preview-wrapper > canvas, .preview-wrapper canvas { max-height: 40vh; }
+  .ar-config-grid { height: auto; }
+}
+
+/* General safeguard: avoid any child causing horizontal scroll inside admin-main */
+.admin-main * { max-width: 100vw; box-sizing: border-box; }
+

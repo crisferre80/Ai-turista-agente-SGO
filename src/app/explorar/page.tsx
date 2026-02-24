@@ -11,11 +11,12 @@ import UserReviewModal from '@/components/UserReviewModal';
 import UserReviewsGallery from '@/components/UserReviewsGallery';
 import { mergeWithDefaultCategories, normalizeCategoryName, type CategoryItem } from '@/lib/categories';
 
-const COLOR_PRIMARY = "#2563eb"; // Azul profesional
-const COLOR_SECONDARY = "#64748b"; // Gris azulado
-const COLOR_ACCENT = "#f1f5f9"; // Gris muy claro
-const COLOR_TEXT = "#1e293b"; // Gris oscuro
-const COLOR_BACKGROUND = "#ffffff"; // Blanco
+// Palette adapted from PlaceDetailClient
+const COLOR_PRIMARY = "#1A3A6C"; // Azul oscuro principal
+const COLOR_ACCENT = "#C5A065"; // Dorado suave
+const COLOR_SECONDARY = "#555555"; // Texto secundario neutro
+const COLOR_TEXT = "#333333"; // Gris oscuro legible
+const COLOR_BACKGROUND = "#ffffff"; // Blanco base
 
 type PlaceType = {
     id: string;
@@ -182,130 +183,35 @@ export default function ExplorePage() {
     });
 
     const PlaceCard = ({ place }: { place: PlaceType }) => (
-        <Link 
+        <Link
             href={`/explorar/${place.id}`}
-            id={`place-${place.id}`} 
-            data-place-id={place.id} 
-            className="card-hover" 
-            style={{
-                background: highlightId === place.id ? '#fef3c7' : 'white',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                boxShadow: highlightId === place.id ? '0 10px 25px rgba(37, 99, 235, 0.15)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                border: '1px solid #e2e8f0',
-                cursor: 'pointer',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'all 0.2s ease',
-                textDecoration: 'none',
-                color: 'inherit'
-            }}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.1)';
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-            }}
+            id={`place-${place.id}`}
+            data-place-id={place.id}
+            className="group bg-white rounded-2xl overflow-hidden shadow-xl transition-all duration-300 transform h-full flex flex-col hover:scale-105 hover:shadow-2xl"
         >
-            <div style={{
-                position: 'relative',
-                height: '180px',
-                overflow: 'hidden'
-            }}>
+            <div className="h-48 overflow-hidden relative">
                 <Image
                     src={place.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg"}
                     alt={place.name}
                     fill
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    style={{
-                        objectFit: 'cover'
-                    }}
+                    className="object-cover transition-transform duration-300 group-hover:scale-110"
                 />
                 {place.category && (
-                    <span style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        background: 'rgba(255, 255, 255, 0.9)',
-                        color: COLOR_TEXT,
-                        padding: '4px 4px',
-                        borderRadius: '2px',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        backdropFilter: 'blur(4px)',
-                        border: '1px solid rgba(231, 23, 23, 0.2)'
-                    }}>
+                    <span className="absolute top-2 right-2 bg-white bg-opacity-90 text-gray-800 px-2 py-1 rounded text-xs font-semibold">
                         {place.category}
                     </span>
                 )}
             </div>
-            <div style={{
-                padding: '12px',
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column'
-            }}>
-                <h3 style={{
-                    margin: '0 0 4px 0',
-                    fontSize: '1.125rem',
-                    fontWeight: '600',
-                    color: COLOR_TEXT,
-                    lineHeight: '1.4'
-                }}>
-                    {place.name}
-                </h3>
-                {place.category && (
-                    <span style={{
-                        alignSelf: 'flex-start',
-                        background: COLOR_ACCENT,
-                        color: COLOR_SECONDARY,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        marginBottom: '8px'
-                    }}>
-                        {place.category}
-                    </span>
-                )}
-                <p style={{
-                    margin: 0,
-                    fontSize: '0.875rem',
-                    color: COLOR_SECONDARY,
-                    lineHeight: '1.5',
-                    flex: 1,
-                    marginBottom: '12px'
-                }}>
+            <div className="p-4 flex-1 flex flex-col">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">{place.name}</h3>
+                <p className="text-gray-600 text-sm flex-1 mb-4">
                     {place.description?.substring(0, 120)}
                     {place.description && place.description.length > 120 ? '...' : ''}
                 </p>
-                <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    flexWrap: 'wrap'
-                }}>
-                    <button style={{
-                        background: COLOR_PRIMARY,
-                        color: 'white',
-                        border: 'none',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        fontWeight: '500',
-                        fontSize: '0.75rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        flex: 1,
-                        minWidth: '80px'
-                    }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#1d4ed8';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = COLOR_PRIMARY;
-                        }}
+                <div className="mt-auto flex gap-2 flex-wrap">
+                    <button
+                        className="flex-1 min-w-[80px] bg-[#C5A065] text-white py-2 px-3 rounded-md text-sm font-medium hover:bg-[#b08d55] transition"
                         onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/explorar/${place.id}`);
@@ -314,23 +220,8 @@ export default function ExplorePage() {
                         Ver detalles
                     </button>
                     {place.gallery_urls && place.gallery_urls.length > 0 && (
-                        <button style={{
-                            background: COLOR_ACCENT,
-                            color: COLOR_TEXT,
-                            border: '1px solid #e2e8f0',
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            fontWeight: '500',
-                            fontSize: '0.75rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                        }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.background = '#f1f5f9';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.background = COLOR_ACCENT;
-                            }}
+                        <button
+                            className="bg-gray-100 text-gray-800 border border-gray-300 py-2 px-3 rounded-md text-sm hover:bg-gray-200 transition"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setGalleryModal({ urls: place.gallery_urls!, name: place.name });
@@ -346,229 +237,105 @@ export default function ExplorePage() {
 
 
     return (
-        <div style={{
-            minHeight: '100vh',
-            background: '#f8fafc',
-            padding: '90px 16px 16px 16px',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
-        }}>
-            {/* Header compartido */}
-            <Header />
-            
-            {/* Espacio para el header fijo */}
-            <div style={{ height: '70px' }} />
+        <div className="relative">
+            <div className="side-pattern"></div>
+            <div className="min-h-screen bg-gray-100 pt-[90px] px-4 font-sans">
+                {/* Header compartido */}
+                <Header />
 
-            {/* Search and Filters */}
-            <div style={{
-                background: COLOR_BACKGROUND,
-                padding: '24px',
-                borderRadius: '16px',
-                marginBottom: '24px',
-                marginTop: '24px',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                border: '1px solid #e2e8f0'
-            }}>
-                <div style={{
-                    maxWidth: '1200px',
-                    margin: '0 auto'
-                }}>
-                    <h1 style={{
-                        margin: '0 0 20px 0',
-                        fontSize: 'clamp(1.5rem, 4vw, 2.25rem)',
-                        fontWeight: '700',
-                        color: COLOR_TEXT,
-                        letterSpacing: '-0.025em',
-                        textAlign: 'center'
-                    }}>
-                        Explorar Santiago
-                    </h1>
+                {/* Espacio para el header fijo */}
+                <div className="h-[70px]" />
 
-                    {/* Search and Filters */}
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                        gap: '12px',
-                        alignItems: 'center'
-                    }}>
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                type="text"
-                                placeholder="Buscar lugares..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '12px 16px',
-                                    paddingLeft: '40px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #d1d5db',
-                                    fontSize: '0.875rem',
-                                    outline: 'none',
-                                    background: COLOR_BACKGROUND,
-                                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
-                                }}
-                                onFocus={(e) => {
-                                    e.target.style.borderColor = COLOR_PRIMARY;
-                                    e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                                }}
-                                onBlur={(e) => {
-                                    e.target.style.borderColor = '#d1d5db';
-                                    e.target.style.boxShadow = 'none';
-                                }}
-                            />
-                            <div style={{
-                                position: 'absolute',
-                                left: '12px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                color: COLOR_SECONDARY,
-                                fontSize: '0.875rem'
-                            }}>
-                                🔍
-                            </div>
+                {/* Page title */}
+                <h1 className="text-4xl font-bold text-center text-[#1A3A6C] mb-6">
+                    Explorar Santiago
+                </h1>
+
+                {/* Search Header (mismo diseño que PlaceDetailClient) */}
+                <section className="flex flex-col items-center justify-center pt-8 pb-6" data-purpose="hero-search">
+                <div className="bg-white rounded-lg w-full max-w-5xl flex flex-col md:flex-row p-1 gap-2 items-center shadow-lg">
+                    <div className="relative flex-grow w-full md:w-auto">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i className="fas fa-search text-gray-400" />
                         </div>
-
+                        <input
+                            className="block w-full pl-10 pr-3 py-3 border-none rounded-lg focus:ring-0 text-gray-700 text-lg placeholder-gray-600"
+                            placeholder="Buscar lugares..."
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <div className="hidden md:block w-px h-8 bg-gray-200" />
+                    <div className="relative min-w-[180px] w-full md:w-auto">
                         <select
+                            className="block w-full pl-3 pr-8 py-3 border-none rounded-lg bg-transparent focus:ring-0 text-gray-600 cursor-pointer appearance-none"
                             value={filter}
                             onChange={(e) => setFilter(e.target.value as 'all' | 'attractions' | 'businesses')}
-                            style={{
-                                padding: '12px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #d1d5db',
-                                fontSize: '0.875rem',
-                                outline: 'none',
-                                background: COLOR_BACKGROUND,
-                                cursor: 'pointer',
-                                color: COLOR_TEXT,
-                                transition: 'border-color 0.2s ease'
-                            }}
                         >
                             <option value="all">Todos los lugares</option>
                             <option value="attractions">Atractivos turísticos</option>
                             <option value="businesses">Negocios</option>
                         </select>
-
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
+                            <i className="fas fa-chevron-down text-xs" />
+                        </div>
+                    </div>
+                    <div className="hidden md:block w-px h-8 bg-gray-200" />
+                    <div className="relative min-w-[180px] w-full md:w-auto">
                         <select
+                            className="block w-full pl-3 pr-8 py-3 border-none rounded-lg bg-transparent focus:ring-0 text-gray-600 cursor-pointer appearance-none"
                             value={selectedCategory}
                             onChange={(e) => setSelectedCategory(e.target.value)}
-                            style={{
-                                padding: '12px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid #d1d5db',
-                                fontSize: '0.875rem',
-                                outline: 'none',
-                                background: COLOR_BACKGROUND,
-                                cursor: 'pointer',
-                                color: COLOR_TEXT,
-                                transition: 'border-color 0.2s ease'
-                            }}
                         >
                             <option value="all">Todas las categorías</option>
                             {availableCategories.map(cat => (
                                 <option key={`${cat.name}-${cat.type}`} value={cat.name}>{cat.name}</option>
                             ))}
                         </select>
-                    </div>
-
-                    {/* Stats - Más discretos y responsive */}
-                    <div style={{
-                        display: 'flex',
-                        gap: '16px',
-                        flexWrap: 'wrap',
-                        justifyContent: 'center',
-                        marginTop: '8px'
-                    }}>
-                        <div style={{
-                            background: COLOR_ACCENT,
-                            padding: isMobile ? '8px 12px' : '12px 10px',
-                            borderRadius: '8px',
-                            textAlign: 'center',
-                            border: '1px solid #e2e8f0',
-                            minWidth: isMobile ? '70px' : '120px',
-                            flex: isMobile ? 1 : 'none'
-                        }}>
-                            <div style={{
-                                fontSize: isMobile ? '1.2rem' : '1.5rem',
-                                fontWeight: '600',
-                                color: COLOR_PRIMARY
-                            }}>
-                                {attractions.length}
-                            </div>
-                            <div style={{
-                                fontSize: isMobile ? '0.65rem' : '0.75rem',
-                                color: COLOR_SECONDARY,
-                                fontWeight: '500'
-                            }}>
-                                Atractivos
-                            </div>
-                        </div>
-                        <div style={{
-                            background: COLOR_ACCENT,
-                            padding: isMobile ? '8px 12px' : '12px 20px',
-                            borderRadius: '8px',
-                            textAlign: 'center',
-                            border: '1px solid #e2e8f0',
-                            minWidth: isMobile ? '90px' : '120px',
-                            flex: isMobile ? 1 : 'none'
-                        }}>
-                            <div style={{
-                                fontSize: isMobile ? '1.2rem' : '1.5rem',
-                                fontWeight: '600',
-                                color: COLOR_PRIMARY
-                            }}>
-                                {businesses.length}
-                            </div>
-                            <div style={{
-                                fontSize: isMobile ? '0.65rem' : '0.75rem',
-                                color: COLOR_SECONDARY,
-                                fontWeight: '500'
-                            }}>
-                                Negocios
-                            </div>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
+                            <i className="fas fa-chevron-down text-xs" />
                         </div>
                     </div>
+                    <button className="w-full md:w-auto bg-[#C5A065] hover:bg-[#b08d55] text-white font-medium py-2 px-8 rounded-md shadow-sm transition-colors duration-200 text-base">
+                        Buscar
+                    </button>
                 </div>
-            </div>
+            </section>
 
-            {/* Quick Categories */}
-            <div style={{
-                background: 'rgba(255,255,255,0.95)',
-                padding: isMobile ? '8px' : '10px',
-                borderRadius: '24px',
-                marginBottom: isMobile ? '8px' : '10px',
-                boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
-                border: `2px solid ${COLOR_PRIMARY}11`
-            }}>
-                <h2 style={{
-                    textAlign: 'center',
-                    color: COLOR_PRIMARY,
-                    marginBottom: isMobile ? '8px' : '10px',
-                    fontSize: isMobile ? '1.1rem' : '1.25rem'
-                }}>
+            {/* Stats Section */}
+            <section className="flex flex-wrap justify-center gap-6 mt-4 mb-10" data-purpose="statistics">
+                <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
+                    <div className="text-[#C5A065] text-2xl mb-1">
+                        <i className="fas fa-landmark" />
+                    </div>
+                    <span className="block text-3xl font-bold text-gray-800 leading-none">{attractions.length}</span>
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Atractivos</span>
+                </div>
+                <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
+                    <div className="text-[#C5A065] text-2xl mb-1">
+                        <i className="fas fa-store" />
+                    </div>
+                    <span className="block text-3xl font-bold text-gray-800 leading-none">{businesses.length}</span>
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Negocios</span>
+                </div>
+            </section>
+
+            {/* Quick Categories with dynamic styling (tailwind layout, inline colour) */}
+            <section className="text-center mb-8" data-purpose="category-filters">
+                <h2 className="text-3xl font-serif text-gray-800 mb-6 relative inline-block">
                     Categorías Destacadas
                 </h2>
-                <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: isMobile ? '2px' : '6px',
-                    justifyContent: 'center'
-                }}>
+                <div className="flex flex-wrap justify-center gap-2">
                     {availableCategories.slice(0, 4).map(cat => (
                         <button
                             key={`${cat.name}-${cat.type}`}
                             onClick={() => setSelectedCategory(cat.name)}
+                            className="px-3 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap"
                             style={{
                                 background: 'rgba(255,255,255,0.8)',
                                 color: COLOR_PRIMARY,
-                                border: `2px solid ${COLOR_PRIMARY}22`,
-                                padding: isMobile ? '1px 8px' : '2px 8px',
-                                borderRadius: isMobile ? '8px' : '30px',
-                                fontWeight: 'bold',
-                                fontSize: isMobile ? '0.8rem' : '0.9rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                whiteSpace: 'nowrap',
-                                lineHeight: '1.2'
+                                border: `2px solid ${COLOR_PRIMARY}22`
                             }}
                         >
                             {cat.name}
@@ -576,72 +343,33 @@ export default function ExplorePage() {
                     ))}
                     <button
                         onClick={() => setSelectedCategory('all')}
-                        style={{
-                            background: 'rgba(255,255,255,0.8)',
-                            color: COLOR_PRIMARY,
-                            border: `2px solid ${COLOR_PRIMARY}22`,
-                            padding: isMobile ? '6px 16px' : '8px 20px',
-                            borderRadius: isMobile ? '16px' : '40px',
-                            fontWeight: 'bold',
-                            fontSize: isMobile ? '0.8rem' : '0.9rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            whiteSpace: 'nowrap',
-                            lineHeight: '1.2'
-                        }}
-                    >
-                        Todas
-                    </button>
+                            className="px-4 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap"
+                            style={{
+                                background: 'rgba(255,255,255,0.8)',
+                                color: COLOR_PRIMARY,
+                                border: `2px solid ${COLOR_PRIMARY}22`
+                            }}
+                        >
+                            Todas
+                        </button>
                 </div>
-            </div>
+            </section>
 
             {/* Main Content */}
-            <main style={{
-                maxWidth: '1400px',
-                margin: '0 auto'
-            }}>
+            <main className="container mx-auto px-4 py-8 relative z-10">
                 {loading ? (
-                    <div style={{
-                        textAlign: 'center',
-                        padding: '100px 20px',
-                        color: COLOR_PRIMARY
-                    }}>
-                        <div style={{
-                            width: '60px',
-                            height: '60px',
-                            border: `6px solid ${COLOR_PRIMARY}22`,
-                            borderTop: `6px solid ${COLOR_ACCENT}`,
-                            borderRadius: '50%',
-                            animation: 'spin 1s linear infinite',
-                            margin: '0 auto 20px'
-                        }} />
-                        <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                            Cargando lugares increíbles...
-                        </p>
+                    <div className="text-center py-24 text-gray-800">
+                        <div className="w-14 h-14 border-8 border-[#1A3A6C]22 border-t-8 border-t-[#C5A065] rounded-full animate-spin mx-auto mb-5" />
+                        <p className="text-xl font-bold">Cargando lugares increíbles...</p>
                     </div>
                 ) : filteredPlaces.length === 0 ? (
-                    <div style={{
-                        textAlign: 'center',
-                        padding: '100px 20px',
-                        background: 'rgba(255,255,255,0.9)',
-                        borderRadius: '32px',
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-                    }}>
-                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔍</div>
-                        <h2 style={{ color: COLOR_PRIMARY, marginBottom: '10px' }}>
-                            No se encontraron resultados
-                        </h2>
-                        <p style={{ color: '#666' }}>
-                            Intenta con otros términos de búsqueda o filtros
-                        </p>
+                    <div className="text-center py-24 bg-white bg-opacity-90 rounded-2xl shadow-lg">
+                        <div className="text-4xl mb-5">🔍</div>
+                        <h2 className="text-[#1A3A6C] mb-2">No se encontraron resultados</h2>
+                        <p className="text-gray-600">Intenta con otros términos de búsqueda o filtros</p>
                     </div>
                 ) : (
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                        gap: '30px',
-                        marginBottom: '50px'
-                    }}>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-8 mb-12">
                         {filteredPlaces.map(place => (
                             <PlaceCard key={place.id} place={place} />
                         ))}
@@ -700,8 +428,42 @@ export default function ExplorePage() {
                         0% { transform: rotate(0deg); }
                         100% { transform: rotate(360deg); }
                     }
+                    /* background gradient and side pattern from interface.htm */
+                    body {
+                        background: linear-gradient(90deg, #FDF5E6 0%, #F0F8FF 50%, #E0F7FA 100%);
+                        min-height: 100vh;
+                        position: relative;
+                    }
+                    .side-pattern {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        bottom: 0;
+                        width: 10%;
+                        background-image: repeating-linear-gradient(45deg, #d2b48c 0, #d2b48c 1px, transparent 0, transparent 50%);
+                        background-size: 20px 20px;
+                        opacity: 0.15;
+                        pointer-events: none;
+                        z-index: -1;
+                        mask-image: linear-gradient(to right, black, transparent);
+                    }
+                    /* custom scrollbar */
+                    ::-webkit-scrollbar {
+                        width: 8px;
+                    }
+                    ::-webkit-scrollbar-track {
+                        background: #f1f1f1;
+                    }
+                    ::-webkit-scrollbar-thumb {
+                        background: #C5A065;
+                        border-radius: 4px;
+                    }
+                    ::-webkit-scrollbar-thumb:hover {
+                        background: #a88650;
+                    }
                 `
             }} />
         </div>
+    </div>
     );
 }

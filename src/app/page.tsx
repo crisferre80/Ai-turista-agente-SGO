@@ -219,7 +219,9 @@ export default function Home() {
   const [showIntro, setShowIntro] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const [carouselPhotos, setCarouselPhotos] = useState<string[]>([]);
+  const [carouselDuration, setCarouselDuration] = useState<number>(25);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const trackRef = React.useRef<HTMLDivElement | null>(null);
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
@@ -249,6 +251,18 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
+
+    // ajustar duración automáticamente según cantidad de fotos (si no se ha configurado manualmente)
+    const basePerImage = 3;
+    const calcDuration = () => {
+      if (carouselPhotos.length > 0) {
+        const auto = carouselPhotos.length * basePerImage;
+        if (Math.abs(auto - carouselDuration) > 1) {
+          setCarouselDuration(auto);
+        }
+      }
+    };
+    calcDuration();
 
     // Recuperar ubicación guardada
     loadUserLocation();
@@ -299,6 +313,23 @@ export default function Home() {
     checkAuthState();
   }, []);
 
+  // update CSS shift variable any time the set of photos changes
+  useEffect(() => {
+    if (trackRef.current && carouselPhotos.length > 0) {
+      const container = trackRef.current.parentElement as HTMLElement | null;
+      if (container) {
+        const items = trackRef.current.querySelectorAll(':scope > div');
+        if (items.length > 0) {
+          const itemWidth = (items[0] as HTMLElement).clientWidth;
+          const visible = Math.max(1, Math.round(container.clientWidth / itemWidth));
+          const n = carouselPhotos.length;
+          const shift = (n - visible + 1) * itemWidth;
+          trackRef.current.style.setProperty('--carousel-shift', `-${shift}px`);
+        }
+      }
+    }
+  }, [carouselPhotos]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -323,7 +354,12 @@ export default function Home() {
       }
 
       const { data: carousel, error: carouselErr } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
+      const { data: cfg, error: cfgErr } = await supabase.from('carousel_settings').select('animation_duration').eq('key','global').maybeSingle();
       if (carouselErr) console.warn('Carousel fetch error', carouselErr);
+      if (cfgErr) console.warn('Carousel settings fetch error', cfgErr);
+      if (cfg && cfg.animation_duration != null) {
+        setCarouselDuration(parseFloat(cfg.animation_duration));
+      }
 
       const mappedBiz = (biz || []).map(b => ({
         ...b,
@@ -576,10 +612,10 @@ export default function Home() {
             background: 'transparent',
             boxShadow: 'none'
           }}>
-            <div className="carousel-track" style={{
+            <div ref={trackRef} className="carousel-track" style={{
               display: 'flex',
               height: '100%',
-              animation: 'carouselScroll 25s linear infinite'
+              animation: `carouselScroll ${carouselDuration}s linear infinite`
             }}>
               {carouselPhotos.map((src, idx) => (
                 <div key={idx} style={{
@@ -608,8 +644,8 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-              {/* Duplicate for seamless loop */}
-              {carouselPhotos.slice(0, Math.ceil(carouselPhotos.length / 2)).map((src, idx) => (
+              {/* Duplicate full set for seamless loop */}
+              {carouselPhotos.map((src, idx) => (
                 <div key={`dup-${idx}`} style={{
                   flex: '0 0 25%',
                   height: '100%',
@@ -645,11 +681,12 @@ export default function Home() {
           __html: `
           @keyframes carouselScroll {
             0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+            100% { transform: translateX(var(--carousel-shift, -50%)); }
           }
           .carousel-container:hover .carousel-track {
             animation-play-state: paused;
           }
+          .carousel-track { animation: carouselScroll ${carouselDuration}s linear infinite; }
           .featured-card { transition: transform .3s ease, box-shadow .3s ease; }
           .featured-card:hover { transform: translateY(-6px); box-shadow: 0 25px 60px rgba(0,0,0,0.5); }
           .featured-card__glow { box-shadow: inset 0 0 0 0 rgba(241,196,15,0.0); transition: box-shadow .4s ease; }
@@ -683,7 +720,7 @@ export default function Home() {
           }
           @media (max-width: 768px) {
             .carousel-container { height: 140px !important; }
-            .carousel-track { animation: carouselScroll 20s linear infinite !important; }
+            .carousel-track { animation: carouselScroll ${carouselDuration * 0.8}s linear infinite !important; }
             .carousel-track > div { flex: 0 0 45% !important; padding: 0 6px !important; }
             section:has(.carousel-container) { padding: 15px !important; border-radius: 16px !important; }
             .multimedia-card { 

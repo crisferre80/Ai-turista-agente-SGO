@@ -38,6 +38,12 @@ export default function WebXRToolsPage() {
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [selectedAttraction, setSelectedAttraction] = useState<Attraction | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const selectTab = (tab: 'overview' | 'qr' | 'gps' | 'tracking' | 'anchors' | 'lighting' | 'depth' | 'camera' | 'scene') => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
+  };
   
   const loadAttractions = useCallback(async () => {
     setLoading(true);
@@ -180,6 +186,22 @@ export default function WebXRToolsPage() {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
+        <button
+          className="webxr-hamburger"
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          aria-label="Abrir menú"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: COLOR_BLUE,
+            fontSize: 24,
+            cursor: 'pointer',
+            marginRight: 12,
+            display: 'none'
+          }}
+        >
+          ☰
+        </button>
         <div>
           <button
             onClick={() => router.push('/admin')}
@@ -332,50 +354,52 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-key-aqui`}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '20px' }}>
+      {isMobileMenuOpen && <div className="webxr-overlay" onClick={() => setIsMobileMenuOpen(false)} />}
+
+      <div className={`webxr-container ${isMobileMenuOpen ? 'menu-open' : ''}`}>
         {/* Sidebar */}
-        <div style={{
+        <div className={`webxr-sidebar ${isMobileMenuOpen ? 'open' : ''}`} style={{
           width: '280px',
           display: 'flex',
           flexDirection: 'column',
           gap: '10px'
         }}>
-          <button onClick={() => setActiveTab('overview')} style={tabStyle(activeTab === 'overview')}>
+          <button onClick={() => selectTab('overview')} style={tabStyle(activeTab === 'overview')}>
             <Grid3x3 size={18} />
             Resumen
           </button>
           
-          <button onClick={() => setActiveTab('qr')} style={tabStyle(activeTab === 'qr')}>
+          <button onClick={() => selectTab('qr')} style={tabStyle(activeTab === 'qr')}>
             <QrCode size={18} />
             QR Codes
           </button>
 
-          <button onClick={() => setActiveTab('gps')} style={tabStyle(activeTab === 'gps')}>
+          <button onClick={() => selectTab('gps')} style={tabStyle(activeTab === 'gps')}>
             <MapPin size={18} />
             GPS Positioning
           </button>
 
-          <button onClick={() => setActiveTab('tracking')} style={tabStyle(activeTab === 'tracking')}>
+          <button onClick={() => selectTab('tracking')} style={tabStyle(activeTab === 'tracking')}>
             <Camera size={18} />
             Image Tracking
           </button>
 
-          <button onClick={() => setActiveTab('anchors')} style={tabStyle(activeTab === 'anchors')}>
+          <button onClick={() => selectTab('anchors')} style={tabStyle(activeTab === 'anchors')}>
             <Anchor size={18} />
             Anchors API
           </button>
 
-          <button onClick={() => setActiveTab('lighting')} style={tabStyle(activeTab === 'lighting')}>
+          <button onClick={() => selectTab('lighting')} style={tabStyle(activeTab === 'lighting')}>
             <Lightbulb size={18} />
             Light Estimation
           </button>
 
-          <button onClick={() => setActiveTab('depth')} style={tabStyle(activeTab === 'depth')}>
+          <button onClick={() => selectTab('depth')} style={tabStyle(activeTab === 'depth')}>
             <Layers size={18} />
             Depth Sensing
           </button>
 
-          <button onClick={() => setActiveTab('camera')} style={tabStyle(activeTab === 'camera')}>
+          <button onClick={() => selectTab('camera')} style={tabStyle(activeTab === 'camera')}>
             <Video size={18} />
             Camera Access
           </button>
@@ -387,7 +411,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-key-aqui`}
           }} />
 
           <button 
-            onClick={() => router.push('/admin/ar-config')} 
+            onClick={() => { selectTab('scene'); router.push('/admin/ar-config'); }} 
             style={tabStyle(activeTab === 'scene')}
           >
             <Box size={18} />

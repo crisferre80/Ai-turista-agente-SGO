@@ -45,10 +45,14 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isHovering, setIsHovering] = useState(false); // Hover state for bubble
     const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
-    const [promotionalMessages, setPromotionalMessages] = useState<string[]>([]); // Promotional messages from DB
-    const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video
-    const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
-    const [showVideoList, setShowVideoList] = useState(false); // Mostrar lista de videos de YouTube
+    const [promotionalMessages, setPromotionalMessages] = useState<Array<{message: string, image_url?: string, video_url?: string}>>([]); // Promotional messages from DB (with optional media)
+const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video (buscar/YouTube)
+const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
+const [showVideoList, setShowVideoList] = useState(false); // Mostrar lista de videos de YouTube
+
+// new promo media modal state
+const [showPromoModal, setShowPromoModal] = useState(false);
+const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: string} | null>(null);
 
     // External triggers effects will be registered after callbacks are defined
 
@@ -82,6 +86,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             try { prevVideoFocusRef.current?.focus?.(); } catch { /* noop */ }
         }
     }, [showVideoModal]);
+    // manage focus when promo modal opens
+    useEffect(() => {
+        if (showPromoModal) {
+            prevVideoFocusRef.current = document.activeElement as HTMLElement | null;
+            setTimeout(() => videoModalCloseRef.current?.focus(), 0);
+        } else {
+            try { prevVideoFocusRef.current?.focus?.(); } catch {}
+        }
+    }, [showPromoModal]);
 
     const closeVideoModal = () => {
         // If the currently focused element is inside the modal (iframe/button), blur it
@@ -121,12 +134,17 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const fetchPromotionalMessages = async () => {
         const { data } = await supabase
             .from('promotional_messages')
-            .select('message')
+            .select('message,image_url,video_url')
             .eq('is_active', true)
             .order('priority', { ascending: false });
         
         if (data && data.length > 0) {
-            const messages = data.map((d: { message: string }) => d.message);
+            // supabase may return nulls
+            const messages = data.map((d: any) => ({
+                message: d.message,
+                image_url: d.image_url || '',
+                video_url: d.video_url || ''
+            }));
             setPromotionalMessages(messages);
             console.log('📢 Loaded promotional messages:', messages.length);
         }
@@ -820,7 +838,7 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const isBusinessPromptText = (text?: string | null) => {
         if (!text) return false;
         const pattern = /(Mi Negocio|registrar un negocio|aparezca en la app|destacad|Comercio Certificado|registrarlo|Mi Negocio)/i;
-        return pattern.test(text) || promotionalMessages.some(p => (text || '').includes(p));
+        return pattern.test(text) || promotionalMessages.some(p => (text || '').includes(p.message));
     };
 
     // Handler for 'Llevame' button - redirect depending on auth state
@@ -871,11 +889,25 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
             if (timeSinceLast >= 120000 && !isSpeaking && !isThinking && !isListening && !input.trim()) {
                 // 25% chance to show a promotional message (if available)
                 const pickPromotion = Math.random() < 0.25 && promotionalMessages.length > 0;
-                const prompt = pickPromotion
-                    ? promotionalMessages[Math.floor(Math.random() * promotionalMessages.length)]
-                    : engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
+                let prompt = '';
+                let chosenPromo: any = null;
+                if (pickPromotion) {
+                    chosenPromo = promotionalMessages[Math.floor(Math.random() * promotionalMessages.length)];
+                    prompt = chosenPromo.message;
+                } else {
+                    prompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
+                }
                 console.log('🎯 Proactive engagement:', pickPromotion ? 'PROMOTIONAL' : 'regular', prompt.substring(0, 50));
                 triggerAssistantMessage(prompt);
+                if (pickPromotion && chosenPromo) {
+                    if (chosenPromo.image_url) {
+                        setPromoMedia({ type: 'image', url: chosenPromo.image_url });
+                        setShowPromoModal(true);
+                    } else if (chosenPromo.video_url) {
+                        setPromoMedia({ type: 'video', url: chosenPromo.video_url });
+                        setShowPromoModal(true);
+                    }
+                }
                 updateInteractionTime();
             }
         }, 5000);
@@ -1502,6 +1534,41 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
                         }}>
                             {showVideoList ? 'Hacé clic en un video para verlo' : 'Podés cerrar este video cuando quieras y seguir charlando conmigo'}
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {/* PROMO MEDIA MODAL (shows image or video when promo triggered) */}
+            {showPromoModal && promoMedia && (
+                <div role="dialog" aria-modal="true" aria-label="Promotional media" style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 40000,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    background: 'rgba(0,0,0,0.75)',
+                    padding: 20
+                }} onClick={() => { setShowPromoModal(false); setPromoMedia(null); }}>
+                    <div style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%' }} onClick={e => e.stopPropagation()}>
+                        <button ref={videoModalCloseRef} onClick={() => { setShowPromoModal(false); setPromoMedia(null); }} style={{
+                            position: 'absolute',
+                            right: -10,
+                            top: -10,
+                            background: '#ffffff',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: 32,
+                            height: 32,
+                            cursor: 'pointer',
+                            fontSize: '1.2rem'
+                        }} aria-label="Cerrar">✖️</button>
+                        {promoMedia.type === 'image' && (
+                            <img src={promoMedia.url} alt="Promotional" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+                        )}
+                        {promoMedia.type === 'video' && (
+                            <video src={promoMedia.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+                        )}
                     </div>
                 </div>
             )}

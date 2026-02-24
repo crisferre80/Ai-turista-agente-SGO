@@ -148,7 +148,7 @@ const PwaInstall: React.FC = () => {
 
   const containerStyle: React.CSSProperties = {
     position: 'fixed',
-    right: 18,
+    right: 14,
     bottom: 80,
     zIndex: 9999,
     boxShadow: '0 6px 18px rgba(0,0,0,0.18)'
@@ -156,28 +156,28 @@ const PwaInstall: React.FC = () => {
 
   const toastStyle: React.CSSProperties = {
     position: 'fixed',
-    right: 18,
+    right: 14,
     top: 80, // below header (header height ~70)
     zIndex: 6000,
-    background: '#0e1f1d',
+    background: '#f8341b',
     color: '#fff',
-    padding: '12px 14px',
+    padding: '4px 18px',
     borderRadius: 10,
     display: 'flex',
     gap: 12,
     alignItems: 'center',
-    boxShadow: '0 8px 30px rgba(0,0,0,0.25)'
+    boxShadow: '0 8px 30px rgba(185, 141, 46, 0.25)'
   };
 
-  const installBtnStyle: React.CSSProperties = { background: '#fff', color: '#0e1f1d', border: 'none', padding: '8px 12px', borderRadius: 8, fontWeight: 800, cursor: 'pointer' };
-  const laterBtnStyle: React.CSSProperties = { background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', padding: '8px 12px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' };
+  const installBtnStyle: React.CSSProperties = { background: '#fff', color: '#0e1f1d', border: 'none', padding: '4px 8px', borderRadius: 8, fontWeight: 800, cursor: 'pointer' };
+  const laterBtnStyle: React.CSSProperties = { background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', padding: '2px 8px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' };
 
   return (
     <div>
       {showToast && (
         <div style={toastStyle} role="dialog" aria-live="polite" aria-label="Instalar SantIA">
           <div style={{ fontSize: 14, fontWeight: 700 }}>Instalar SantIA</div>
-          <div style={{ fontSize: 13, color: '#cfe6ff', opacity: 0.95 }}>Instálala para usarla como una app en tu dispositivo.</div>
+          <div style={{ fontSize: 13, color: '#cfe6ff', opacity: 0.95 }}></div>
           <div style={{ marginLeft: 8, display: 'flex', gap: 8 }}>
             <button onClick={handleToastInstall} style={installBtnStyle} aria-label="Instalar">Instalar</button>
             <button onClick={handleToastLater} style={laterBtnStyle} aria-label="En otro momento">En otro momento</button>
@@ -186,7 +186,7 @@ const PwaInstall: React.FC = () => {
       )}
 
       {showIosHint && (
-        <div style={{ ...containerStyle, width: 260, background: '#fff', padding: 12, borderRadius: 10 }}>
+        <div style={{ ...containerStyle, width: 260, background: '#fff', padding: 8, borderRadius: 10 }}>
           <div style={{ fontSize: 13, color: '#222', marginBottom: 8, fontWeight: 700 }}>Instalar SantIA</div>
           <div style={{ fontSize: 12, color: '#444', marginBottom: 8 }}>En iOS, toca <strong>Compartir → Añadir a pantalla de inicio</strong>.</div>
           <div style={{ display: 'flex', gap: 8 }}>

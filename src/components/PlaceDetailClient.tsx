@@ -329,7 +329,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         router.push(`/ar/${parsed.attractionId}`);
         return;
       }
-    } catch (err) {
+    } catch {
       // No es JSON, continuar con el comportamiento antiguo
     }
 
@@ -353,11 +353,11 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
           // Fallback: navegar externamente
           window.location.href = maybeUrl;
           return;
-        } catch (err) {
+        } catch {
           // no es una URL válida -> continuar
         }
       }
-    } catch (err) {
+    } catch {
       // ignore
     }
 
@@ -385,7 +385,80 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   return (
     <div style={{ padding: 6, maxWidth: 1000, margin: '0 auto' }}>
-      
+      {/* Search Header copied from interface.htm */}
+      <section className="flex flex-col items-center justify-center pt-8 pb-6" data-purpose="hero-search">
+        <div className="bg-white rounded-lg w-full max-w-5xl flex flex-col md:flex-row p-1 gap-2 items_center shadow-lg">
+          <div className="relative flex-grow w-full md:w-auto">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <i className="fas fa-search text-gray-400" />
+            </div>
+            <input
+              className="block w-full pl-10 pr-3 py-3 border-none rounded-lg focus:ring-0 text-gray-700 text-lg placeholder-gray-600"
+              placeholder="Buscar lugares..."
+              type="text"
+            />
+          </div>
+          <div className="hidden md:block w-px h-8 bg-gray-200" />
+          <div className="relative min-w-[180px] w-full md:w-auto">
+            <select className="block w-full pl-3 pr-8 py-3 border-none rounded-lg bg-transparent focus:ring-0 text-gray-600 cursor-pointer appearance-none">
+              <option>Todos los lugares</option>
+              <option>Termas de Rio Hondo</option>
+              <option>Capital</option>
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
+              <i className="fas fa-chevron-down text-xs" />
+            </div>
+          </div>
+          <div className="hidden md:block w-px h-8 bg-gray-200" />
+          <div className="relative min-w-[180px] w-full md:w-auto">
+            <select className="block w-full pl-3 pr-8 py-3 border-none rounded-lg bg-transparent focus:ring-0 text-gray-600 cursor-pointer appearance-none">
+              <option>Todas las categorías</option>
+              <option>Arquitectura</option>
+              <option>Naturaleza</option>
+              <option>Cultura</option>
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
+              <i className="fas fa-chevron-down text-xs" />
+            </div>
+          </div>
+          <button className="w-full md:w-auto bg-[#C5A065] hover:bg-[#b08d55] text-white font-medium py-2 px-8 rounded-md shadow-sm transition-colors duration-200 text-base">
+            Buscar
+          </button>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="flex flex-wrap justify-center gap-6 mt-4 mb-10" data-purpose="statistics">
+        <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
+          <div className="text-[#C5A065] text-2xl mb-1">
+            <i className="fas fa-landmark" />
+          </div>
+          <span className="block text-3xl font-bold text-gray-800 leading-none">22</span>
+          <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Atractivos</span>
+        </div>
+        <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
+          <div className="text-[#C5A065] text-2xl mb-1">
+            <i className="fas fa-store" />
+          </div>
+          <span className="block text-3xl font-bold text-gray-800 leading-none">0</span>
+          <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Negocios</span>
+        </div>
+      </section>
+
+      {/* Categories Section */}
+      <section className="text-center mb-8" data-purpose="category-filters">
+        <h2 className="text-3xl font-serif text-gray-800 mb-6 relative inline-block">
+          Categorías
+        </h2>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button className="px-6 py-1.5 rounded-full text-white bg-[#2F4F4F] hover:opacity-90 transition shadow-sm text-sm font-medium">arquitectura</button>
+          <button className="px-6 py-1.5 rounded-full text-white bg-[#A0522D] hover:opacity-90 transition shadow-sm text-sm font-medium">artesanía</button>
+          <button className="px-6 py-1.5 rounded-full text-white bg-[#556B2F] hover:opacity-90 transition shadow-sm text-sm font-medium">compras</button>
+          <button className="px-6 py-1.5 rounded-full text-white bg-[#87CEEB] hover:opacity-90 transition shadow-sm text-sm font-medium">cultura</button>
+          <button className="px-6 py-1.5 rounded-full bg-[#B0C4DE] text-[#374151] hover:opacity-90 transition shadow-sm text-sm font-medium">Todas</button>
+        </div>
+      </section>
+
       <style dangerouslySetInnerHTML={{
         __html: `
           @keyframes fadeInUp {

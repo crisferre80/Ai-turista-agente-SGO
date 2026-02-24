@@ -9,6 +9,23 @@ import { takePhoto } from '@/lib/photoService';
 import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 
 // Tipos básicos usados en este panel
+
+// lista de URLs estáticas que se usan como último recurso en la app pública
+const DEFAULT_CAROUSEL_IMAGES = [
+    '/fotos/ciudadsgo.jpg',
+    '/fotos/dique.jfif',
+    '/fotos/estadio.jpg',
+    '/fotos/pergola.jpg',
+    '/fotos/termas costanera.jpg',
+    '/fotos/parqueencuentro1-1.jpeg',
+    '/fotos/municapi_plazasarmiento.jpg',
+    '/fotos/ccb.jpg',
+    '/fotos/faap.jpg',
+    '/fotos/puente.jpg',
+    '/fotos/central.jpg',
+    '/fotos/catedral.jpg'
+];
+
 interface PlaceRecord {
     id?: string;
     name: string;
@@ -75,8 +92,9 @@ export default function AdminDashboard() {
     const [videos, setVideos] = useState<VideoRecord[]>([]);
     const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
     const [carouselPhotos, setCarouselPhotos] = useState<CarouselPhoto[]>([]);
+    const [carouselDuration, setCarouselDuration] = useState<number>(25); // segundos por bucle completo
     const [phrases, setPhrases] = useState<Array<{id: string, phrase: string, category: string}>>([]);
-    const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, is_active: boolean, category: string, priority: number, show_probability: number}>>([]);
+    const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, is_active: boolean, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}>>([]);
     const [attractionCategories, setAttractionCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
     const [businessCategories, setBusinessCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
 
@@ -87,9 +105,15 @@ export default function AdminDashboard() {
         name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: defaultAttractionCategory, gallery: [] as string[], videoUrls: [''] as string[]
     });
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
-    const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+    const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
     const [editingPromotionalMessageId, setEditingPromotionalMessageId] = useState<string | null>(null);
     const [newVideo, setNewVideo] = useState({ title: '', url: '' });
+    // gallery states restored
+    const [, setGalleryFolders] = useState<string[]>([]);
+    const [, setGalleryTarget] = useState<GalleryTarget>('place-main');
+    const [, setGalleryLoading] = useState(false);
+    const [, setGalleryError] = useState('');
+    const [includeSubfolders] = useState(true);
     const [newBusiness, setNewBusiness] = useState({ id: '', name: '', category: 'restaurante', contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599 });
 
     const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -113,29 +137,31 @@ export default function AdminDashboard() {
     const [storageBuckets, setStorageBuckets] = useState<Array<{ id: string; name: string; public: boolean }>>([]);
     const [selectedBucket, setSelectedBucket] = useState('');
     const [selectedFolderPath, setSelectedFolderPath] = useState('');
-    const [galleryFolders, setGalleryFolders] = useState<string[]>([]);
-    const [galleryTarget, setGalleryTarget] = useState<GalleryTarget>('place-main');
-    const [galleryLoading, setGalleryLoading] = useState(false);
-    const [galleryError, setGalleryError] = useState('');
-    const [includeSubfolders, setIncludeSubfolders] = useState(true);
-
+    
     // Plans States
     const [plans, setPlans] = useState<Array<{id: string, name: string, display_name: string, price_monthly: number, price_yearly: number, features: string[], mercadopago_id: string, max_images: number, priority: number, is_active: boolean}>>([]);
     const [newPlan, setNewPlan] = useState({ name: '', display_name: '', price_monthly: 0, price_yearly: 0, features: [] as string[], mercadopago_id: '', max_images: 5, priority: 0 });
     const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
 
-    const checkAuth = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        const legacyAuth = localStorage.getItem('adminToken');
+    // Backup/Export states
+    const [exporting, setExporting] = useState(false);
+    const [selectedExportTable, setSelectedExportTable] = useState<string>('');
 
-        if (!user && legacyAuth !== 'granted') {
-            router.push('/login');
-        } else {
-            setIsAuthorized(true);
-            fetchData();
-            fetchCategories();
-        }
-    }, [router]);
+    // lista de tablas que queremos poder volcar (ajustar cuando se agreguen nuevas)
+    // tablas reales usadas en la aplicación
+    const EXPORT_TABLES = [
+        'profiles',
+        'categories',
+        'business_profiles',
+        'attractions',
+        'narrations',
+        'promotional_messages',
+        'santis_phrases',      // la tabla de frases se llama santis_phrases
+        'carousel_photos',
+        'app_videos',          // videos se guardan en app_videos
+        'business_plans',      // planes reales
+        'businesses' // vista, pero los datos son los mismos que business_profiles
+    ];
 
     // Función para asegurar autenticación antes de operaciones de escritura
     const ensureAuthenticated = useCallback(async () => {
@@ -151,10 +177,6 @@ export default function AdminDashboard() {
         }
         return true;
     }, [router]);
-
-    useEffect(() => {
-        checkAuth();
-    }, [checkAuth]);
 
     // Al volver desde /admin/image-manager en modo "nuevo atractivo",
     // leer las imágenes seleccionadas desde localStorage y aplicarlas al formulario.
@@ -182,49 +204,30 @@ export default function AdminDashboard() {
         }
     }, []);
 
-    // Si venimos desde el Image Manager para editar un atractivo, abrir el editor
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const sp = new URLSearchParams(window.location.search);
-        const editId = sp.get('editAttractionId');
-        if (!editId) return;
 
-        // Traer el atractivo actualizado desde Supabase para asegurarnos
-        // de tener la imagen/galería más reciente luego de la asignación.
-        (async () => {
-            try {
-                const { data: placeData, error: placeErr } = await supabase
-                    .from('attractions')
-                    .select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls')
-                    .eq('id', editId)
-                    .single();
 
-                if (placeErr) {
-                    console.warn('No se pudo cargar el atractivo editado:', placeErr.message || placeErr);
-                    return;
-                }
-
-                if (placeData) {
-                    startEditing(placeData as PlaceRecord);
-                    try { router.replace('/admin'); } catch (e) { /* ignore */ }
-                }
-            } catch (e) {
-                console.error('Error fetching edited attraction:', e);
-            }
-        })();
-    }, [router]);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
+        // ensure no corrupted carousel rows exist
+        const { error: cleanupErr } = await supabase.from('carousel_photos').delete().is('image_url', null);
+        if (cleanupErr) console.warn('Admin: error cleaning null carousel rows', cleanupErr);
+
         const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls').order('created_at', { ascending: false });
         const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,is_active,payment_status,phone,address,description,lat,lng').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
-        const { data: carouselData, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
+        let carouselData;
+        const { data, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
+        carouselData = data;
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
-        const { data: promotionalData } = await supabase.from('promotional_messages').select('id,business_name,message,is_active,category,priority,show_probability').order('priority', { ascending: false });
+        const { data: promotionalData } = await supabase.from('promotional_messages').select('id,business_name,message,is_active,category,priority,show_probability,image_url,video_url').order('priority', { ascending: false });
         const { data: plansData, error: plansErr } = await supabase.from('business_plans').select('*').order('priority', { ascending: true });
+        const { data: configData, error: configErr } = await supabase.from('carousel_settings').select('animation_duration').eq('key','global').maybeSingle();
 
         if (attErr) console.warn('Admin attractions fetch error', attErr);
+        if (configErr) console.warn('Admin carousel settings fetch error', configErr);
+        if (configData && configData.animation_duration != null) {
+            setCarouselDuration(parseFloat(configData.animation_duration));
+        }
         if (bizErr) console.warn('Admin businesses fetch error', bizErr);
         if (vidErr) console.warn('Admin videos fetch error', vidErr);
         if (carouselErr) console.warn('Admin carousel fetch error', carouselErr);
@@ -232,18 +235,53 @@ export default function AdminDashboard() {
         if (plansErr) console.warn('Admin plans fetch error', plansErr);
         console.log('Admin: Plans error:', plansErr);
 
+        // si no hay fotos en la base, sembrar las predeterminadas para que el panel las muestre
+        if ((!carouselData || carouselData.length === 0) && DEFAULT_CAROUSEL_IMAGES.length > 0) {
+            console.log('Admin: Sembrando carrusel con imágenes predeterminadas');
+            const seeding = DEFAULT_CAROUSEL_IMAGES
+                .filter(url => url) // omit empty/null entries
+                .map((url, idx) => ({
+                    image_url: url,
+                    title: '',
+                    description: '',
+                    order_position: idx,
+                    is_active: true
+                }));
+            if (seeding.length > 0) {
+                const { error: seedErr } = await supabase.from('carousel_photos').insert(seeding);
+                if (seedErr) {
+                    console.error('Admin: error al sembrar carrusel', seedErr);
+                } else {
+                    const { data: newData } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
+                    carouselData = newData || [];
+                }
+            }
+        }
+
         if (attData) setPlaces(attData as PlaceRecord[]);
         if (bizData) setBusinesses(bizData as BusinessRecord[]);
         if (vidData) setVideos(vidData as VideoRecord[]);
         if (carouselData) setCarouselPhotos(carouselData);
         if (phraseData) setPhrases(phraseData);
-        if (promotionalData) setPromotionalMessages(promotionalData);
+        if (promotionalData) {
+            setPromotionalMessages(promotionalData as Array<{
+                id: string;
+                business_name: string;
+                message: string;
+                is_active: boolean;
+                category: string;
+                priority: number;
+                show_probability: number;
+                image_url?: string;
+                video_url?: string;
+            }>);
+        }
         if (plansData) setPlans(plansData.map(p => ({ ...p, features: Array.isArray(p.features) ? p.features : [] })));
         console.log('Admin: Loaded plans:', plansData);
         setLoading(false);
-    };
+    }, []);
 
-    const fetchCategories = async () => {
+    const fetchCategories = useCallback(async () => {
         console.log('🔍 Admin: Fetching categories...');
         try {
             const { data, error } = await supabase
@@ -265,13 +303,31 @@ export default function AdminDashboard() {
                 setAttractionCategories(attractions);
                 setBusinessCategories(businesses);
             }
-        } catch (err) {
-            console.error('❌ Admin: Exception fetching categories:', err);
+        } catch (error) {
+            console.error('Admin categories fetch error', error);
             const fallback = getDefaultCategories();
             setAttractionCategories(fallback.filter(cat => cat.type === 'attraction'));
             setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
         }
-    };
+    }, []);
+
+    // moved authentication check below data helpers
+    const checkAuth = useCallback(async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const legacyAuth = localStorage.getItem('adminToken');
+
+        if (!user && legacyAuth !== 'granted') {
+            router.push('/login');
+        } else {
+            setIsAuthorized(true);
+            fetchData();
+            fetchCategories();
+        }
+    }, [router, fetchData, fetchCategories]);
+
+    useEffect(() => {
+        checkAuth();
+    }, [checkAuth]);
 
     const loadStoragePath = useCallback(async (bucketName: string, folderPath: string, recursive = includeSubfolders) => {
         if (!bucketName) return;
@@ -500,6 +556,7 @@ export default function AdminDashboard() {
         setGalleryLoading(false);
     }, [selectedBucket, includeSubfolders, ensureAuthenticated, loadStoragePath]);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const openGalleryForTarget = (target: GalleryTarget, preferredBucket = 'images') => {
         setGalleryTarget(target);
         setActiveTab('galeria');
@@ -618,6 +675,154 @@ export default function AdminDashboard() {
             const nextVideoUrls = prev.videoUrls.filter((_, idx) => idx !== index);
             return { ...prev, videoUrls: nextVideoUrls.length > 0 ? nextVideoUrls : [''] };
         });
+    };
+
+    // ---------- Export / backup helpers ----------
+    const downloadString = (content: string, filename: string, mimeType = 'text/plain') => {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const toSqlInserts = <T extends Record<string, unknown>>(table: string, data: T[]) => {
+        if (!data || data.length === 0) return '';
+        const cols = Object.keys(data[0]);
+        const escapeVal = (v: unknown) => {
+            if (v === null || v === undefined) return 'NULL';
+            if (typeof v === 'number' || typeof v === 'boolean') return v.toString();
+            const s = String(v).replace(/'/g, "''");
+            return `'${s}'`;
+        };
+        let sql = `-- tabla ${table}\n`;
+        data.forEach(row => {
+            const vals = cols.map(c => escapeVal(row[c]));
+            sql += `INSERT INTO ${table} (${cols.join(',')}) VALUES (${vals.join(',')});\n`;
+        });
+        sql += '\n';
+        return sql;
+    };
+
+    const exportAllSql = async () => {
+        setExporting(true);
+        let output = '-- backup generado ' + new Date().toISOString() + '\n\n';
+        for (const table of EXPORT_TABLES) {
+            console.log('🗂️ Exportando SQL tabla', table);
+            try {
+                const { data, error } = await supabase.from(table).select('*');
+                if (error) {
+                    console.error('export error', table, error);
+                    continue;
+                }
+                output += toSqlInserts(table, data || []);
+            } catch (err) {
+                console.error('exception exporting', table, err);
+            }
+        }
+        const filename = `supabase-backup-${new Date().toISOString().slice(0,10)}.sql`;
+        downloadString(output, filename, 'application/sql');
+        setExporting(false);
+    };
+
+    const exportTableSql = async (table: string) => {
+        if (!table) return;
+        setExporting(true);
+        try {
+            const { data, error } = await supabase.from(table).select('*');
+            if (error) throw error;
+            const sql = toSqlInserts(table, data || []);
+            const filename = `${table}-${new Date().toISOString().slice(0,10)}.sql`;
+            downloadString(sql, filename, 'application/sql');
+        } catch (err) {
+            console.error('sql export error', err);
+            alert('Error al exportar la tabla en SQL. Revisa la consola.');
+        }
+        setExporting(false);
+    };
+
+    const toCsv = <T extends Record<string, unknown>>(data: T[]) => {
+        if (!data || data.length === 0) return '';
+        const keys = Object.keys(data[0]);
+        const escape = (val: unknown) => {
+            if (val == null) return '';
+            const str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        };
+        const lines = [keys.join(',')];
+        data.forEach(row => {
+            lines.push(keys.map(k => escape(row[k])).join(','));
+        });
+        return lines.join('\n');
+    };
+
+    const exportAllJson = async () => {
+        setExporting(true);
+        const result: Record<string, unknown[]> = {};
+        for (const table of EXPORT_TABLES) {
+            console.log('🗂️ Exportando tabla', table);
+            try {
+                const { data, error } = await supabase.from(table).select('*');
+                if (error) {
+                    console.error('export error', table, error);
+                    result[table] = [];
+                } else {
+                    result[table] = data || [];
+                }
+            } catch (err) {
+                console.error('exception exporting', table, err);
+                result[table] = [];
+            }
+        }
+        const filename = `supabase-backup-${new Date().toISOString().slice(0,10)}.json`;
+        downloadString(JSON.stringify(result, null, 2), filename, 'application/json');
+        setExporting(false);
+    };
+
+    const exportTableCsv = async (table: string) => {
+        if (!table) return;
+        setExporting(true);
+        try {
+            const { data, error } = await supabase.from(table).select('*');
+            if (error) throw error;
+            const csv = toCsv(data || []);
+            const filename = `${table}-${new Date().toISOString().slice(0,10)}.csv`;
+            downloadString(csv, filename, 'text/csv');
+        } catch (err) {
+            console.error('csv export error', err);
+            alert('Error al exportar la tabla. Revisa la consola.');
+        }
+        setExporting(false);
+    };
+
+    // export CSV for selected or all tables
+    const exportCsv = async () => {
+        if (!selectedExportTable) return;
+        if (selectedExportTable === 'all') {
+            setExporting(true);
+            for (const t of EXPORT_TABLES) {
+                try {
+                    const { data, error } = await supabase.from(t).select('*');
+                    if (error) {
+                        console.error('csv export error', t, error);
+                        continue;
+                    }
+                    const csv = toCsv(data || []);
+                    const filename = `${t}-${new Date().toISOString().slice(0,10)}.csv`;
+                    downloadString(csv, filename, 'text/csv');
+                } catch (err) {
+                    console.error('exception exporting', t, err);
+                }
+            }
+            setExporting(false);
+        } else {
+            await exportTableCsv(selectedExportTable);
+        }
     };
 
     const handleAddPlace = async (e: React.FormEvent) => {
@@ -769,7 +974,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const startEditing = (p: PlaceRecord) => {
+    const startEditing = useCallback((p: PlaceRecord) => {
         setEditingId(p.id ?? null);
         setNewPlace({
             name: p.name,
@@ -784,7 +989,37 @@ export default function AdminDashboard() {
         });
         setActiveTab('lugares');
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+    }, [defaultAttractionCategory]);
+
+    // Effect to handle redirect from Image Manager with editId
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const sp = new URLSearchParams(window.location.search);
+        const editId = sp.get('editAttractionId');
+        if (!editId) return;
+
+        (async () => {
+            try {
+                const { data: placeData, error: placeErr } = await supabase
+                    .from('attractions')
+                    .select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls')
+                    .eq('id', editId)
+                    .single();
+
+                if (placeErr) {
+                    console.warn('No se pudo cargar el atractivo editado:', placeErr.message || placeErr);
+                    return;
+                }
+
+                if (placeData) {
+                    startEditing(placeData as PlaceRecord);
+                    try { router.replace('/admin'); } catch { /* ignore */ }
+                }
+            } catch (e) {
+                console.error('Error fetching edited attraction:', e);
+            }
+        })();
+    }, [router, startEditing]);
 
     const handleAddBusiness = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -856,13 +1091,15 @@ export default function AdminDashboard() {
                     message: newPromotionalMessage.message.trim(),
                     category: newPromotionalMessage.category,
                     priority: newPromotionalMessage.priority,
-                    show_probability: newPromotionalMessage.show_probability
+                    show_probability: newPromotionalMessage.show_probability,
+                    image_url: newPromotionalMessage.image_url || '',
+                    video_url: newPromotionalMessage.video_url || ''
                 })
                 .eq('id', editingPromotionalMessageId);
             
             if (error) alert(error.message);
             else {
-                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 setEditingPromotionalMessageId(null);
                 fetchData();
             }
@@ -874,23 +1111,27 @@ export default function AdminDashboard() {
                 category: newPromotionalMessage.category,
                 priority: newPromotionalMessage.priority,
                 show_probability: newPromotionalMessage.show_probability,
-                is_active: true
+                is_active: true,
+                image_url: newPromotionalMessage.image_url || '',
+                video_url: newPromotionalMessage.video_url || ''
             }]);
             if (error) alert(error.message);
             else {
-                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 fetchData();
             }
         }
     };
 
-    const handleEditPromotionalMessage = (message: {id: string, business_name: string, message: string, category: string, priority: number, show_probability: number}) => {
+    const handleEditPromotionalMessage = (message: {id: string, business_name: string, message: string, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}) => {
         setNewPromotionalMessage({
             business_name: message.business_name,
             message: message.message,
             category: message.category,
             priority: message.priority,
-            show_probability: message.show_probability
+            show_probability: message.show_probability,
+            image_url: message.image_url || '',
+            video_url: message.video_url || ''
         });
         setEditingPromotionalMessageId(message.id);
         // Scroll al formulario
@@ -898,7 +1139,7 @@ export default function AdminDashboard() {
     };
 
     const handleCancelEditPromotionalMessage = () => {
-        setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25 });
+        setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
         setEditingPromotionalMessageId(null);
     };
 
@@ -991,7 +1232,11 @@ export default function AdminDashboard() {
             const { error: uploadError } = await supabase.storage.from('images').upload(filePath, compressed);
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+            const { data: pubData } = supabase.storage.from('images').getPublicUrl(filePath);
+            const publicUrl = pubData?.publicUrl;
+            if (!publicUrl) {
+                throw new Error('No se pudo obtener URL pública de la imagen');
+            }
 
             const { error } = await supabase.from('carousel_photos').insert([{
                 image_url: publicUrl,
@@ -1021,11 +1266,46 @@ export default function AdminDashboard() {
         else fetchData();
     };
 
+    const moveCarouselPhoto = async (id: string, delta: number) => {
+        if (!(await ensureAuthenticated())) return;
+        const photo = carouselPhotos.find(p => p.id === id);
+        if (!photo) return;
+        const current = photo.order_position || 0;
+        const target = current + delta;
+        if (target < 0 || target >= carouselPhotos.length) return;
+        const other = carouselPhotos.find(p => (p.order_position || 0) === target);
+        // update each row separately to avoid accidental nulling
+        const { error: err1 } = await supabase.from('carousel_photos').update({ order_position: target }).eq('id', photo.id);
+        if (err1) {
+            alert(err1.message);
+            return;
+        }
+        if (other) {
+            const { error: err2 } = await supabase.from('carousel_photos').update({ order_position: current }).eq('id', other.id);
+            if (err2) {
+                alert(err2.message);
+                return;
+            }
+        }
+        fetchData();
+    };
+
     const toggleCarouselPhotoStatus = async (id: string, currentStatus: boolean) => {
         if (!(await ensureAuthenticated())) return;
         const { error } = await supabase.from('carousel_photos').update({ is_active: !currentStatus }).eq('id', id);
         if (error) alert(error.message);
         else fetchData();
+    };
+
+    const saveCarouselSettings = async () => {
+        setLoading(true);
+        const { error } = await supabase.from('carousel_settings').upsert({ key: 'global', animation_duration: carouselDuration });
+        if (error) {
+            alert('Error al guardar configuración del carrusel: ' + error.message);
+        } else {
+            alert('Configuración guardada');
+        }
+        setLoading(false);
     };
 
     // Plans handlers
@@ -1214,6 +1494,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
                     <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
+                    <button onClick={() => { setActiveTab('backup'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'backup')}>💾 Copia</button>
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -1224,7 +1505,6 @@ export default function AdminDashboard() {
             {/* Main Content */}
             <div style={{ 
                 flex: 1, 
-                padding: '120px 50px 50px 50px', 
                 overflowY: 'auto' 
             }} className="main-content admin-main">
                 <header style={{ 
@@ -1253,7 +1533,10 @@ export default function AdminDashboard() {
                                 activeTab === 'promociones' ? 'Mensajes Promocionales' :
                                 activeTab === 'videos' ? 'Multimedia' :
                                 activeTab === 'emails' ? 'Emails' :
-                                activeTab === 'planes' ? 'Planes de Pago' : (activeTab === 'ai' ? 'IA y TTS' : 'Santi')}
+                                activeTab === 'planes' ? 'Planes de Pago' :
+                                activeTab === 'ai' ? 'IA y TTS' :
+                                activeTab === 'backup' ? 'Copia de Seguridad' :
+                                'Santi'}
                     </h1>
                     {loading && <span className="loading-spinner"></span>}
                 </header>
@@ -1467,6 +1750,27 @@ export default function AdminDashboard() {
                             fontWeight: 'bold'
                         }}>📸 Gestión del Carrusel de Fotos</h3>
                         
+                        {/* Carousel speed/duration control */}
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={labelStyle}>Duración total del bucle (segundos)</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                min="1"
+                                value={carouselDuration}
+                                onChange={e => setCarouselDuration(parseFloat(e.target.value) || 0)}
+                                style={inputStyle}
+                            />
+                            <button
+                                type="button"
+                                onClick={saveCarouselSettings}
+                                style={{ ...btnPrimary, marginTop: '10px', width: 'auto' }}
+                                disabled={loading}
+                            >
+                                Guardar configuración
+                            </button>
+                        </div>
+
                         <form onSubmit={handleAddCarouselPhoto} style={{ 
                             display: 'flex', 
                             flexDirection: 'column', 
@@ -1623,6 +1927,38 @@ export default function AdminDashboard() {
                                             gap: '8px',
                                             marginTop: '12px'
                                         }}>
+                                            <button
+                                                onClick={() => moveCarouselPhoto(photo.id, -1)}
+                                                disabled={(photo.order_position || 0) === 0}
+                                                style={{
+                                                    padding: '8px',
+                                                    background: '#3490dc',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '50px',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: 'bold',
+                                                    cursor: (photo.order_position || 0) === 0 ? 'not-allowed' : 'pointer'
+                                                }}
+                                            >
+                                                ▲
+                                            </button>
+                                            <button
+                                                onClick={() => moveCarouselPhoto(photo.id, 1)}
+                                                disabled={(photo.order_position || 0) === (carouselPhotos.length - 1)}
+                                                style={{
+                                                    padding: '8px',
+                                                    background: '#3490dc',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '50px',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: 'bold',
+                                                    cursor: (photo.order_position || 0) === (carouselPhotos.length - 1) ? 'not-allowed' : 'pointer'
+                                                }}
+                                            >
+                                                ▼
+                                            </button>
                                             <button 
                                                 onClick={() => toggleCarouselPhotoStatus(photo.id, !!photo.is_active)}
                                                 style={{
@@ -2185,6 +2521,61 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {/* Tab: BACKUP/EXPORT */}
+                {activeTab === 'backup' && (
+                    <div style={cardStyle}>
+                        <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>💾 Copia de Seguridad</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <button
+                                onClick={exportAllJson}
+                                style={{ ...submitBtn, width: 'auto' }}
+                                disabled={exporting}
+                            >
+                                {exporting ? 'Exportando...' : 'Descargar JSON completo'}
+                            </button>
+                            <button
+                                onClick={exportAllSql}
+                                style={{ ...submitBtn, width: 'auto' }}
+                                disabled={exporting}
+                            >
+                                {exporting ? 'Exportando...' : 'Descargar SQL completo'}
+                            </button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <select
+                                    style={inputStyle}
+                                    value={selectedExportTable}
+                                    onChange={e => setSelectedExportTable(e.target.value)}
+                                >
+                                    <option value="">-- Seleccionar tabla --</option>
+                                    <option value="all">📁 Todas las tablas</option>
+                                    {EXPORT_TABLES.map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={exportCsv}
+                                    disabled={exporting || !selectedExportTable}
+                                    style={{ ...submitBtn, width: 'auto' }}
+                                >
+                                    {exporting ? 'Exportando...' : 'Descargar CSV'}
+                                </button>
+                                <button
+                                    onClick={() => exportTableSql(selectedExportTable)}
+                                    disabled={exporting || !selectedExportTable}
+                                    style={{ ...submitBtn, width: 'auto' }}
+                                >
+                                    {exporting ? 'Exportando...' : 'Descargar SQL'}
+                                </button>
+                            </div>
+
+                            <p style={{ fontSize: '13px', color: '#64748b' }}>
+                                La lista de tablas puede ajustarse en el código. Cada botón genera un fichero descargable que puedes guardar en tu equipo.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Tab: CATEGORÍAS */}
                 {activeTab === 'categorias' && (
                     <div style={cardStyle}>
@@ -2370,6 +2761,62 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                             </div>
+                            {/* New fields for media */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                                <div>
+                                    <label style={labelStyle}>Imagen (URL o archivo)</label>
+                                    <input
+                                        type="text"
+                                        style={inputStyle}
+                                        value={newPromotionalMessage.image_url || ''}
+                                        onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, image_url: e.target.value })}
+                                        placeholder="https://..."
+                                    />
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ marginTop: '6px' }}
+                                        onChange={async e => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            // upload handled below
+                                            const url = await handleFileUpload(file, 'images');
+                                            if (url) setNewPromotionalMessage(prev => ({ ...prev, image_url: url }));
+                                        }}
+                                    />
+                                    {newPromotionalMessage.image_url && (
+                                        <NextImage src={newPromotionalMessage.image_url} alt="preview" width={400} height={300} style={{ maxWidth: '100%', marginTop: '8px', borderRadius: '6px' }} />
+                                    )}
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Video (URL o archivo)</label>
+                                    <input
+                                        type="text"
+                                        style={inputStyle}
+                                        value={newPromotionalMessage.video_url || ''}
+                                        onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, video_url: e.target.value })}
+                                        placeholder="https://..."
+                                    />
+                                    <input
+                                        type="file"
+                                        accept="video/*"
+                                        style={{ marginTop: '6px' }}
+                                        onChange={async e => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            // upload handled below
+                                            // upload to images bucket for simplicity
+                                            const url = await handleFileUpload(file, 'images');
+                                            if (url) setNewPromotionalMessage(prev => ({ ...prev, video_url: url }));
+                                        }}
+                                    />
+                                    {newPromotionalMessage.video_url && (
+                                        <div style={{ marginTop: '8px' }}>
+                                            <a href={newPromotionalMessage.video_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.85rem' }}>Ver video</a>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button type="submit" style={{ ...btnPrimary, flex: 1 }}>
                                     {editingPromotionalMessageId ? '💾 Actualizar Mensaje' : '✅ Agregar Mensaje Promocional'}
@@ -2486,6 +2933,16 @@ export default function AdminDashboard() {
                                     }}>
                                         &quot;{promo.message}&quot;
                                     </p>
+                                    {promo.image_url && (
+                                        <NextImage src={promo.image_url} alt="promo" width={200} height={112} style={{ maxWidth: '200px', marginTop: '10px', borderRadius: '6px' }} />
+                                    )}
+                                    {promo.video_url && (
+                                        <div style={{ marginTop: '10px' }}>
+                                            <a href={promo.video_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.85rem' }}>
+                                                🔗 Ver video
+                                            </a>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                             {promotionalMessages.length === 0 && (
