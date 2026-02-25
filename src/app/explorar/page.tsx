@@ -187,11 +187,11 @@ export default function ExplorePage() {
             href={`/explorar/${place.id}`}
             id={`place-${place.id}`}
             data-place-id={place.id}
-            className="group bg-white rounded-2xl overflow-hidden shadow-xl transition-all duration-300 transform h-full flex flex-col hover:scale-105 hover:shadow-2xl"
+            className="group bg-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 transform h-full flex flex-col hover:scale-105 hover:shadow-2xl"
         >
             <div className="h-48 overflow-hidden relative">
                 <Image
-                    src={place.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg"}
+                    src={place.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1771998208/Generated_Image_February_25_2026_-_2_39AM_ohvyx5.png"}
                     alt={place.name}
                     fill
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -204,8 +204,8 @@ export default function ExplorePage() {
                 )}
             </div>
             <div className="p-4 flex-1 flex flex-col">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">{place.name}</h3>
-                <p className="text-gray-600 text-sm flex-1 mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">{place.name}</h3>
+                <p className="text-white text-sm flex-1 mb-4">
                     {place.description?.substring(0, 120)}
                     {place.description && place.description.length > 120 ? '...' : ''}
                 </p>
@@ -303,23 +303,6 @@ export default function ExplorePage() {
                 </div>
             </section>
 
-            {/* Stats Section */}
-            <section className="flex flex-wrap justify-center gap-6 mt-4 mb-10" data-purpose="statistics">
-                <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
-                    <div className="text-[#C5A065] text-2xl mb-1">
-                        <i className="fas fa-landmark" />
-                    </div>
-                    <span className="block text-3xl font-bold text-gray-800 leading-none">{attractions.length}</span>
-                    <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Atractivos</span>
-                </div>
-                <div className="bg-white border border-[#C5A065] rounded-lg px-10 py-4 flex flex-col items-center gap-1 shadow-sm min-w-[180px]">
-                    <div className="text-[#C5A065] text-2xl mb-1">
-                        <i className="fas fa-store" />
-                    </div>
-                    <span className="block text-3xl font-bold text-gray-800 leading-none">{businesses.length}</span>
-                    <span className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-1">Negocios</span>
-                </div>
-            </section>
 
             {/* Quick Categories with dynamic styling (tailwind layout, inline colour) */}
             <section className="text-center mb-8" data-purpose="category-filters">
@@ -331,24 +314,14 @@ export default function ExplorePage() {
                         <button
                             key={`${cat.name}-${cat.type}`}
                             onClick={() => setSelectedCategory(cat.name)}
-                            className="px-3 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap"
-                            style={{
-                                background: 'rgba(255,255,255,0.8)',
-                                color: COLOR_PRIMARY,
-                                border: `2px solid ${COLOR_PRIMARY}22`
-                            }}
+                            className="px-3 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap bg-slate-200 text-slate-800 border border-slate-300 hover:bg-slate-300"
                         >
                             {cat.name}
                         </button>
                     ))}
                     <button
                         onClick={() => setSelectedCategory('all')}
-                            className="px-4 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap"
-                            style={{
-                                background: 'rgba(255,255,255,0.8)',
-                                color: COLOR_PRIMARY,
-                                border: `2px solid ${COLOR_PRIMARY}22`
-                            }}
+                            className="px-4 py-1 rounded-full font-bold text-sm transition duration-200 whitespace-nowrap bg-slate-200 text-slate-800 border border-slate-300 hover:bg-slate-300"
                         >
                             Todas
                         </button>
