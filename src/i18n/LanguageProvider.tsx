@@ -46,29 +46,34 @@ export const LanguageProvider: React.FC<{
 
   const [locale, setLocaleState] = useState<Locale>(getStartingLocale);
 
-  // After hydration, check localStorage and override if the user previously chose a
+  console.log('🌐 LanguageProvider initialized with locale:', locale);
+
+  // After hydration, check localStorage ONCE and override if the user previously chose a
   // language. This runs only on the client and avoids SSR/CSR mismatch.
-  // After hydration, read user preference from localStorage.  Using `locale` in
-  // deps lets us satisfy the linter; the effect will run once initially and again
-  // only if `locale` ever changes (which shouldn't happen before we read storage).
+  // We use an empty dependency array to run only once on mount.
   useEffect(() => {
     try {
       const saved = localStorage.getItem('locale');
-      if (saved && locales.includes(saved as Locale) && saved !== locale) {
-        // update state asynchronously, not synchronously during render
-        setTimeout(() => setLocaleState(saved as Locale), 0);
+      console.log('🌐 LanguageProvider: Checking localStorage on mount, saved locale:', saved);
+      if (saved && locales.includes(saved as Locale)) {
+        console.log('🌐 LanguageProvider: Setting locale from localStorage:', saved);
+        setLocaleState(saved as Locale);
       }
-    } catch {}
-  }, [locale]);
+    } catch (err) {
+      console.warn('🌐 LanguageProvider: Failed to read localStorage:', err);
+    }
+  }, []); // Empty array = run only once on mount
 
   const setLocale = (loc: Locale | 'auto') => {
     if (loc === 'auto') {
       const detected = detect();
+      console.log('🌐 LanguageProvider: Setting locale to auto-detected:', detected);
       setLocaleState(detected);
       try {
         localStorage.removeItem('locale');
       } catch {}
     } else {
+      console.log('🌐 LanguageProvider: Setting locale to:', loc);
       setLocaleState(loc);
       try {
         localStorage.setItem('locale', loc);

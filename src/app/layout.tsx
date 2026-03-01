@@ -38,12 +38,12 @@ export default async function RootLayout({
   // turbopack may return a plain object instead of Headers instance
   const accept = (typeof hdrs.get === 'function'
     ? hdrs.get('accept-language')
-    : (hdrs as Record<string,string>)['accept-language']) || '';
-  let serverLocale = 'es';
+    : (hdrs as unknown as Record<string,string>)['accept-language']) || '';
+  let serverLocale: 'es' | 'en' | 'pt' | 'fr' = 'es';
   if (accept) {
     const primary = accept.split(',')[0].trim().slice(0, 2);
     if (['es', 'en', 'pt', 'fr'].includes(primary)) {
-      serverLocale = primary;
+      serverLocale = primary as 'es' | 'en' | 'pt' | 'fr';
     }
   }
 

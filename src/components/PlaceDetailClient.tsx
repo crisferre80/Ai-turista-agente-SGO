@@ -46,13 +46,27 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const router = useRouter();
   const { t, locale } = useI18n();
 
+  console.log('🌐 PlaceDetailClient mounted with locale:', locale);
+
   // pick the right description column based on current locale
-  const localizedDescription = (() => {
-    if (locale === 'en' && place.description_en) return place.description_en;
-    if (locale === 'pt' && place.description_pt) return place.description_pt;
-    if (locale === 'fr' && place.description_fr) return place.description_fr;
+  // Use useMemo to recalculate when locale changes
+  const localizedDescription = React.useMemo(() => {
+    console.log('🌐 PlaceDetailClient: Recalculating localizedDescription with locale:', locale);
+    if (locale === 'en' && place.description_en) {
+      console.log('✅ Using EN description for', place.name);
+      return place.description_en;
+    }
+    if (locale === 'pt' && place.description_pt) {
+      console.log('✅ Using PT description for', place.name);
+      return place.description_pt;
+    }
+    if (locale === 'fr' && place.description_fr) {
+      console.log('✅ Using FR description for', place.name);
+      return place.description_fr;
+    }
+    console.log('⚠️ Using default ES description for', place.name, 'locale was:', locale);
     return place.description || '';
-  })();
+  }, [locale, place]);
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [videoOpen, setVideoOpen] = useState<{ open: boolean; src?: string }>({ open: false });
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -72,6 +86,12 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
   // Track if we've already narrated this place
   const hasNarratedRef = useRef(false);
+
+  // Reset narration flag when locale changes so it re-narrates in the new language
+  useEffect(() => {
+    console.log('🌐 PlaceDetailClient: Locale changed to', locale, '- resetting narration flag');
+    hasNarratedRef.current = false;
+  }, [locale]);
 
   const openGallery = (index = 0) => setGalleryOpen({ open: true, index });
   const closeGallery = () => setGalleryOpen({ open: false, index: 0 });
@@ -163,11 +183,19 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         }
         
         // If no pending narration after retries, create default one
-        if (!hasPendingNarration && place.description) {
-          // first sentence is translatable, description itself is dynamic and kept as-is
-          narrationText = t('place.defaultNarration', { name: place.name }) +
-            ` ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
-          console.log('PlaceDetailClient: Using default narration text');
+        if (!hasPendingNarration && localizedDescription) {
+          // Use localized description based on current language
+          const defaultNarrationPrefix = t('place.defaultNarration', { name: place.name });
+          narrationText = defaultNarrationPrefix +
+            ` ${localizedDescription.slice(0, 200)}${localizedDescription.length > 200 ? '...' : ''}`;
+          console.log('PlaceDetailClient: Using default narration text with localized description', {
+            locale,
+            defaultNarrationPrefix,
+            localizedDescriptionPreview: localizedDescription.substring(0, 50),
+            hasDescriptionEn: !!place.description_en,
+            hasDescriptionPt: !!place.description_pt,
+            hasDescriptionFr: !!place.description_fr
+          });
         }
         
         // Only narrate if we have text
@@ -199,7 +227,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       // Start the narration check process
       checkForPendingNarration();
     }
-  }, [place.id, place.name, place.description]);
+  }, [place.id, place.name, locale, localizedDescription, t]);  // Added locale and localizedDescription dependencies
   
   // Calculate average rating
   useEffect(() => {

@@ -1129,10 +1129,6 @@ export default function Home() {
           externalStory={activeStory}
           isModalOpen={!!activePlace}
           userLocation={userLocation}
-          onLocationUpdate={(loc) => {
-            setUserLocation(loc);
-            if (loc) saveUserLocation(loc);
-          }}
         />
 
         {/* Place Detail Card - Responsive: Sidebar (Desktop) / Slide-up Panel (Mobile) */}

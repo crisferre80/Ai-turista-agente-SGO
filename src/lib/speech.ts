@@ -182,18 +182,55 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     langCode = map[loc] || 'es-AR';
   }
 
-  fetch('/api/speech', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: cleanText, languageCode: langCode }), // pass language hint
-  })
-    .then(response => {
+  // Helper to fetch the configured voice and speak
+  const performSpeech = async () => {
+    try {
+      // Fetch the configured voice for this language from the server
+      const langPrefix = langCode?.slice(0, 2).toLowerCase() || 'es';
+      
+      let configuredVoice: string | null = null;
+      let actualLanguageCode = langCode;
+      let provider = 'google';
+      
+      try {
+        const voiceConfigResponse = await fetch(`/api/tts/voice-config?lang=${langPrefix}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (voiceConfigResponse.ok) {
+          const voiceConfig = await voiceConfigResponse.json();
+          configuredVoice = voiceConfig.voice;
+          // Use the correct language code for the selected voice
+          actualLanguageCode = voiceConfig.languageCode || langCode;
+          provider = voiceConfig.provider || 'google';
+          console.log(`santiSpeak: Using configured voice for ${langPrefix}: ${configuredVoice || '(default)'} with lang ${actualLanguageCode}`);
+        }
+      } catch (fetchErr) {
+        console.warn('Failed to fetch voice config, using default:', fetchErr);
+      }
+
+      const payload: Record<string, any> = { 
+        text: cleanText, 
+        languageCode: actualLanguageCode,
+        provider: provider
+      };
+      
+      if (configuredVoice) {
+        payload.voice = configuredVoice;
+      }
+
+      const response = await fetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
       if (response.status === 401) throw new Error("API_KEY_MISSING");
       if (response.status === 429) throw new Error("QUOTA_EXCEEDED");
       if (!response.ok) throw new Error("Audio generation failed");
-      return response.blob();
-    })
-    .then(blob => {
+      
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       _currentAudio = audio;
@@ -234,12 +271,11 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
         _currentAudio = null;
         _isNarrating = false;
       };
-    })
-    .catch(error => {
+    } catch (error) {
       console.error("TTS Error:", error);
       
       // Use browser TTS as fallback for quota exceeded or API errors
-      if (error.message === "QUOTA_EXCEEDED" || error.message === "Audio generation failed") {
+      if ((error as Error).message === "QUOTA_EXCEEDED" || (error as Error).message === "Audio generation failed") {
         useBrowserTTS();
         return;
       }
@@ -251,11 +287,15 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
       } catch (e) { /* ignore */ }
       _isNarrating = false;
       
-      if (error.message === "API_KEY_MISSING") {
-        console.warn("OpenAI API key missing, falling back to browser TTS");
+      if ((error as Error).message === "API_KEY_MISSING") {
+        console.warn("Google API key missing, falling back to browser TTS");
         useBrowserTTS();
       }
-    });
+    }
+  };
+
+  // Start the async speech process
+  performSpeech();
 };
 
 export const santiNarrate = santiSpeak;

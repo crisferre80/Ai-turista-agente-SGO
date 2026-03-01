@@ -6,10 +6,81 @@ import { createClient } from '@supabase/supabase-js';
 // helper to pick localized description from DB objects
 const getLocaleDesc = (obj: any, locale: string) => {
     if (!obj) return '';
-    if (locale === 'en' && obj.description_en) return obj.description_en;
-    if (locale === 'pt' && obj.description_pt) return obj.description_pt;
-    if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+    console.log('🌍 getLocaleDesc called:', { 
+        locale, 
+        name: obj.name,
+        hasDescriptionEn: !!obj.description_en,
+        hasDescriptionPt: !!obj.description_pt,
+        hasDescriptionFr: !!obj.description_fr,
+        hasDescription: !!obj.description
+    });
+    
+    if (locale === 'en' && obj.description_en) {
+        console.log('✅ Returning EN description for:', obj.name);
+        return obj.description_en;
+    }
+    if (locale === 'pt' && obj.description_pt) {
+        console.log('✅ Returning PT description for:', obj.name);
+        return obj.description_pt;
+    }
+    if (locale === 'fr' && obj.description_fr) {
+        console.log('✅ Returning FR description for:', obj.name);
+        return obj.description_fr;
+    }
+    console.log('⚠️ Using default ES description for:', obj.name);
     return obj.description || '';
+};
+
+// Helper to localize fallback messages
+const getLocalizedFallback = (type: 'attraction' | 'business', name: string, category: string, locale: string) => {
+    const messages = {
+        attraction: {
+            es: `Descubre ${name}, un atractivo en la categoría ${category}.`,
+            en: `Discover ${name}, an attraction in the ${category} category.`,
+            pt: `Descubra ${name}, uma atração na categoria ${category}.`,
+            fr: `Découvrez ${name}, une attraction dans la catégorie ${category}.`
+        },
+        business: {
+            es: `Conoce ${name}, un negocio en la categoría ${category}.`,
+            en: `Meet ${name}, a business in the ${category} category.`,
+            pt: `Conheça ${name}, um negócio na categoria ${category}.`,
+            fr: `Découvrez ${name}, une entreprise dans la catégorie ${category}.`
+        }
+    };
+    return messages[type][locale as keyof typeof messages.attraction] || messages[type].es;
+};
+
+// Helper to localize greetings
+const getLocalizedGreeting = (name: string, locale: string) => {
+    const greetings = {
+        es: `¡Hola, chango! Te cuento sobre **${name}**.`,
+        en: `Hello! Let me tell you about **${name}**.`,
+        pt: `Olá! Deixe-me falar sobre **${name}**.`,
+        fr: `Bonjour! Laissez-moi vous parler de **${name}**.`
+    };
+    return greetings[locale as keyof typeof greetings] || greetings.es;
+};
+
+// Helper to localize recommendation
+const getLocalizedRecommendation = (name: string, category: string, locale: string) => {
+    const recommendations = {
+        es: `¡Hola! Te recomiendo **${name}**, un lugar en la categoría ${category}.`,
+        en: `Hello! I recommend **${name}**, a place in the ${category} category.`,
+        pt: `Olá! Recomendo **${name}**, um lugar na categoria ${category}.`,
+        fr: `Bonjour! Je recommande **${name}**, un lieu dans la catégorie ${category}.`
+    };
+    return recommendations[locale as keyof typeof recommendations] || recommendations.es;
+};
+
+// Helper to localize contact label
+const getLocalizedContact = (locale: string) => {
+    const labels = {
+        es: 'Contacto:',
+        en: 'Contact:',
+        pt: 'Contato:',
+        fr: 'Contact :'
+    };
+    return labels[locale as keyof typeof labels] || labels.es;
 };
 
 const supabaseBase = createClient(
@@ -61,6 +132,8 @@ export async function POST(req: Request) {
     try {
         const { messages, userLocation, locale: reqLocale } = await req.json();
         const locale = reqLocale || 'es'; // default to spanish if missing
+        
+        console.log('🌐 Chat API received request with locale:', locale, 'reqLocale:', reqLocale);
 
         if (!messages) {
             return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
@@ -318,15 +391,25 @@ export async function POST(req: Request) {
             // Generar respuesta simple sobre el lugar encontrado
             if (foundPlaceType === 'attraction') {
                 const attraction = foundPlace as any;
-                placeDescription = attraction.description || `Descubre ${placeName}, un atractivo en la categoría ${attraction.category}.`;
-                reply = `¡Hola, chango! Te cuento sobre **${placeName}**.\n\n${placeDescription}`;
+                placeDescription = getLocaleDesc(attraction, locale) || getLocalizedFallback('attraction', placeName, attraction.category, locale);
+                console.log('📝 Generated placeDescription for attraction:', {
+                    name: placeName,
+                    locale,
+                    descriptionPreview: placeDescription.substring(0, 100)
+                });
+                reply = `${getLocalizedGreeting(placeName, locale)}\n\n${placeDescription}`;
             } else {
                 const business = foundPlace as any;
-                placeDescription = `Conoce ${placeName}, un negocio en la categoría ${business.category}.`;
+                placeDescription = getLocaleDesc(business, locale) || getLocalizedFallback('business', placeName, business.category, locale);
+                console.log('📝 Generated placeDescription for business:', {
+                    name: placeName,
+                    locale,
+                    descriptionPreview: placeDescription.substring(0, 100)
+                });
                 const contactInfo = business.contact_info;
-                reply = `¡Hola! Te recomiendo **${placeName}**, un lugar en la categoría ${business.category}.`;
+                reply = getLocalizedRecommendation(placeName, business.category, locale);
                 if (contactInfo) {
-                    reply += `\n\nContacto: ${contactInfo}`;
+                    reply += `\n\n${getLocalizedContact(locale)} ${contactInfo}`;
                 }
             }
             
@@ -387,39 +470,60 @@ export async function POST(req: Request) {
         `;
         }
 
-        const systemPrompt = `
-    Sos "Santi", un amigable asistente robot turístico de la provincia de Santiago del Estero, Argentina.
-    
-    Tu personalidad:
-    - Alegre, servicial y usas modismos santiagueños sutiles (ej: "chango", "changuito", "changuita").
-    - Conoces muy bien la cultura, el folclore, y lugares icónicos.
-    ${userProfile ? `- Conoces al usuario: ${userProfile.name || 'turista'}, tratalo con familiaridad y personaliza tus respuestas según sus intereses.` : '- Sos amigable con los visitantes y te gusta conocerlos.'}
-    
-    INSTRUCCIONES CRÍTICAS:
-    1. PRIORIDAD DE DATOS: Antes de usar tu conocimiento general, REVISA SIEMPRE la "INFORMACIÓN LOCAL REGISTRADA" provista arriba.
-    2. LUGARES PARA MATES, RELAX, NATURALEZA: Cuando pregunten dónde tomar mates, relajarse, disfrutar la naturaleza, etc., recomienda SOLO los ATRACTIVOS TURÍSTICOS (plazas, parques, reservas ecológicas, espacios naturales) - NUNCA negocios para estas actividades.
-    3. Si el usuario pregunta por servicios comerciales (comer, dormir, comprar), ahí sí recomienda tanto atractivos como negocios según corresponda.
-    4. Si encuentras lugares en la lista local que coincidan con la consulta, RECOMIÉNDALOS PRIMERO mencionando que son lugares registrados en la app.
-    5. Si NO encuentras algo en la lista local, usa tu conocimiento de la web pero aclara: "Estoy consultando mi base de datos global...".
-    6. Siempre fomenta el turismo local y sé muy amable.
-    7. Cuando recomiendes un lugar específico de la "INFORMACIÓN LOCAL REGISTRADA", asegúrate de escribir su nombre EXACTAMENTE como figura en la lista para que el sistema pueda encontrarlo y mostrar su ubicación o ruta en el mapa automáticamente.
-    6. CRÍTICO - CONSULTAS DE RUTA: Cuando el usuario pregunte "cómo llegar", "direcciones", "cómo voy" a un lugar:
-       - Menciona el nombre EXACTO del lugar en tu respuesta una sola vez
-       - Di algo breve como: "¡Dale! Te muestro la ruta a [NOMBRE DEL LUGAR] en el mapa."
-       - NO describas el lugar, NO des detalles extras, SOLO la confirmación de la ruta
-       - El sistema mostrará automáticamente la ruta en el mapa
-       - NO menciones coordenadas ni ubicaciones específicas en estos casos
-    7. Diferencia entre consultas de INFORMACIÓN (mostrar detalles del lugar) y consultas de RUTA (solo trazar camino)
-    8. Sé conversacional pero conciso en consultas de ruta.
-    9. BÚSQUEDA DE VIDEOS: Cuando el usuario pida ver videos, mostrar videos, o pregunte sobre eventos/espectáculos (ej: "marcha de los bombos", "carnaval", "chacarera", "MotoGP", "fútbol", etc.):
-       - SIEMPRE responde que estás buscando videos en YouTube
-       - Di algo como: "¡Dale! Estoy buscando videos sobre [TEMA] en YouTube..."
-       - NO digas que no puedes mostrar videos
-       - El sistema automáticamente buscará y mostrará una lista de videos para que el usuario elija
-       - Sé entusiasta sobre los resultados que vas a mostrar
-    ${userProfile ? `10. PERSONALIZACIÓN: El usuario ya está registrado. Usá su nombre (${userProfile.name}) naturalmente y NO le preguntes información que ya tenés (nombre, edad, origen). Personalizá tus recomendaciones según sus preferencias.` : '10. Si el usuario no está registrado, podés preguntarle su nombre y conocerlo mejor.'}
+        // Map locale to language instruction
+        const languageInstructions: Record<string, string> = {
+            es: 'Responde SIEMPRE en ESPAÑOL de Argentina, usando modismos locales cuando sea natural.',
+            en: 'Respond ALWAYS in ENGLISH. Be friendly and clear in English, avoid Spanish words.',
+            pt: 'Responda SEMPRE em PORTUGUÊS brasileiro. Seja amigável e claro em português.',
+            fr: 'Répondez TOUJOURS en FRANÇAIS. Soyez amical et clair en français.'
+        };
+        const languageInstruction = languageInstructions[locale] || languageInstructions.es;
 
-    Contexto actual de la app:
+        // Localized fallback messages
+        const fallbackMessages: Record<string, string> = {
+            es: 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?',
+            en: 'Sorry, I could not generate a response. Could you try again?',
+            pt: 'Desculpe, não consegui gerar uma resposta. Você poderia tentar novamente?',
+            fr: 'Désolé, je n\'ai pas pu générer une réponse. Pourriez-vous réessayer?'
+        };
+        const fallbackMessage = fallbackMessages[locale] || fallbackMessages.es;
+
+        const systemPrompt = `
+    You are "Santi", a friendly robot tourist assistant for the province of Santiago del Estero, Argentina.
+    
+    CRITICAL LANGUAGE INSTRUCTION:
+    ${languageInstruction}
+    
+    Your personality:
+    - Cheerful, helpful, and you use subtle Santiago expressions when speaking Spanish (e.g., "chango", "changuito", "changuita").
+    - You know the culture, folklore, and iconic places very well.
+    ${userProfile ? `- You know the user: ${userProfile.name || 'turista'}, treat them familiarly and personalize your answers based on their interests.` : '- You are friendly with visitors and like to get to know them.'}
+    
+    CRITICAL INSTRUCTIONS:
+    1. PRIORITY OF DATA: Before using your general knowledge, ALWAYS CHECK the "LOCAL REGISTERED INFORMATION" provided above.
+    2. PLACES FOR MATE, RELAX, NATURE: When asked about places to drink mate, relax, enjoy nature, etc., recommend ONLY TOURIST ATTRACTIONS (plazas, parks, ecological reserves, natural spaces) - NEVER businesses for these activities.
+    3. If the user asks for commercial services (eating, sleeping, shopping), then recommend both attractions and businesses as appropriate.
+    4. If you find places in the local list that match the query, RECOMMEND THEM FIRST mentioning they are registered in the app.
+    5. If you DON'T find something in the local list, use your web knowledge but clarify: "I'm consulting my global database...".
+    6. Always promote local tourism and be very friendly.
+    7. When recommending a specific place from "LOCAL REGISTERED INFORMATION", make sure to write its name EXACTLY as it appears in the list so the system can find it and show its location or route on the map automatically.
+    8. CRITICAL - ROUTE QUERIES: When the user asks "how to get", "directions", "how do I go" to a place:
+       - Mention the EXACT name of the place in your answer only once
+       - Say something brief like: "Sure! I'll show you the route to [PLACE NAME] on the map."
+       - DON'T describe the place, DON'T give extra details, ONLY the route confirmation
+       - The system will automatically show the route on the map
+       - DON'T mention coordinates or specific locations in these cases
+    9. Differentiate between INFORMATION queries (show place details) and ROUTE queries (only draw path)
+    10. Be conversational but brief for route queries.
+    11. VIDEO SEARCH: When the user asks to see videos, show videos, or asks about events/shows (e.g., "marcha de los bombos", "carnival", "chacarera", "MotoGP", "football", etc.):
+       - ALWAYS respond that you're searching for videos on YouTube
+       - Say something like: "Sure! I'm searching for videos about [TOPIC] on YouTube..."
+       - DON'T say you can't show videos
+       - The system will automatically search and show a list of videos for the user to choose from
+       - Be enthusiastic about the results you're going to show
+    ${userProfile ? `12. PERSONALIZATION: The user is already registered. Use their name (${userProfile.name}) naturally and DON'T ask for information you already have (name, age, origin). Personalize your recommendations based on their preferences.` : '12. If the user is not registered, you can ask their name and get to know them better.'}
+
+    Current app context:
     ${localContext}
     ${userContext}
     `;
@@ -446,7 +550,7 @@ export async function POST(req: Request) {
                 temperature: 0.7
             });
 
-            reply = response.choices[0].message.content || 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?';
+            reply = response.choices[0].message.content || fallbackMessage;
             console.log('✅ OpenAI response:', reply.substring(0, 100));
         } else {
             // Gemini
@@ -549,7 +653,7 @@ export async function POST(req: Request) {
                             temperature: 0.7
                         });
 
-                        reply = response.choices[0].message.content || 'Lo siento, no pude generar una respuesta. ¿Podrías intentar de nuevo?';
+                        reply = response.choices[0].message.content || fallbackMessage;
                         console.log('✅ OpenAI fallback successful');
                     } catch (openaiErr) {
                         console.error('OpenAI fallback also failed:', openaiErr);
@@ -670,11 +774,11 @@ export async function POST(req: Request) {
             if (placeId && !placeDescription) {
                 const attraction = attractions?.find(a => a.id === placeId);
                 if (attraction) {
-                    placeDescription = getLocaleDesc(attraction, locale) || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
+                    placeDescription = getLocaleDesc(attraction, locale) || getLocalizedFallback('attraction', attraction.name, attraction.category, locale);
                 } else {
                     const business = businesses?.find(b => b.id === placeId);
                     if (business) {
-                        placeDescription = `Conoce ${business.name}, un negocio en la categoría ${business.category}.`;
+                        placeDescription = getLocaleDesc(business, locale) || getLocalizedFallback('business', business.name, business.category, locale);
                     }
                 }
             }

@@ -33,6 +33,8 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const { t } = useI18n();
+
   useEffect(() => {
     initializeAR();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,8 +254,6 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
       </div>
     );
   }
-
-  const { t } = useI18n();
 
   // Renderizar tutorial de introducción
   if (showTutorial) {

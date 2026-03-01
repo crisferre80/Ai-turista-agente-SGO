@@ -113,6 +113,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           id: string | number;
           name?: string | null;
           description?: string | null;
+          description_en?: string | null;
+          description_pt?: string | null;
+          description_fr?: string | null;
           category?: string | null;
           lat?: number | null;
           lng?: number | null;

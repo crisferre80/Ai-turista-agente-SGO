@@ -6,6 +6,11 @@ type Settings = {
   ia_model?: string;
   tts_provider?: 'browser' | 'openai' | 'google' | 'coqui' | 'other';
   tts_engine?: string;
+  tts_voice_gender?: 'MALE' | 'FEMALE';
+  tts_voice_name_es?: string;
+  tts_voice_name_en?: string;
+  tts_voice_name_pt?: string;
+  tts_voice_name_fr?: string;
   google_tts_api_key?: string;
 };
 
@@ -22,6 +27,11 @@ export default function AdminAISettings() {
   const [openaiVoices, setOpenaiVoices] = useState<TTSVoice[]>([]);
   const [googleVoices, setGoogleVoices] = useState<TTSVoice[]>([]);
   const [showGoogleKey, setShowGoogleKey] = useState(false);
+
+  // TTS Voice Selector by Language and Gender
+  const [voiceGenderFilter, setVoiceGenderFilter] = useState<'MALE' | 'FEMALE'>('MALE');
+  const [expandedLanguage, setExpandedLanguage] = useState<string | null>(null);
+  const [voicesByLanguage, setVoicesByLanguage] = useState<Record<string, TTSVoice[]>>({});
 
   // Models listing
   type ModelInfo = { name: string; displayName?: string; description?: string; provider?: string; is_free?: boolean; pricing?: string; tier?: string };
@@ -506,7 +516,8 @@ export default function AdminAISettings() {
                   try {
                     const headers: Record<string,string> = {};
                     if (settings.google_tts_api_key) headers['x-google-tts-api-key'] = settings.google_tts_api_key;
-                    const res = await fetch('/api/admin/tts/voices?provider=google', { headers });
+                    // Filtrar específicamente por voces masculinas
+                    const res = await fetch('/api/admin/tts/voices?provider=google&gender=MALE', { headers });
                     const body = await res.json();
                     if (res.ok && body.voices) {
                       setGoogleVoices(body.voices as TTSVoice[]);
@@ -515,7 +526,7 @@ export default function AdminAISettings() {
                     }
                   } catch (e) { console.error('Fetch voices error', e); alert('Error al obtener voces'); }
                   setLoading(false);
-                }}>Listar voces (Google)</button>
+                }}>👨 Listar voces masculinas (Google)</button>
               </div>
               <div style={{ marginTop: 6, color: '#666', fontSize: '0.9rem' }}>
                 Si ingresás la clave acá, se almacenará en la tabla <code>app_settings</code> (solo accesible para admins). También se puede guardar en <code>GOOGLE_TTS_API_KEY</code> en el servidor.
@@ -525,7 +536,7 @@ export default function AdminAISettings() {
                 <div style={{ marginTop: 8 }}>
                   <label>Voces Google disponibles ({googleVoices.length})</label>
                   <div style={{ marginTop: 6, color: '#666', fontSize: '0.9rem' }}>
-                    Hacé clic en una voz para seleccionarla, luego en &quot;Probar&quot; para escucharla. Mostrando solo voces latinas (excluye España).
+                    Hacé clic en una voz para seleccionarla, luego en &quot;Probar&quot; para escucharla. Mostrando voces masculinas de Google (recomendado para Santi, tu avatar masculino).
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, marginTop: 6 }}>
                     {googleVoices.map(v => (
@@ -731,17 +742,59 @@ export default function AdminAISettings() {
                   try {
                     const headers: Record<string,string> = {};
                     if (settings.google_tts_api_key) headers['x-google-tts-api-key'] = settings.google_tts_api_key;
-                    const res = await fetch('/api/admin/tts/voices?provider=google', { headers });
+                    // Filtrar por género MALE (masculino) por defecto para Santi
+                    const res = await fetch('/api/admin/tts/voices?provider=google&gender=MALE', { headers });
                     const body = await res.json();
                     if (res.ok && body.voices) {
-                      const voices = body.voices as TTSVoice[];
-                      setGoogleVoices(voices);
+                      setGoogleVoices(body.voices as TTSVoice[]);
                     } else {
                       alert('No se pudieron obtener voces: ' + (body.error || 'unknown'));
                     }
                   } catch (e) { console.error('Fetch voices error', e); alert('Error al obtener voces'); }
                   setLoading(false);
-                }}>Listar voces (Google)</button>
+                }}>👨 Voces masculinas</button>
+
+                {/* Botones para filtrar por idioma */}
+                <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  <small style={{ width: '100%', color: '#666' }}>Voces masculinas por idioma:</small>
+                  {(['es', 'en', 'pt', 'fr'] as const).map(langCode => {
+                    const langLabels = { es: 'Español', en: 'English', pt: 'Português', fr: 'Français' } as const;
+                    const langLabel = langLabels[langCode];
+                    return (
+                      <button
+                        key={langCode}
+                        type="button"
+                        onClick={async () => {
+                          setLoading(true);
+                          try {
+                            const headers: Record<string,string> = {};
+                            if (settings.google_tts_api_key) headers['x-google-tts-api-key'] = settings.google_tts_api_key;
+                            const res = await fetch(`/api/admin/tts/voices?provider=google&gender=MALE&lang=${langCode}`, { headers });
+                            const body = await res.json();
+                            if (res.ok && body.voices) {
+                              setGoogleVoices(body.voices as TTSVoice[]);
+                            } else {
+                              alert(`No se pudieron obtener voces para ${langLabel}: ` + (body.error || 'unknown'));
+                            }
+                          } catch (e) { console.error('Fetch voices error', e); alert('Error al obtener voces'); }
+                          setLoading(false);
+                        }}
+                        disabled={loading}
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '0.85em',
+                          backgroundColor: '#2196f3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {langCode.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div style={{ marginTop: 6, color: '#666', fontSize: '0.9rem' }}>
                 Si tu proveedor tiene más voces, podés escribir su nombre manualmente o usar Listar voces para ver opciones.
@@ -759,6 +812,238 @@ export default function AdminAISettings() {
               )}
             </div>
           )}
+
+          <div style={{ marginBottom: 12, marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+            <h4>Configuración de voces TTS (Santi)</h4>
+            <div style={{ marginBottom: 8 }}>
+              <label>Género de voz preferido</label><br />
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceGenderFilter('MALE');
+                    setExpandedLanguage(null);
+                    setVoicesByLanguage({});
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: voiceGenderFilter === 'MALE' ? '#2196f3' : '#ddd',
+                    color: voiceGenderFilter === 'MALE' ? 'white' : 'black',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: voiceGenderFilter === 'MALE' ? 'bold' : 'normal'
+                  }}
+                >
+                  👨 Masculino
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceGenderFilter('FEMALE');
+                    setExpandedLanguage(null);
+                    setVoicesByLanguage({});
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: voiceGenderFilter === 'FEMALE' ? '#ff9800' : '#ddd',
+                    color: voiceGenderFilter === 'FEMALE' ? 'white' : 'black',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: voiceGenderFilter === 'FEMALE' ? 'bold' : 'normal'
+                  }}
+                >
+                  👩 Femenino
+                </button>
+              </div>
+              <div style={{ marginTop: 6, color: '#666', fontSize: '0.9rem' }}>
+                Género seleccionado: <strong>{voiceGenderFilter}</strong> - Las voces se filtrarán por este género
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label>Buscar voces por idioma</label>
+              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {[
+                  { code: 'es', label: 'Español', key: 'tts_voice_name_es' as const },
+                  { code: 'en', label: 'Inglés', key: 'tts_voice_name_en' as const },
+                  { code: 'pt', label: 'Portugués', key: 'tts_voice_name_pt' as const },
+                  { code: 'fr', label: 'Francés', key: 'tts_voice_name_fr' as const }
+                ].map(lang => (
+                  <div key={lang.code} style={{ 
+                    border: expandedLanguage === lang.code ? '2px solid #2196f3' : '1px solid #ddd', 
+                    padding: '8px',
+                    borderRadius: '4px',
+                    backgroundColor: expandedLanguage === lang.code ? '#e3f2fd' : 'white'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={async () => {
+                          if (expandedLanguage === lang.code) {
+                            setExpandedLanguage(null);
+                          } else {
+                            setLoading(true);
+                            setMessage(null);
+                            try {
+                              const headers: Record<string, string> = {};
+                              if (settings.google_tts_api_key?.trim()) {
+                                console.log(`📡 Usando API key del formulario (${settings.google_tts_api_key.trim().length} chars)`);
+                                headers['x-google-tts-api-key'] = settings.google_tts_api_key.trim();
+                              } else {
+                                console.log('✓ Sin API key en formulario, usaré GOOGLE_TTS_API_KEY del servidor (.env)');
+                              }
+                              const url = `/api/admin/tts/voices?provider=google&gender=${voiceGenderFilter}&lang=${lang.code}`;
+                              console.log(`🔍 Buscando voces: ${url}`);
+                              const res = await fetch(url, { headers });
+                              const body = await res.json();
+                              
+                              console.log('Response:', {
+                                status: res.status,
+                                voicesCount: body.voices?.length || 0,
+                                filterApplied: body.filterApplied,
+                                totalAvailable: body.totalAvailable,
+                                filteredAvailable: body.filteredAvailable,
+                                error: body.error
+                              });
+
+                              if (res.ok && body.voices && body.voices.length > 0) {
+                                setVoicesByLanguage(prev => ({
+                                  ...prev,
+                                  [lang.code]: body.voices as TTSVoice[]
+                                }));
+                                setExpandedLanguage(lang.code);
+                                setMessage(null);
+                              } else {
+                                const errorMsg = body.error || `No hay voces disponibles para ${lang.label} en género ${voiceGenderFilter}. Verifica que GOOGLE_TTS_API_KEY esté configurado y que la API esté habilitada.`;
+                                console.warn('❌ Error o sin voces:', errorMsg);
+                                setMessage(`⚠️ ${errorMsg}`);
+                              }
+                            } catch (e) {
+                              console.error('Fetch voices error', e);
+                              const errorMsg = e instanceof Error ? e.message : 'Error desconocido';
+                              setMessage(`❌ Error al obtener voces: ${errorMsg}`);
+                              alert(`Error al obtener voces para ${lang.label}: ${errorMsg}`);
+                            } finally {
+                              setLoading(false);
+                            }
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          backgroundColor: expandedLanguage === lang.code ? '#2196f3' : '#f0f0f0',
+                          color: expandedLanguage === lang.code ? 'white' : 'black',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: loading ? 'wait' : 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '0.9em',
+                          opacity: loading ? 0.7 : 1
+                        }}
+                      >
+                        {expandedLanguage === lang.code ? '✓' : '▼'} {lang.label}
+                      </button>
+                      {settings[lang.key] && (
+                        <div style={{
+                          fontSize: '0.75em',
+                          backgroundColor: '#e8f5e9',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          color: '#2e7d32',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {settings[lang.key].split('-').slice(0, 2).join('-')}
+                        </div>
+                      )}
+                    </div>
+
+                    {expandedLanguage === lang.code && voicesByLanguage[lang.code] && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: '0.85em', color: '#666', marginBottom: 6 }}>
+                          {voicesByLanguage[lang.code].length} voces disponibles:
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 4 }}>
+                          {voicesByLanguage[lang.code].map((voice) => (
+                            <button
+                              key={voice.name}
+                              type="button"
+                              onClick={() => {
+                                setSettings(prev => ({
+                                  ...prev,
+                                  [lang.key]: voice.name
+                                }));
+                              }}
+                              style={{
+                                padding: '6px 8px',
+                                backgroundColor: settings[lang.key] === voice.name ? '#4caf50' : '#fff',
+                                color: settings[lang.key] === voice.name ? 'white' : 'black',
+                                border: settings[lang.key] === voice.name ? '2px solid #4caf50' : '1px solid #ccc',
+                                borderRadius: '3px',
+                                cursor: 'pointer',
+                                fontSize: '0.75em',
+                                fontWeight: settings[lang.key] === voice.name ? 'bold' : 'normal',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={voice.name}
+                            >
+                              {voice.name.split('-').slice(0, 3).join('-')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!expandedLanguage && settings[lang.key] && (
+                      <div style={{ fontSize: '0.75em', color: '#999', marginTop: '4px' }}>
+                        Asignada: {settings[lang.key]}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, padding: 12, backgroundColor: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: 4 }}>
+                <strong>💡 Cómo usar:</strong>
+                <ol style={{ margin: '4px 0 8px 0', paddingLeft: 20 }}>
+                  <li>Selecciona el género (Masculino/Femenino)</li>
+                  <li>Haz clic en un idioma para cargar las voces disponibles</li>
+                  <li>Selecciona una voz haciendo clic sobre ella (se resaltará en verde)</li>
+                  <li>Repite para otros idiomas</li>
+                  <li>Al final, haz clic en &quot;Guardar&quot;</li>
+                </ol>
+
+                {!settings.google_tts_api_key && (
+                  <div style={{ marginTop: 8, padding: 8, backgroundColor: '#e8f5e9', border: '1px solid #4caf50', borderRadius: 3 }}>
+                    <strong style={{ color: '#1b5e20' }}>✓ API Key configurada en servidor:</strong>
+                    <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#2e7d32' }}>
+                      Se detectó <code>GOOGLE_TTS_API_KEY</code> en .env.local. El servidor usará esa clave automáticamente.
+                    </p>
+                    <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#2e7d32' }}>
+                      Puedes proceder a cargar las voces por idioma. Si tienes problemas, abre la consola (F12) para ver los logs.
+                    </p>
+                  </div>
+                )}
+
+                {settings.google_tts_api_key && (
+                  <div style={{ marginTop: 8, padding: 8, backgroundColor: '#e8f5e9', border: '1px solid #4caf50', borderRadius: 3 }}>
+                    <strong style={{ color: '#1b5e20' }}>✓ API Key guardada en base de datos:</strong>
+                    <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#2e7d32' }}>
+                      {settings.google_tts_api_key.substring(0, 10)}...{settings.google_tts_api_key.substring(settings.google_tts_api_key.length - 5)}
+                    </p>
+                    <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#2e7d32' }}>
+                      Esta clave tiene prioridad sobre .env.local. Puedes proceder a cargar las voces.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           <button onClick={save} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
           {message && <div style={{ marginTop: 8 }}>{message}</div>}

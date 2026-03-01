@@ -270,13 +270,48 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         console.log('ChatInterface: Making TTS request...');
         
         try {
-            // determine language code for TTS providers
-            const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
-            const langCode = localeMap[locale] || 'es-AR';
+            // Fetch the configured voice for this language from the server
+            const langPrefix = locale || 'es';
+            
+            let configuredVoice: string | null = null;
+            let actualLanguageCode = 'es-AR';
+            let provider = 'google';
+            
+            try {
+                const voiceConfigResponse = await fetch(`/api/tts/voice-config?lang=${langPrefix}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (voiceConfigResponse.ok) {
+                    const voiceConfig = await voiceConfigResponse.json();
+                    configuredVoice = voiceConfig.voice;
+                    // Use the correct language code for the selected voice
+                    actualLanguageCode = voiceConfig.languageCode || actualLanguageCode;
+                    provider = voiceConfig.provider || 'google';
+                    console.log(`ChatInterface: Using configured voice for ${langPrefix}: ${configuredVoice || '(default)'} with lang ${actualLanguageCode}`);
+                }
+            } catch (fetchErr) {
+                console.warn('Failed to fetch voice config, using default:', fetchErr);
+                // Fallback to locale-based language code
+                const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+                actualLanguageCode = localeMap[locale] || 'es-AR';
+            }
+            
+            const payload: Record<string, string> = {
+                text: cleanText,
+                languageCode: actualLanguageCode,
+                provider: provider
+            };
+            
+            if (configuredVoice) {
+                payload.voice = configuredVoice;
+            }
+            
             const response = await fetch('/api/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: cleanText, languageCode: langCode, voice: undefined, provider: undefined }), // pass language hint
+                body: JSON.stringify(payload),
             });
 
             if (response.status === 401) throw new Error("API_KEY_MISSING");
@@ -298,12 +333,10 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                     // Use browser TTS as fallback with cleaned text, respect locale
                     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
                         const utter = new SpeechSynthesisUtterance(cleanText); // Use cleaned text
-                        const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
-                        const langCode = localeMap[locale] || 'es-AR';
-                        utter.lang = langCode;
+                        utter.lang = actualLanguageCode;
                         const voices = window.speechSynthesis.getVoices();
                         // try to match first two letters
-                        const prefix = langCode.slice(0,2);
+                        const prefix = actualLanguageCode.slice(0,2);
                         utter.voice = voices.find(v => v.lang?.startsWith(prefix)) || null;
                         window.speechSynthesis.cancel();
                         window.speechSynthesis.speak(utter);
@@ -507,6 +540,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
             let botReply = data.reply || t('chat.bot.thinkingError');
             const placeId = data.placeId;
             const placeName = data.placeName;
+            const placeDescription = data.placeDescription; // Localized description from API
             const isRouteOnly = data.isRouteOnly; // Flag para indicar consulta de ruta únicamente
             const isInfoQuery = data.isInfoQuery; // Flag para preguntas informativas (no navegar automáticamente)
             const relevantVideo = data.relevantVideo; // Video relevante si existe
@@ -562,10 +596,14 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
 
             console.log('🎵 ChatInterface: Checking isRouteOnly flag:', isRouteOnly, 'isInfoQuery:', isInfoQuery, 'botReply preview:', botReply.substring(0, 50));
             
+            // Usar la descripción localizada del lugar si está disponible, sino usar la respuesta de la IA
+            const textToNarrate = placeDescription || botReply;
+            console.log('🎵 ChatInterface: Text to narrate:', placeDescription ? 'Using localized placeDescription' : 'Using botReply', textToNarrate.substring(0, 100));
+            
             // Siempre reproducir la respuesta del asistente, incluso para consultas de ruta
             // El mapa agregará después las instrucciones detalladas mediante eventos
             console.log('🎵 ChatInterface: Playing audio response for:', isRouteOnly ? 'route query' : isInfoQuery ? 'info query' : 'normal query');
-            playAudioResponse(botReply);
+            playAudioResponse(textToNarrate);
             
             // Solo navegar a detail page si hay placeId Y NO es consulta de ruta Y NO es consulta informativa
             if (placeId && !isRouteOnly && !isInfoQuery && typeof window !== 'undefined') {
@@ -586,10 +624,11 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 try {
                     console.log('ChatInterface: Storing narration data before navigation:', {
                         placeId,
-                        textLength: botReply.length
+                        textLength: textToNarrate.length,
+                        isLocalizedDescription: !!placeDescription
                     });
                     setStorage('santi:narratingPlace', placeId);
-                    setStorage('santi:narratingText', botReply);
+                    setStorage('santi:narratingText', textToNarrate);  // Use localized description text
                     // Navigate with enough delay to ensure storage completes
                     setTimeout(() => {
                         console.log('ChatInterface: Navigating to place detail page');
@@ -684,7 +723,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                                         image: a.image_url || '',
                                         info: a.info_extra || '',
                                         gallery_urls: a.gallery_urls || [],
-                                        coords: [a.lng, a.lat],
+                                        coords: [a.lng || 0, a.lat || 0] as [number, number],
                                         category: a.category || ''
                                     };
 

@@ -207,8 +207,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     'ar.cameraPermission': 'Allow camera access for full experience.',
     'ar.modeCamera': 'AR with camera',
     'ar.modeScreen': 'AR on screen',
-    'ar.modeCamera': 'AR with camera',
-    'ar.modeScreen': 'AR on screen',
     'ar.detail1': '3D models, multimedia and data overlaid in the real world.',
     'ar.detail2': 'Place content and discover information about elements.',
     'ar.lookDescription': 'Point your camera to see AR content.',
@@ -356,8 +354,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     'ar.cameraPermission': 'Permita o acesso à câmera para uma experiência completa.',
     'ar.modeCamera': 'AR com câmera',
     'ar.modeScreen': 'AR na tela',
-    'ar.modeCamera': 'AR com câmera',
-    'ar.modeScreen': 'AR na tela',
     'ar.detail1': 'Modelos 3D, multimídia e dados sobrepostos no mundo real.',
     'ar.detail2': 'Coloque conteúdo e descubra informações sobre os elementos.',
     'ar.lookDescription': 'Aponte sua câmera para ver o conteúdo AR.',
@@ -470,7 +466,6 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     'home.featuredPlaces': 'Lieux en vedette',
     'home.explorePlaces': '🗺️ Explorer les lieux',
-    'home.featuredPlaces': 'Lieux en vedette',
 
     'ar.welcome': "Bienvenue dans l'AR",        
     'ar.discover': 'Découvrez {name} en réalité augmentée.',

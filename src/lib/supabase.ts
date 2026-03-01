@@ -33,7 +33,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 if (supabase && supabase.auth) {
   const auth = supabase.auth as any;
   const wrap = (orig: Function) => {
-    return async function(...args: any[]) {
+    return async function(this: any, ...args: any[]) {
       try {
         return await orig.apply(this, args);
       } catch (err: any) {
