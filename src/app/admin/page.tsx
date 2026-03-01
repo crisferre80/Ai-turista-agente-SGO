@@ -2275,10 +2275,10 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => setNewBusiness({ id: b.id || '', name: b.name, category: b.category, contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 })} style={btnAction}>✏️</button>
+                                        <button onClick={() => setNewBusiness({ id: b.id || '', name: b.name, category: b.category, description: b.description || '', description_en: b.description_en || '', description_pt: b.description_pt || '', description_fr: b.description_fr || '', contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 })} style={btnAction}>✏️</button>
                                         <button
                                             onClick={() => {
-                                                setNewBusiness({ id: b.id || '', name: b.name, category: b.category, contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 });
+                                                setNewBusiness({ id: b.id || '', name: b.name, category: b.category, description: b.description || '', description_en: b.description_en || '', description_pt: b.description_pt || '', description_fr: b.description_fr || '', contact: b.contact_info || '', website: b.website_url || '', image_url: b.image_url || '', lat: b.lat || -27.7834, lng: b.lng || -64.2599 });
                                                 router.push('/admin/image-manager');
                                             }}
                                             style={btnAction}
