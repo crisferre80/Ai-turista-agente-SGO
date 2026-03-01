@@ -287,7 +287,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
   },
   pt: {
-    santi: 'Santi IA',
+    santi: 'Santi IA Go',
     explore: 'Explorar',
     accreditation: 'Autenticar',
     install: 'Instalar',
