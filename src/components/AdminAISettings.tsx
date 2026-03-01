@@ -957,7 +957,7 @@ export default function AdminAISettings() {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis'
                         }}>
-                          {settings[lang.key].split('-').slice(0, 2).join('-')}
+                          {settings[lang.key]?.split('-').slice(0, 2).join('-') || 'No configurada'}
                         </div>
                       )}
                     </div>
