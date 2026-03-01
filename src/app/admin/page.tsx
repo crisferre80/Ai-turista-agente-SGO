@@ -932,16 +932,32 @@ export default function AdminDashboard() {
             let error;
             if (editingId) {
                 console.log('🔄 Admin: Updating attraction ID:', editingId);
-                const { error: updErr } = await supabase.from('attractions').update(placeData).eq('id', editingId);
-                error = updErr;
-                if (error) {
+                // Use API endpoint to update and revalidate cache
+                const res = await fetch('/api/admin/attractions', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: editingId, ...placeData })
+                });
+                const result = await res.json();
+                if (!res.ok) {
+                    error = new Error(result.error || 'Update failed');
                     console.error('❌ Admin: Update error:', error);
                 } else {
-                    console.log('✅ Admin: Update successful');
+                    console.log('✅ Admin: Update successful with cache revalidation');
                 }
             } else {
-                const { error: insErr } = await supabase.from('attractions').insert([placeData]);
-                error = insErr;
+                // Use API endpoint to create and revalidate cache
+                const res = await fetch('/api/admin/attractions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(placeData)
+                });
+                const result = await res.json();
+                if (!res.ok) {
+                    error = new Error(result.error || 'Create failed');
+                } else {
+                    console.log('✅ Admin: Create successful with cache revalidation');
+                }
             }
 
             if (error) throw error;
@@ -1126,11 +1142,27 @@ export default function AdminDashboard() {
 
             let error;
             if (newBusiness.id) {
-                const { error: updErr } = await supabase.from('business_profiles').update(bizData).eq('id', newBusiness.id);
-                error = updErr;
+                // Use API endpoint to update and revalidate cache
+                const res = await fetch('/api/admin/businesses', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: newBusiness.id, ...bizData })
+                });
+                const result = await res.json();
+                if (!res.ok) {
+                    error = new Error(result.error || 'Update failed');
+                }
             } else {
-                const { error: insErr } = await supabase.from('business_profiles').insert([bizData]);
-                error = insErr;
+                // Use API endpoint to create and revalidate cache
+                const res = await fetch('/api/admin/businesses', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bizData)
+                });
+                const result = await res.json();
+                if (!res.ok) {
+                    error = new Error(result.error || 'Create failed');
+                }
             }
 
             if (error) throw error;

@@ -310,10 +310,32 @@ export async function POST(req: Request) {
         const normalizedQuery = normalizeText(userQuery);
         
         // Extraer palabras clave significativas (más de 3 letras)
-        const commonWords = new Set(['donde', 'puedo', 'quiero', 'como', 'cual', 'para', 'con', 'sin', 'sobre', 'desde', 'hasta', 'entre', 'hay', 'esta', 'son', 'tiene', 'hacer', 'lugar', 'lugares', 'sitio', 'sitios', 'conocer', 'ver', 'visitar', 'que', 'del', 'las', 'los', 'una', 'uno']);
+        const commonWords = new Set(['donde', 'puedo', 'quiero', 'como', 'cual', 'para', 'con', 'sin', 'sobre', 'desde', 'hasta', 'entre', 'hay', 'esta', 'son', 'tiene', 'hacer', 'lugar', 'lugares', 'sitio', 'sitios', 'conocer', 'ver', 'visitar', 'que', 'del', 'las', 'los', 'una', 'uno', 'debe', 'pueda', 'seria']);
         const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 3 && !commonWords.has(w));
         
         console.log('🔑 Palabras clave extraídas:', queryWords.join(', '));
+        
+        // Mapa de sinónimos para mejorar búsqueda
+        const synonymMap: Record<string, string[]> = {
+            'flora': ['natural', 'fauna', 'reserva', 'parque', 'ecologia', 'ecosistema', 'biologia'],
+            'fauna': ['flora', 'natural', 'reserva', 'parque', 'ecologia'],
+            'historia': ['historico', 'antiguo', 'monumento', 'colonial', 'museo'],
+            'iglesia': ['templo', 'religiosa', 'capilla', 'santuario'],
+            'rio': ['agua', 'playa', 'balneario', 'laguna', 'arroyo'],
+            'comida': ['restaurante', 'gastronomia', 'culinario', 'cafe', 'panaderia'],
+            'arte': ['cultural', 'museo', 'pintura', 'escultura', 'artesania'],
+        };
+        
+        // Expandir palabras clave con sinónimos
+        const expandedWords = new Set(queryWords);
+        for (const word of queryWords) {
+            if (synonymMap[word]) {
+                synonymMap[word].forEach(syn => expandedWords.add(syn));
+            }
+        }
+        const allSearchWords = Array.from(expandedWords);
+        
+        console.log('🔑 Palabras clave expandidas con sinónimos:', allSearchWords.join(', '));
         
         // Buscar coincidencias en attractions
         let foundPlace = null;
@@ -325,6 +347,7 @@ export async function POST(req: Request) {
                 const name = normalizeText(attraction.name as string);
                 const description = normalizeText((attraction.description as string) || '');
                 const category = normalizeText((attraction.category as string) || '');
+                const infoExtra = normalizeText((attraction.info_extra as string) || '');
                 
                 let score = 0;
                 
@@ -333,10 +356,11 @@ export async function POST(req: Request) {
                     score = 100;
                 } else {
                     // Contar cuántas palabras clave coinciden
-                    for (const word of queryWords) {
-                        if (name.includes(word)) score += 10;
-                        if (description.includes(word)) score += 3;
-                        if (category.includes(word)) score += 5;
+                    for (const word of allSearchWords) {
+                        if (name.includes(word)) score += 15;  // Aumentado de 10
+                        if (category.includes(word)) score += 8;  // Aumentado de 5
+                        if (description.includes(word)) score += 4;  // Aumentado de 3
+                        if (infoExtra.includes(word)) score += 3;
                     }
                 }
                 
@@ -348,20 +372,22 @@ export async function POST(req: Request) {
             }
         }
         
-        // Buscar en businesses si no encontró buena coincidencia en attractions
+        // Buscar en businesses solo si no encontró buena coincidencia (score >= 10)
         if (bestScore < 10 && businesses && businesses.length > 0) {
             for (const business of businesses) {
                 const name = normalizeText(business.name as string);
                 const category = normalizeText((business.category as string) || '');
+                const contact = normalizeText((business.contact_info as string) || '');
                 
                 let score = 0;
                 
                 if (name === normalizedQuery) {
                     score = 100;
                 } else {
-                    for (const word of queryWords) {
-                        if (name.includes(word)) score += 10;
-                        if (category.includes(word)) score += 5;
+                    for (const word of allSearchWords) {
+                        if (name.includes(word)) score += 15;
+                        if (category.includes(word)) score += 8;
+                        if (contact.includes(word)) score += 3;
                     }
                 }
                 
@@ -375,15 +401,16 @@ export async function POST(req: Request) {
         
         console.log(`🎯 Mejor coincidencia: ${foundPlace ? (foundPlace.name as string) : 'NINGUNA'} (score: ${bestScore})`);
         
-        // Si encontramos un lugar con suficiente confianza (score >= 5), responder directamente sin Gemini
+        // Si encontramos un lugar con suficiente confianza (score >= 10), responder directamente sin Gemini
+        // Aumentado threshold de 5 a 10 para evitar resultados falsos
         let reply: string = '';
         let placeId: string | null = null;
         let placeName: string | null = null;
         let placeDescription: string | null = null;
         let skipGemini = false;
         
-        if (foundPlace && bestScore >= 5) {
-            console.log('✅ Lugar encontrado en BD local:', foundPlace.name);
+        if (foundPlace && bestScore >= 10) {
+            console.log('✅ Lugar encontrado en BD local (score suficientemente alto):', foundPlace.name);
             placeId = foundPlace.id;
             placeName = foundPlace.name as string;
             skipGemini = true;
@@ -415,7 +442,10 @@ export async function POST(req: Request) {
             
             console.log('💬 Respuesta generada desde BD local (sin Gemini)');
         } else {
-            console.log('❌ No se encontró lugar en BD local, usando Gemini para búsqueda global...');
+            console.log('❌ No se encontró lugar en BD local con suficiente confianza, usando Gemini para búsqueda inteligente...');
+            if (bestScore > 0) {
+                console.log(`⚠️ Score encontrado (${bestScore}) es menor que el threshold (10) - delegando a Gemini para análisis semántico`);
+            }
         }
         
         // ============================================================

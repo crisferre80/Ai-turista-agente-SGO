@@ -9,45 +9,20 @@ const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false }
 });
 
-export async function GET() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  try {
-    const { data: businesses, error } = await supabase
-      .from('business_profiles')
-      .select('id, name, category')
-      .eq('is_active', true)
-      .order('name');
-
-    if (error) {
-      console.error('Error fetching businesses:', error);
-      return NextResponse.json({ error: 'Error al cargar negocios' }, { status: 500 });
-    }
-
-    return NextResponse.json({ businesses: businesses || [] });
-  } catch (error) {
-    console.error('Error:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
-  }
-}
-
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, ...updates } = body;
 
     if (!id) {
-      return NextResponse.json({ error: 'Missing business ID' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing attraction ID' }, { status: 400 });
     }
 
-    console.log('🔄 API: Updating business', id, 'with:', Object.keys(updates));
+    console.log('🔄 API: Updating attraction', id, 'with:', Object.keys(updates));
 
     // Update in Supabase
     const { error } = await admin
-      .from('business_profiles')
+      .from('attractions')
       .update(updates)
       .eq('id', id);
 
@@ -56,9 +31,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    console.log('✅ API: Business updated successfully, revalidating cache...');
+    console.log('✅ API: Attraction updated successfully, revalidating cache...');
 
-    // Revalidate all routes that might display this business
+    // Revalidate all routes that might display this attraction
     try {
       // Revalidate the specific detail page
       revalidatePath(`/explorar/${id}`);
@@ -73,15 +48,16 @@ export async function PUT(request: Request) {
       console.log('✅ Revalidated /');
     } catch (revalidateError) {
       console.warn('⚠️ Revalidation warning:', revalidateError);
+      // Don't fail the request if revalidation fails
     }
 
     return NextResponse.json({ 
       ok: true, 
-      message: 'Business updated and cache revalidated'
+      message: 'Attraction updated and cache revalidated' 
     });
   } catch (err) {
-    console.error('❌ API: Error updating business:', err);
-    const message = err instanceof Error ? err.message : 'Failed to update business';
+    console.error('❌ API: Error updating attraction:', err);
+    const message = err instanceof Error ? err.message : 'Failed to update attraction';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -90,11 +66,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    console.log('🆕 API: Creating NEW business with:', Object.keys(body));
+    console.log('🆕 API: Creating NEW attraction with:', Object.keys(body));
 
     // Insert in Supabase
     const { data, error } = await admin
-      .from('business_profiles')
+      .from('attractions')
       .insert([body])
       .select()
       .single();
@@ -108,7 +84,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No data returned from insert' }, { status: 400 });
     }
 
-    console.log('✅ API: Business created successfully, revalidating cache...');
+    console.log('✅ API: Attraction created successfully, revalidating cache...');
 
     // Revalidate explore pages
     try {
@@ -124,11 +100,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       ok: true, 
       id: data.id,
-      message: 'Business created and cache revalidated'
+      message: 'Attraction created and cache revalidated'
     });
   } catch (err) {
-    console.error('❌ API: Error creating business:', err);
-    const message = err instanceof Error ? err.message : 'Failed to create business';
+    console.error('❌ API: Error creating attraction:', err);
+    const message = err instanceof Error ? err.message : 'Failed to create attraction';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
