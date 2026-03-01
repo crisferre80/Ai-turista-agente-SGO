@@ -395,7 +395,7 @@ export async function POST(req: Request) {
                 console.log('📝 Generated placeDescription for attraction:', {
                     name: placeName,
                     locale,
-                    descriptionPreview: placeDescription.substring(0, 100)
+                    descriptionPreview: placeDescription?.substring(0, 100) || 'N/A'
                 });
                 reply = `${getLocalizedGreeting(placeName, locale)}\n\n${placeDescription}`;
             } else {
@@ -404,7 +404,7 @@ export async function POST(req: Request) {
                 console.log('📝 Generated placeDescription for business:', {
                     name: placeName,
                     locale,
-                    descriptionPreview: placeDescription.substring(0, 100)
+                    descriptionPreview: placeDescription?.substring(0, 100) || 'N/A'
                 });
                 const contactInfo = business.contact_info;
                 reply = getLocalizedRecommendation(placeName, business.category, locale);
