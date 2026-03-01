@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Internationalization is handled via our custom LanguageProvider in the App Router
+  // (next.config.ts i18n is unsupported when using the app/ directory).
+  // Keep locale list in sync with src/i18n/translations.ts if you add/remove languages.
   // Removed 'output: export' to enable API routes
 };
 

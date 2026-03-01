@@ -4,7 +4,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getUserSafe } from '@/lib/supabaseAuth';
 import type { User } from '@supabase/supabase-js';
+import { useI18n } from '@/i18n/LanguageProvider';
+import { locales, languageNames, Locale } from '@/i18n/translations';
 
 interface UserProfile {
   name: string | null;
@@ -19,6 +22,7 @@ interface UserAvatarProps {
 }
 
 export default function UserAvatar({ size = 32, showName = false, className = '' }: UserAvatarProps) {
+  const { locale, setLocale, t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,15 +33,29 @@ export default function UserAvatar({ size = 32, showName = false, className = ''
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          // offline; skip attempt and leave loading as false later
+          console.warn('UserAvatar: offline, skipping user fetch');
+          return;
+        }
+
+        const { data: { user }, error } = await getUserSafe();
+        if (error && error.message && /failed to fetch/i.test(error.message)) {
+          // already logged inside helper
+        }
+
         if (user) {
           setUser(user);
           // Obtener perfil
-          const { data: profileData } = await supabase
+          const { data: profileData, error: profErr } = await supabase
             .from('profiles')
             .select('name, avatar_url, role')
             .eq('id', user.id)
             .single();
+
+          if (profErr) {
+            console.warn('Error fetching profile data:', profErr);
+          }
 
           if (profileData) {
             setProfile(profileData);
@@ -296,6 +314,26 @@ export default function UserAvatar({ size = 32, showName = false, className = ''
               ⚙️ Panel Admin
             </Link>
           )}
+          {/* language chooser */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
+            <span style={{ fontSize: '14px', color: '#374151', marginRight: '8px' }}>{t('language')}:</span>
+            <select
+              value={locale}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'auto') setLocale('auto');
+                else setLocale(v as Locale);
+              }}
+              style={{ background: 'transparent', border: '1px solid #ccc', borderRadius: 4, padding: '2px 4px', fontSize: '14px' }}
+            >
+              <option value="auto" style={{ color: '#000' }}>{t('lang.auto')}</option>
+              {locales.map(l => (
+                <option key={l} value={l} style={{ color: '#000' }}>
+                  {languageNames[l]}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={handleLogout}
             style={{

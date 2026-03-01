@@ -7,6 +7,7 @@ import UserReviewsGallery from './UserReviewsGallery';
 import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 import type { ARData } from '@/types/ar';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 // Importar QR Scanner dinámicamente para evitar problemas de SSR
 const QRScanner = dynamic(() => import('./QRScanner'), { ssr: false });
@@ -15,6 +16,9 @@ type PlaceSerializable = {
   id: string;
   name: string;
   description?: string;
+  description_en?: string;
+  description_pt?: string;
+  description_fr?: string;
   image_url?: string;
   category?: string;
   lat?: number;
@@ -40,6 +44,15 @@ type Promotion = {
 
 export default function PlaceDetailClient({ place, promotions = [] }: { place: PlaceSerializable; promotions?: Promotion[] }) {
   const router = useRouter();
+  const { t, locale } = useI18n();
+
+  // pick the right description column based on current locale
+  const localizedDescription = (() => {
+    if (locale === 'en' && place.description_en) return place.description_en;
+    if (locale === 'pt' && place.description_pt) return place.description_pt;
+    if (locale === 'fr' && place.description_fr) return place.description_fr;
+    return place.description || '';
+  })();
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [videoOpen, setVideoOpen] = useState<{ open: boolean; src?: string }>({ open: false });
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -151,7 +164,9 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         
         // If no pending narration after retries, create default one
         if (!hasPendingNarration && place.description) {
-          narrationText = `Aquí tienes más detalles sobre ${place.name}. ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
+          // first sentence is translatable, description itself is dynamic and kept as-is
+          narrationText = t('place.defaultNarration', { name: place.name }) +
+            ` ${place.description.slice(0, 200)}${place.description.length > 200 ? '...' : ''}`;
           console.log('PlaceDetailClient: Using default narration text');
         }
         
@@ -227,7 +242,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
   const handleShare = async () => {
     const url = typeof window !== 'undefined' ? window.location.href : '';
     if (navigator.share) {
-      try { await navigator.share({ title: place.name, text: place.description?.slice(0, 140), url }); }
+      try { await navigator.share({ title: place.name, text: localizedDescription?.slice(0, 140), url }); }
       catch { /* ignore */ }
     } else {
       await navigator.clipboard.writeText(url);
@@ -610,7 +625,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                 gap: 6,
               }}
               className="btn-hover"
-              title="Escanear código QR"
+              title={t('place.qrScan')}
             >
               <span style={{ fontSize: '1.2rem' }}>📷</span>
               <span>QR</span>
@@ -638,10 +653,10 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                   animation: 'pulse-ar-button 2s infinite',
                 }}
                 className="btn-hover"
-                title="Ver en Realidad Aumentada"
+                title={t('place.viewInAR')}
               >
                 <span style={{ fontSize: '1.2rem' }}>🥽</span>
-                <span>Ver en AR</span>
+                <span>{t('place.viewInARShort')}</span>
               </button>
             )}
           </div>
@@ -650,7 +665,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.5px' }} className="hero-title">{place.name}</h1>
             <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {place.category && <span style={{ background: 'rgba(255,255,255,0.95)', color: '#1A3A6C', padding: '6px 12px', borderRadius: 20, fontWeight: 700, fontSize: '0.85rem', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>{place.category}</span>}
-              <button onClick={handleShare} className="btn-hover" style={{ padding: '8px 14px', background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>Compartir</button>
+              <button onClick={handleShare} className="btn-hover" style={{ padding: '8px 14px', background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>{t('place.share')}</button>
               {place.lat && place.lng && (
                 <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`} target="_blank" rel="noreferrer">
                   <button className="btn-hover" style={{ padding: '8px 14px', background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
@@ -666,13 +681,13 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
         {/* Main Info / Side panel */}
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }} className="main-grid">
           <div style={{ background: 'white', padding: 20, borderRadius: 14, boxShadow: '0 8px 25px rgba(0,0,0,0.08)' }} className="description-section card-section">
-            <h2 style={{ marginTop: 0, color: '#1A3A6C' }} className="description-title">Descripción</h2>
-            <p style={{ color: '#333', lineHeight: 1.7 }}>{place.description || 'No hay descripción disponible.'}</p>
+            <h2 style={{ marginTop: 0, color: '#1A3A6C' }} className="description-title">{t('place.descriptionTitle')}</h2>
+            <p style={{ color: '#333', lineHeight: 1.7 }}>{localizedDescription || t('place.noDescription')}</p>
 
             {/* Gallery Thumbnails */}
             {place.gallery_urls && place.gallery_urls.length > 0 && (
               <section style={{ marginTop: 18 }}>
-                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>Galería</h3>
+                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>{t('place.gallery')}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }} className="gallery-grid">
                   {place.gallery_urls.map((u, i) => (
                     <div key={i} onClick={() => openGallery(i)} style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', height: 100, position: 'relative', animationDelay: `${i * 0.05}s` }} className="gallery-item">
@@ -686,7 +701,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             {/* Videos */}
             {normalizedVideoUrls.length > 0 && (
               <section style={{ marginTop: 20 }}>
-                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>Videos</h3>
+                <h3 style={{ margin: 0, marginBottom: 10, color: '#1A3A6C', fontSize: '1.1rem' }}>{t('place.videos')}</h3>
                 <div style={{ borderRadius: 12, overflow: 'hidden', background: '#111', position: 'relative', minHeight: 260 }}>
                   {isYoutubeUrl(currentVideoUrl) ? (
                     <iframe
@@ -694,7 +709,7 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                       style={{ width: '100%', height: 320, border: 'none' }}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
-                      title="Video principal"
+                      title={t('place.videoMainTitle')}
                     />
                   ) : (
                     <video src={currentVideoUrl} controls style={{ width: '100%', height: 320, background: '#000' }} />
@@ -748,18 +763,18 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
             {/* Promotions */}
             {promotions && promotions.length > 0 && (
               <section style={{ marginTop: 18 }}>
-                <h3 style={{ margin: 0, marginBottom: 8 }}>Promociones</h3>
+                <h3 style={{ margin: 0, marginBottom: 8 }}>{t('place.promotions')}</h3>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {promotions.map(p => (
                     <div key={p.id} style={{ display: 'flex', gap: 12, background: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="promotion-item">
                       {p.image_url && <div style={{ width: 120, height: 80, position: 'relative', borderRadius: 8, overflow: 'hidden' }} className="promotion-image"><Image src={p.image_url} alt={p.title || 'Promo'} fill style={{ objectFit: 'cover' }} /></div>}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 800 }}>{p.title}</div>
-                        <div style={{ color: '#666' }}>{p.description}</div>
+                        <div style={{ color: '#666' }}>{p.description}</div> // list views still use raw field
                         {p.terms && <div style={{ marginTop: 8, fontSize: '0.85rem', color: '#999' }}>Términos: {p.terms}</div>}
                       </div>
                       <div>
-                        <button style={{ background: '#F1C40F', border: 'none', padding: '8px 12px', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}>Ver Promo</button>
+                        <button style={{ background: '#F1C40F', border: 'none', padding: '8px 12px', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}>{t('place.viewPromo')}</button>
                       </div>
                     </div>
                   ))}
@@ -785,15 +800,15 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="sidebar">
             <div style={{ background: 'white', padding: 16, borderRadius: 14, boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="sidebar-card card-section">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 12, color: '#666' }}>{place.isBusiness ? 'Negocio' : 'Atractivo'}</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{place.isBusiness ? t('place.business') : t('place.attraction')}</div>
                 <div style={{ fontSize: 12, color: '#666' }}>{place.category}</div>
               </div>
-              {place.contact_info && <div style={{ marginTop: 12 }}><strong>Contacto:</strong><br /> <a href={`tel:${place.contact_info}`} style={{ color: '#1A3A6C', fontWeight: 700 }}>{place.contact_info}</a></div>}
-              {place.website_url && <div style={{ marginTop: 8 }}><a href={place.website_url} target="_blank" rel="noreferrer" style={{ color: '#1A3A6C', fontWeight: 700 }}>Visitar sitio web</a></div>}
+              {place.contact_info && <div style={{ marginTop: 12 }}><strong>{t('place.contact')}</strong><br /> <a href={`tel:${place.contact_info}`} style={{ color: '#1A3A6C', fontWeight: 700 }}>{place.contact_info}</a></div>}
+              {place.website_url && <div style={{ marginTop: 8 }}><a href={place.website_url} target="_blank" rel="noreferrer" style={{ color: '#1A3A6C', fontWeight: 700 }}>{t('place.visitWebsite')}</a></div>}
 
               {place.isBusiness && (
                 <div style={{ marginTop: 12 }}>
-                  <button className="btn-hover" style={{ width: '100%', padding: '12px 14px', background: 'linear-gradient(135deg, #1A3A6C 0%, #2C5AA0 100%)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(26, 58, 108, 0.25)' }}>Contactar/Reservar</button>
+                  <button className="btn-hover" style={{ width: '100%', padding: '12px 14px', background: 'linear-gradient(135deg, #1A3A6C 0%, #2C5AA0 100%)', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(26, 58, 108, 0.25)' }}>{t('place.contactReserve')}</button>
                 </div>
               )}
 
@@ -807,11 +822,11 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
 
             {/* Quick Highlights */}
             <div style={{ background: 'white', padding: 16, borderRadius: 14, boxShadow: '0 6px 20px rgba(0,0,0,0.06)' }} className="sidebar-card card-section">
-              <div style={{ fontWeight: 800, marginBottom: 8 }}>Aspectos Destacados</div>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>{t('place.highlightsTitle')}</div>
               <ul style={{ paddingLeft: 18, color: '#444' }}>
-                <li>Recomendado para turistas</li>
-                <li>Acceso y estacionamiento</li>
-                <li>Opciones gastronómicas cercanas</li>
+                <li>{t('place.highlight.tourist')}</li>
+                <li>{t('place.highlight.parking')}</li>
+                <li>{t('place.highlight.food')}</li>
               </ul>
             </div>
 
@@ -823,10 +838,10 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
       {galleryOpen.open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={closeGallery}>
           <div style={{ width: '90%', maxWidth: 1100, height: '80%', position: 'relative' }} className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <Image src={place.gallery_urls?.[galleryOpen.index] || place.image_url || ''} alt="Galería" fill style={{ objectFit: 'contain' }} />
+            <Image src={place.gallery_urls?.[galleryOpen.index] || place.image_url || ''} alt={t('place.gallery')} fill style={{ objectFit: 'contain' }} />
             <button onClick={() => setGalleryOpen(g => ({ ...g, index: Math.max(0, g.index - 1) }))} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.9)', border: 'none', padding: 10, borderRadius: 999 }}>&lt;</button>
             <button onClick={() => setGalleryOpen(g => ({ ...g, index: Math.min((place.gallery_urls?.length || 1) - 1, g.index + 1) }))} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.9)', border: 'none', padding: 10, borderRadius: 999 }}>&gt;</button>
-            <button onClick={closeGallery} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
+            <button onClick={closeGallery} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>{t('ar.close')}</button>
           </div>
         </div>
       )}
@@ -841,12 +856,12 @@ export default function PlaceDetailClient({ place, promotions = [] }: { place: P
                 style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
-                title="Video"
+                title={t('place.video')}
               />
             ) : (
               <video src={videoOpen.src} controls style={{ width: '100%', height: '100%', background: '#000' }} />
             )}
-            <button ref={videoModalCloseRef} aria-label="Cerrar video" onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>Cerrar</button>
+            <button ref={videoModalCloseRef} aria-label={t('place.closeVideo')} onClick={closeVideo} style={{ position: 'absolute', right: 10, top: 10, background: 'rgba(255,255,255,0.9)', border: 'none', padding: 8, borderRadius: 8 }}>{t('ar.close')}</button>
           </div>
         </div>
       )}

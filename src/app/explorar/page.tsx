@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
+import { useI18n } from '@/i18n/LanguageProvider';
 import GalleryModal from '@/components/GalleryModal';
 import Header from '@/components/Header';
 import UserReviewModal from '@/components/UserReviewModal';
@@ -22,6 +23,9 @@ type PlaceType = {
     id: string;
     name: string;
     description: string;
+    description_en?: string;
+    description_pt?: string;
+    description_fr?: string;
     image_url?: string;
     category?: string;
     lat: number;
@@ -35,6 +39,7 @@ type PlaceType = {
 
 
 export default function ExplorePage() {
+    const { t, locale } = useI18n();
     const [attractions, setAttractions] = useState<PlaceType[]>([]);
     const [businesses, setBusinesses] = useState<PlaceType[]>([]);
     const [loading, setLoading] = useState(true);
@@ -48,11 +53,12 @@ export default function ExplorePage() {
     const [categories, setCategories] = useState<CategoryItem[]>([]);
     const router = useRouter();
 
+    // initial load and refetch whenever locale changes – this ensures freshly‑added translations show up
     useEffect(() => {
         fetchData();
         fetchCategories();
         testCategoriesQuery();
-    }, []);
+    }, [locale]);
 
     useEffect(() => {
         console.log('🔄 Categories state changed:', categories.length, 'categories');
@@ -90,8 +96,8 @@ export default function ExplorePage() {
         setLoading(true);
         try {
             const [attrsRes, bizRes] = await Promise.all([
-                supabase.from('attractions').select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls'),
-                supabase.from('business_profiles').select('id,name,description,website_url,contact_info,category,payment_status,gallery_images,lat,lng,is_active,phone,address')
+                supabase.from('attractions').select('id,name,description,description_en,description_pt,description_fr,image_url,category,lat,lng,info_extra,gallery_urls'),
+                supabase.from('business_profiles').select('id,name,description,description_en,description_pt,description_fr,website_url,contact_info,category,payment_status,gallery_images,lat,lng,is_active,phone,address')
             ]);
 
             if (attrsRes.error) console.warn('Attractions fetch error', attrsRes.error);
@@ -105,6 +111,7 @@ export default function ExplorePage() {
             const attrs = attrsRes.data;
             const biz = bizRes.data;
 
+            // keep translations in the object for later selection
             setAttractions(attrs || []);
             setBusinesses((biz || []).map(b => ({ 
                 ...b, 
@@ -116,6 +123,13 @@ export default function ExplorePage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const getTranslatedDesc = (place: PlaceType) => {
+        if (locale === 'en' && place.description_en) return place.description_en;
+        if (locale === 'pt' && place.description_pt) return place.description_pt;
+        if (locale === 'fr' && place.description_fr) return place.description_fr;
+        return place.description || '';
     };
 
     const fetchCategories = async () => {
@@ -206,8 +220,8 @@ export default function ExplorePage() {
             <div className="p-4 flex-1 flex flex-col">
                 <h3 className="text-lg font-semibold text-white mb-2">{place.name}</h3>
                 <p className="text-white text-sm flex-1 mb-4">
-                    {place.description?.substring(0, 120)}
-                    {place.description && place.description.length > 120 ? '...' : ''}
+                    {getTranslatedDesc(place).substring(0, 120)}
+                    {getTranslatedDesc(place).length > 120 ? '...' : ''}
                 </p>
                 <div className="mt-auto flex gap-2 flex-wrap">
                     <button
@@ -217,7 +231,7 @@ export default function ExplorePage() {
                             router.push(`/explorar/${place.id}`);
                         }}
                     >
-                        Ver detalles
+                        {t('explore.button.details')}
                     </button>
                     {place.gallery_urls && place.gallery_urls.length > 0 && (
                         <button
@@ -248,7 +262,7 @@ export default function ExplorePage() {
 
                 {/* Page title */}
                 <h1 className="text-4xl font-bold text-center text-[#1A3A6C] mb-6">
-                    Explorar Santiago
+                    {t('explore.pageTitle')}
                 </h1>
 
                 {/* Search Header (mismo diseño que PlaceDetailClient) */}
@@ -260,7 +274,7 @@ export default function ExplorePage() {
                         </div>
                         <input
                             className="block w-full pl-10 pr-3 py-3 border-none rounded-lg focus:ring-0 text-gray-700 text-lg placeholder-gray-600"
-                            placeholder="Buscar lugares..."
+                            placeholder={t('explore.searchPlaceholder')}
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -273,9 +287,9 @@ export default function ExplorePage() {
                             value={filter}
                             onChange={(e) => setFilter(e.target.value as 'all' | 'attractions' | 'businesses')}
                         >
-                            <option value="all">Todos los lugares</option>
-                            <option value="attractions">Atractivos turísticos</option>
-                            <option value="businesses">Negocios</option>
+                            <option value="all">{t('explore.filter.all')}</option>
+                            <option value="attractions">{t('explore.filter.attractions')}</option>
+                            <option value="businesses">{t('explore.filter.businesses')}</option>
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-400">
                             <i className="fas fa-chevron-down text-xs" />
@@ -288,7 +302,7 @@ export default function ExplorePage() {
                             value={selectedCategory}
                             onChange={(e) => setSelectedCategory(e.target.value)}
                         >
-                            <option value="all">Todas las categorías</option>
+                            <option value="all">{t('explore.category.all')}</option>
                             {availableCategories.map(cat => (
                                 <option key={`${cat.name}-${cat.type}`} value={cat.name}>{cat.name}</option>
                             ))}

@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         const { getAppSettings } = await import('@/lib/getSettings');
         const settings = await getAppSettings();
         const ttsProvider = provider || settings?.tts_provider || 'openai';
-        const ttsEngine = voice || settings?.tts_engine || 'alloy';
+        let ttsEngine = voice || settings?.tts_engine || 'alloy';
 
         console.log('TTS config:', { ttsProvider, ttsEngine });
 
@@ -35,8 +35,8 @@ export async function POST(req: Request) {
                 return NextResponse.json({ error: 'Google TTS API key is missing', fallback: true }, { status: 401 });
             }
 
-            // Use provided language code or extract from voice name
-            let finalLanguageCode = languageCode; // Use if provided from client
+            // determine language code
+            let finalLanguageCode = languageCode;
             if (!finalLanguageCode && ttsEngine) {
                 if (ttsEngine.includes('es-US')) finalLanguageCode = 'es-US';
                 else if (ttsEngine.includes('es-MX')) finalLanguageCode = 'es-MX';
@@ -47,23 +47,27 @@ export async function POST(req: Request) {
                 else if (ttsEngine.includes('es-VE')) finalLanguageCode = 'es-VE';
                 else if (ttsEngine.includes('es-EC')) finalLanguageCode = 'es-EC';
                 else {
-                    // For voices that contain country codes, extract the pattern
-                    const match = ttsEngine.match(/es-([A-Z]{2})/i);
+                    const match = ttsEngine.match(/([a-z]{2}-[A-Z]{2})/i);
                     if (match) {
-                        finalLanguageCode = `es-${match[1].toUpperCase()}`;
+                        finalLanguageCode = match[1];
                     } else {
-                        finalLanguageCode = 'es-419'; // fallback
+                        finalLanguageCode = 'es-419';
                     }
                 }
             }
             if (!finalLanguageCode) finalLanguageCode = 'es-419';
 
+            // if a voice is specified but its language doesn't match the code, drop it
+            if (ttsEngine && finalLanguageCode && !ttsEngine.toLowerCase().startsWith(finalLanguageCode.slice(0,2).toLowerCase())) {
+                console.log('Voice', ttsEngine, 'does not match language code', finalLanguageCode, 'dropping voice so Google can pick default');
+                ttsEngine = '';
+            }
+
             console.log('Using language code:', finalLanguageCode, 'for voice:', ttsEngine);
 
-            const requestBody = {
+            const requestBody: any = {
                 input: { text },
                 voice: {
-                    name: ttsEngine,
                     languageCode: finalLanguageCode
                 },
                 audioConfig: {
@@ -71,16 +75,16 @@ export async function POST(req: Request) {
                     sampleRateHertz: 24000
                 }
             };
+            if (ttsEngine) requestBody.voice.name = ttsEngine;
 
-            const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`, {
+            // actually call Google TTS API
+            const apiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`;
+            console.log('Google TTS request to', apiUrl, 'body', requestBody);
+            const response = await fetch(apiUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
-
-            console.log('Google TTS response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -112,6 +116,14 @@ export async function POST(req: Request) {
         }
 
         if (ttsProvider === 'openai') {
+            // if user requested a language other than Spanish we can't guarantee the
+            // Spanish-only voices will speak it correctly, so let the client fallback
+            // to browser/Google TTS which handles multiple languages.
+            if (languageCode && !languageCode.startsWith('es')) {
+                console.log('OpenAI provider: non-Spanish language requested, advising browser fallback');
+                return NextResponse.json({ fallback: true, message: 'Use browser TTS for language ' + languageCode }, { status: 200 });
+            }
+
             const openai = (await import('@/lib/openai')).default;
             if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "key_not_set") {
                 return NextResponse.json({ error: 'OpenAI API key is missing', fallback: true }, { status: 401 });
@@ -143,6 +155,8 @@ export async function POST(req: Request) {
             if (apiError.status === 429) return NextResponse.json({ error: 'Quota exceeded', fallback: true }, { status: 429 });
             if (apiError.status === 401) return NextResponse.json({ error: 'Auth failed', fallback: true }, { status: 401 });
         }
-        return NextResponse.json({ error: 'Internal Server Error', fallback: true }, { status: 500 });
+        // include actual message for debugging
+        const message = apiError && apiError.message ? String(apiError.message) : 'Internal Server Error';
+        return NextResponse.json({ error: message, fallback: true }, { status: 500 });
     }
 }

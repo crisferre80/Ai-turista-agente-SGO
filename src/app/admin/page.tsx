@@ -30,6 +30,9 @@ interface PlaceRecord {
     id?: string;
     name: string;
     description?: string;
+    description_en?: string;
+    description_pt?: string;
+    description_fr?: string;
     lat: number;
     lng: number;
     image_url?: string;
@@ -44,6 +47,10 @@ interface BusinessRecord {
     id?: string;
     name: string;
     category: string;
+    description?: string;
+    description_en?: string;
+    description_pt?: string;
+    description_fr?: string;
     contact_info?: string;
     website_url?: string;
     image_url?: string;
@@ -102,8 +109,12 @@ export default function AdminDashboard() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const defaultAttractionCategory = getDefaultCategories('attraction')[0]?.name || 'histórico';
     const [newPlace, setNewPlace] = useState({
-        name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: defaultAttractionCategory, gallery: [] as string[], videoUrls: [''] as string[]
+        name: '', lat: -27.7834, lng: -64.2599,
+        // description fields, spanish is stored in `desc` for backwards compatibility
+        desc: '', desc_en: '', desc_pt: '', desc_fr: '',
+        img: '', info: '', category: defaultAttractionCategory, gallery: [] as string[], videoUrls: [''] as string[]
     });
+    const [placeDescLang, setPlaceDescLang] = useState<'es'|'en'|'pt'|'fr'>('es');
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
     const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
     const [editingPromotionalMessageId, setEditingPromotionalMessageId] = useState<string | null>(null);
@@ -114,7 +125,56 @@ export default function AdminDashboard() {
     const [, setGalleryLoading] = useState(false);
     const [, setGalleryError] = useState('');
     const [includeSubfolders] = useState(true);
-    const [newBusiness, setNewBusiness] = useState({ id: '', name: '', category: 'restaurante', contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599 });
+    const [newBusiness, setNewBusiness] = useState({
+        id: '', name: '', category: 'restaurante',
+        // multilingual description
+        description: '', description_en: '', description_pt: '', description_fr: '',
+        contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599
+    });
+    const [bizDescLang, setBizDescLang] = useState<'es'|'en'|'pt'|'fr'>('es');
+
+    // helpers to get/set the appropriate description field based on selected language
+    const getPlaceDesc = (lang: string) => {
+        switch (lang) {
+            case 'en': return newPlace.desc_en;
+            case 'pt': return newPlace.desc_pt;
+            case 'fr': return newPlace.desc_fr;
+            case 'es':
+            default:
+                return newPlace.desc;
+        }
+    };
+    const setPlaceDesc = (lang: string, val: string) => {
+        setNewPlace(prev => {
+            const copy = { ...prev } as any;
+            if (lang === 'en') copy.desc_en = val;
+            else if (lang === 'pt') copy.desc_pt = val;
+            else if (lang === 'fr') copy.desc_fr = val;
+            else copy.desc = val;
+            return copy;
+        });
+    };
+
+    const getBizDesc = (lang: string) => {
+        switch (lang) {
+            case 'en': return newBusiness.description_en;
+            case 'pt': return newBusiness.description_pt;
+            case 'fr': return newBusiness.description_fr;
+            case 'es':
+            default:
+                return newBusiness.description;
+        }
+    };
+    const setBizDesc = (lang: string, val: string) => {
+        setNewBusiness(prev => {
+            const copy = { ...prev } as any;
+            if (lang === 'en') copy.description_en = val;
+            else if (lang === 'pt') copy.description_pt = val;
+            else if (lang === 'fr') copy.description_fr = val;
+            else copy.description = val;
+            return copy;
+        });
+    };
 
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
@@ -212,8 +272,8 @@ export default function AdminDashboard() {
         const { error: cleanupErr } = await supabase.from('carousel_photos').delete().is('image_url', null);
         if (cleanupErr) console.warn('Admin: error cleaning null carousel rows', cleanupErr);
 
-        const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls').order('created_at', { ascending: false });
-        const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,contact_info,website_url,gallery_images,is_active,payment_status,phone,address,description,lat,lng').order('created_at', { ascending: false });
+        const { data: attData, error: attErr } = await supabase.from('attractions').select('id,name,description,description_en,description_pt,description_fr,lat,lng,image_url,info_extra,category,gallery_urls,video_urls').order('created_at', { ascending: false });
+        const { data: bizData, error: bizErr } = await supabase.from('business_profiles').select('id,name,category,description,description_en,description_pt,description_fr,contact_info,website_url,gallery_images,is_active,payment_status,phone,address,lat,lng').order('created_at', { ascending: false });
         const { data: vidData, error: vidErr } = await supabase.from('app_videos').select('id,title,video_url,created_at').order('created_at', { ascending: false });
         let carouselData;
         const { data, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
@@ -855,6 +915,9 @@ export default function AdminDashboard() {
             const placeData = {
                 name: newPlace.name,
                 description: newPlace.desc,
+                description_en: newPlace.desc_en,
+                description_pt: newPlace.desc_pt,
+                description_fr: newPlace.desc_fr,
                 lat: newPlace.lat,
                 lng: newPlace.lng,
                 image_url: finalImgUrl,
@@ -894,10 +957,15 @@ export default function AdminDashboard() {
     };
 
     const resetPlaceForm = () => {
-        setNewPlace({ name: '', lat: -27.7834, lng: -64.2599, desc: '', img: '', info: '', category: defaultAttractionCategory, gallery: [], videoUrls: [''] });
+        setNewPlace({
+            name: '', lat: -27.7834, lng: -64.2599,
+            desc: '', desc_en: '', desc_pt: '', desc_fr: '',
+            img: '', info: '', category: defaultAttractionCategory, gallery: [], videoUrls: ['']
+        });
         setEditingId(null);
         setUploadFile(null);
         setGalleryFiles([]);
+        setPlaceDescLang('es');
     };
 
     const generateDescription = async (type: 'place' | 'business') => {
@@ -928,9 +996,16 @@ export default function AdminDashboard() {
             const data = await response.json();
             
             if (type === 'place') {
-                setNewPlace({ ...newPlace, desc: data.description });
+                // write into currently selected language field
+                if (placeDescLang === 'es') setNewPlace({ ...newPlace, desc: data.description });
+                else if (placeDescLang === 'en') setNewPlace({ ...newPlace, desc_en: data.description });
+                else if (placeDescLang === 'pt') setNewPlace({ ...newPlace, desc_pt: data.description });
+                else if (placeDescLang === 'fr') setNewPlace({ ...newPlace, desc_fr: data.description });
             } else {
-                setNewBusiness({ ...newBusiness, contact: data.description });
+                if (bizDescLang === 'es') setNewBusiness({ ...newBusiness, description: data.description });
+                else if (bizDescLang === 'en') setNewBusiness({ ...newBusiness, description_en: data.description });
+                else if (bizDescLang === 'pt') setNewBusiness({ ...newBusiness, description_pt: data.description });
+                else if (bizDescLang === 'fr') setNewBusiness({ ...newBusiness, description_fr: data.description });
             }
         } catch (error) {
             console.error('Error:', error);
@@ -981,12 +1056,16 @@ export default function AdminDashboard() {
             lat: p.lat,
             lng: p.lng,
             desc: p.description || '',
+            desc_en: (p as any).description_en || '',
+            desc_pt: (p as any).description_pt || '',
+            desc_fr: (p as any).description_fr || '',
             img: p.image_url || '',
             info: p.info_extra || '',
             category: normalizeCategoryName(p.category, 'attraction') || defaultAttractionCategory,
             gallery: p.gallery_urls || [],
             videoUrls: p.video_urls && p.video_urls.length > 0 ? p.video_urls : ['']
         });
+        setPlaceDescLang('es');
         setActiveTab('lugares');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [defaultAttractionCategory]);
@@ -1002,7 +1081,7 @@ export default function AdminDashboard() {
             try {
                 const { data: placeData, error: placeErr } = await supabase
                     .from('attractions')
-                    .select('id,name,description,lat,lng,image_url,info_extra,category,gallery_urls,video_urls')
+                    .select('id,name,description,description_en,description_pt,description_fr,lat,lng,image_url,info_extra,category,gallery_urls,video_urls')
                     .eq('id', editId)
                     .single();
 
@@ -1034,6 +1113,10 @@ export default function AdminDashboard() {
             const bizData = {
                 name: newBusiness.name,
                 category: newBusiness.category,
+                description: newBusiness.description,
+                description_en: newBusiness.description_en,
+                description_pt: newBusiness.description_pt,
+                description_fr: newBusiness.description_fr,
                 contact_info: newBusiness.contact,
                 website_url: newBusiness.website,
                 image_url: finalImgUrl,
@@ -1052,7 +1135,12 @@ export default function AdminDashboard() {
 
             if (error) throw error;
             alert('¡Negocio guardado!');
-            setNewBusiness({ id: '', name: '', category: 'restaurante', contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599 });
+            setNewBusiness({
+                id: '', name: '', category: 'restaurante',
+                description: '', description_en: '', description_pt: '', description_fr: '',
+                contact: '', website: '', image_url: '', lat: -27.7834, lng: -64.2599
+            });
+            setBizDescLang('es');
             setBusinessFile(null);
             fetchData();
         } catch (e: unknown) {
@@ -1614,11 +1702,32 @@ export default function AdminDashboard() {
                                             {generatingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
                                         </button>
                                     </div>
+                                    {/* language tabs */}
+                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                                        {['es','en','pt','fr'].map(l => (
+                                            <button
+                                                key={l}
+                                                type="button"
+                                                onClick={() => setPlaceDescLang(l as any)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    background: placeDescLang === l ? '#1A3A6C' : '#ccc',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '12px'
+                                                }}
+                                            >
+                                                {l.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
                                     <textarea 
                                         style={textareaStyle} 
                                         placeholder="Descripción para Santi... o genera una con IA" 
-                                        value={newPlace.desc} 
-                                        onChange={e => setNewPlace({ ...newPlace, desc: e.target.value })} 
+                                        value={getPlaceDesc(placeDescLang)} 
+                                        onChange={e => setPlaceDesc(placeDescLang, e.target.value)} 
                                         rows={3} 
                                     />
                                 </div>
@@ -2054,7 +2163,7 @@ export default function AdminDashboard() {
                                 
                                 <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                        <label style={labelStyle}>Descripción / WhatsApp / Contacto</label>
+                                        <label style={labelStyle}>Descripción del negocio</label>
                                         <button 
                                             type="button"
                                             onClick={() => generateDescription('business')}
@@ -2076,12 +2185,34 @@ export default function AdminDashboard() {
                                             {generatingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
                                         </button>
                                     </div>
-                                    <Input 
-                                        label="" 
-                                        value={newBusiness.contact} 
-                                        onChange={v => setNewBusiness({ ...newBusiness, contact: v })} 
-                                        placeholder="Descripción del negocio o número de contacto"
+                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                                        {['es','en','pt','fr'].map(l => (
+                                            <button
+                                                key={l}
+                                                type="button"
+                                                onClick={() => setBizDescLang(l as any)}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    background: bizDescLang === l ? '#1A3A6C' : '#ccc',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '12px'
+                                                }}
+                                            >
+                                                {l.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <textarea
+                                        style={textareaStyle}
+                                        placeholder="Descripción del negocio"
+                                        value={getBizDesc(bizDescLang)}
+                                        onChange={e => setBizDesc(bizDescLang, e.target.value)}
+                                        rows={3}
                                     />
+                                    <Input label="WhatsApp / Contacto" value={newBusiness.contact} onChange={v => setNewBusiness({ ...newBusiness, contact: v })} />
                                 </div>
                                 <Input label="Web o Instagram" value={newBusiness.website} onChange={v => setNewBusiness({ ...newBusiness, website: v })} />
                                 <button type="submit" style={btnPrimary}>{newBusiness.id ? 'Guardar Cambios' : 'Registrar Negocio'}</button>

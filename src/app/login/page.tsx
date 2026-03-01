@@ -1,13 +1,18 @@
 "use client";
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getUserSafe } from '@/lib/supabaseAuth';
+import type { AuthError } from '@supabase/supabase-js';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isAdminMode, setIsAdminMode] = useState(false);
+    const { t } = useI18n();
     const [isTourist, setIsTourist] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -26,7 +31,7 @@ export default function LoginPage() {
             if (isAdminMode) {
                 // Admin: Autenticación real con Supabase
                 if (!email || !password) {
-                    setError('Por favor completa email y contraseña de admin');
+                    setError(t('error.admin_fill'));
                     setLoading(false);
                     return;
                 }
@@ -38,7 +43,7 @@ export default function LoginPage() {
 
                 if (authError) {
                     console.error('Admin login error:', authError);
-                    setError('Credenciales de admin incorrectas. Verifica email y contraseña.');
+                    setError(t('error.admin_invalid'));
                     setLoading(false);
                     return;
                 }
@@ -52,7 +57,7 @@ export default function LoginPage() {
 
                 if (profileError || profileData?.role !== 'admin') {
                     await supabase.auth.signOut();
-                    setError('Esta cuenta no tiene permisos de administrador.');
+                    setError(t('error.admin_no_permission'));
                     setLoading(false);
                     return;
                 }
@@ -63,7 +68,7 @@ export default function LoginPage() {
             } else if (isTourist) {
                 // Tourist: usar email/password tradicional
                 if (!email || !password) {
-                    setError('Por favor completa email y contraseña');
+                    setError(t('error.fill_email_password'));
                     setLoading(false);
                     return;
                 }
@@ -117,7 +122,7 @@ export default function LoginPage() {
                         }
                     }
 
-                    setSuccess('🎉 ¡Cuenta creada! Revisá tu email para confirmar tu cuenta.');
+                    setSuccess(t('success.account_created'));
                     setTimeout(() => {
                         setIsRegistering(false);
                         setEmail('');
@@ -132,7 +137,7 @@ export default function LoginPage() {
 
                     if (authError) {
                         console.error('Tourist login error:', authError);
-                        setError('Email o contraseña incorrectos. ¿No tenés cuenta? Registrate primero.');
+                        setError(t('error.invalid_credentials'));
                         setLoading(false);
                         return;
                     }
@@ -154,13 +159,13 @@ export default function LoginPage() {
                         });
                     }
 
-                    setSuccess('✅ ¡Sesión iniciada! Redirigiendo...');
+                    setSuccess(t('success.logged_in'));
                     setTimeout(() => router.push('/explorar'), 1000);
                 }
             } else {
                 if (isRegistering) {
                     // Sign Up Business
-                    const { data, error: authError } = await supabase.auth.signUp({
+                    const { error: authError } = await supabase.auth.signUp({
                         email,
                         password,
                         options: {
@@ -170,7 +175,7 @@ export default function LoginPage() {
                         }
                     });
                     if (authError) throw authError;
-                    setSuccess('¡Registro exitoso! Revisa tu email para confirmar la cuenta.');
+                    setSuccess(t('success.signup_business'));
 
                     // Trigger welcome email (server-side) with basic personalization
                     try {
@@ -188,26 +193,26 @@ export default function LoginPage() {
                     const authError = resp.error;
                     if (authError) {
                         console.warn('signInWithPassword error', authError);
-                        const status = (authError as any)?.status;
-                        const msg = (authError as any)?.message || String(authError);
+                        const status = (authError as AuthError).status;
+                        const msg = (authError as AuthError).message || String(authError);
                         if (status === 429) {
-                            setError('Demasiados intentos. Espera un momento e intenta nuevamente.');
+                            setError(t('error.too_many_attempts'));
                         } else if (/confirm|verify|pending/i.test(msg)) {
-                            setError('Tu cuenta no está confirmada. Revisa tu email para confirmar la cuenta.');
+                            setError(t('error.account_not_confirmed'));
                         } else if (/invalid|credentials|user not found/i.test(msg)) {
-                            setError('Credenciales inválidas. Verifica email y contraseña.');
+                            setError(t('error.invalid_credentials2'));
                         } else {
-                            setError('Error al iniciar sesión: ' + msg);
+                            setError(t('error.login_failed', { msg }));
                         }
                         setLoading(false);
                         return;
                     }
 
                     // Determine role: check `businesses` table (businesses have their own table), then `profiles`, then metadata.
-                    const userId = (await supabase.auth.getUser()).data.user?.id;
+                    const userId = (await getUserSafe()).data.user?.id;
 
                     if (!userId) {
-                        setError('No se pudo obtener el id de usuario. Intenta recargar la página.');
+                        setError(t('error.no_user_id'));
                         setLoading(false);
                         return;
                     }
@@ -222,7 +227,7 @@ export default function LoginPage() {
                     if (businessError) {
                         console.warn('Error al buscar business:', businessError);
                         // Show a user-friendly hint but fall back to profile metadata
-                        setError('Hubo un problema verificando tu cuenta de negocio. Intenta de nuevo o contacta soporte.');
+                        setError(t('error.business_lookup'));
                     }
 
                     console.debug('Login check:', { userId, businessRow, businessError });
@@ -242,7 +247,7 @@ export default function LoginPage() {
                     if (profileError) console.warn('Error al buscar profile:', profileError);
 
                     const roleFromProfile = profileRow?.role;
-                    const authUser = (await supabase.auth.getUser()).data.user;
+                    const authUser = (await getUserSafe()).data.user;
                     const roleFromMetadata = authUser?.user_metadata?.role;
                     const role = roleFromProfile || roleFromMetadata || 'user';
 
@@ -256,15 +261,15 @@ export default function LoginPage() {
                     }
                 }
             }
-        } catch (err: any) {
-            const msg = err?.message || String(err);
-            const status = err?.status;
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const status = (err as { status?: number }).status;
             if (status === 429) {
-                setError('Hay muchos intentos. Espera un momento e intenta nuevamente.');
+                setError(t('error.generic_many_attempts'));
             } else if (/confirm|verify|pending/i.test(msg)) {
-                setError('Tu cuenta no está confirmada. Revisa tu email para confirmar la cuenta.');
+                setError(t('error.account_not_confirmed'));
             } else {
-                setError('Error: ' + msg);
+                setError(t('error.error_msg', { msg }));
             }
         } finally {
             setLoading(false);
@@ -295,11 +300,12 @@ export default function LoginPage() {
                 textAlign: 'center',
                 border: `2px solid ${COLOR_GOLD}33`
             }}>
-                <img
+                <Image
                     src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
                     alt="Santi"
+                    width={100}
+                    height={100}
                     style={{ 
-                        width: '100px', 
                         marginBottom: '20px',
                         filter: 'drop-shadow(0 8px 20px rgba(241,196,15,0.4))'
                     }}
@@ -310,13 +316,13 @@ export default function LoginPage() {
                     marginBottom: '8px',
                     fontWeight: '950',
                     letterSpacing: '-0.5px'
-                }}>Panel de Control</h1>
+                }}>{t('login.panelTitle')}</h1>
                 <p style={{ 
                     color: '#64748b', 
                     marginBottom: '35px', 
                     fontSize: '15px',
                     fontWeight: '500'
-                }}>Gestión de Atractivos y Negocios</p>
+                }}>{t('login.panelSubtitle')}</p>
 
                 <div style={{ 
                     display: 'flex', 
@@ -343,7 +349,7 @@ export default function LoginPage() {
                             boxShadow: (!isAdminMode && !isTourist) ? `0 8px 20px ${COLOR_BLUE}44` : 'none'
                         }}
                     >
-                        Negocio
+                        {t('login.tabBusiness')}
                     </button>
                     <button
                         onClick={() => { setIsAdminMode(false); setIsRegistering(false); setIsTourist(true); }}
@@ -361,7 +367,7 @@ export default function LoginPage() {
                             boxShadow: isTourist ? `0 8px 20px #20B2AA44` : 'none'
                         }}
                     >
-                        Turista
+                        {t('login.tabTourist')}
                     </button>
                 </div>
 
@@ -369,7 +375,7 @@ export default function LoginPage() {
                     {isAdminMode && (
                         <input
                             type="email"
-                            placeholder="Email de administrador"
+                            placeholder={t('login.emailAdminPlaceholder')}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             style={inputStyle}
@@ -380,7 +386,7 @@ export default function LoginPage() {
                     {!isAdminMode && !isTourist && (
                         <input
                             type="email"
-                            placeholder="Email del negocio"
+                            placeholder={t('login.emailBusinessPlaceholder')}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             style={inputStyle}
@@ -392,7 +398,7 @@ export default function LoginPage() {
                   <>
                     <input
                       type="email"
-                      placeholder="Tu email"
+                      placeholder={t('login.emailTouristPlaceholder')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       style={inputStyle}
@@ -400,7 +406,7 @@ export default function LoginPage() {
                     />
                     <input
                       type="password"
-                      placeholder="Tu contraseña"
+                      placeholder={t('login.password')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       style={inputStyle}
@@ -429,7 +435,7 @@ export default function LoginPage() {
                 {!isTourist && (
                   <input
                     type="password"
-                    placeholder={isAdminMode ? "Contraseña de admin" : "Contraseña"}
+                    placeholder={isAdminMode ? t('login.adminPassword') : t('login.password')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     style={inputStyle}

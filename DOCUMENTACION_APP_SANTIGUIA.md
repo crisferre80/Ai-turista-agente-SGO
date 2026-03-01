@@ -484,7 +484,10 @@
 ## 🌍 Idiomas
 
 - Español (principal)
-- Preparado para multiidioma (i18n)
+- Soporta inglés, portugués y francés además de español.
+- La aplicación detecta automáticamente el idioma del navegador o cabecera `Accept-Language` en el primer acceso.
+- Hay un selector en la cabecera que permite forzar manualmente un idioma o volver al modo **Automático**.
+- Las traducciones se gestionan en `src/i18n/translations.ts` y se pueden ampliar con nuevos textos y lenguajes.
 
 ---
 

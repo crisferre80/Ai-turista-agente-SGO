@@ -1,10 +1,12 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import { useI18n } from '@/i18n/LanguageProvider';
 import Map from '@/components/Map';
 import ChatInterface from '@/components/ChatInterface';
 import Header from '@/components/Header';
 import IntroOverlay from '@/components/IntroOverlay';
 import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabaseAuth';
 import { santiSpeak, santiNarrate, stopSantiNarration } from '@/lib/speech';
 import { LocationStorage } from '@/lib/location-storage';
 import Image from 'next/image';
@@ -43,6 +45,7 @@ interface Video {
 }
 
 const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onClick: () => void }) => {
+    const { t } = useI18n();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -174,7 +177,9 @@ const QuickActionBtn = ({ icon, label, onClick }: { icon: string; label: string;
   </>
 );
 
-const FeaturedCard = ({ title, img }: { title: string; img?: string }) => (
+const FeaturedCard = ({ title, img }: { title: string; img?: string }) => {
+  const { t } = useI18n();
+  return (
   <div className="featured-card" style={{
     position: 'relative',
     borderRadius: 24,
@@ -200,20 +205,34 @@ const FeaturedCard = ({ title, img }: { title: string; img?: string }) => (
     <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <h4 style={{ margin: 0, color: '#eef2ff', textShadow: '0 2px 10px rgba(0,0,0,0.6)', fontWeight: 900, letterSpacing: 0.3 }}>{title}</h4>
-        <Link href="/explorar" style={{ background: COLOR_GOLD, color: '#0e1f1d', borderRadius: 999, padding: '8px 14px', fontWeight: 800, textDecoration: 'none', boxShadow: `0 10px 25px ${COLOR_GOLD}44` }}>Explorar</Link>
+        <Link href="/explorar" style={{ background: COLOR_GOLD, color: '#0e1f1d', borderRadius: 999, padding: '8px 14px', fontWeight: 800, textDecoration: 'none', boxShadow: `0 10px 25px ${COLOR_GOLD}44` }}>{t('explore')}</Link>
       </div>
     </div>
     <div className="featured-card__glow" style={{ position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none' }} />
   </div>
 );
+};
 
 export default function Home() {
+    const { t, locale } = useI18n();
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [filters, setFilters] = useState({ atracciones: true, alojamientos: true, gastronomia: true, cultura: true });
   const [narration] = useState<string | undefined>(undefined);
   const [activeStory, setActiveStory] = useState<{ url: string; name: string } | undefined>(undefined);
+
+  // helper to return the appropriate description based on current locale
+  const getLocaleDesc = (obj: any) => {
+    if (!obj) return '';
+    if (locale === 'en' && obj.description_en) return obj.description_en;
+    if (locale === 'pt' && obj.description_pt) return obj.description_pt;
+    if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+    // fall back to whatever description or business info we stored during fetch
+    return obj.description || obj.contact_info || obj.category || '';
+  };
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [activePlace, setActivePlace] = useState<Attraction | null>(null);
   const [zoomImage, setZoomImage] = useState<string | undefined>(undefined);
   const [showIntro, setShowIntro] = useState(false);
@@ -249,21 +268,26 @@ export default function Home() {
     return null;
   };
 
+  // Efecto 1: Carga inicial de datos (solo al montar)
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo ejecutar al montar, no volver a ejecutar
 
-    // ajustar duración automáticamente según cantidad de fotos (si no se ha configurado manualmente)
+  // Efecto 2: Ajuste automático de duración del carrusel
+  useEffect(() => {
     const basePerImage = 3;
-    const calcDuration = () => {
-      if (carouselPhotos.length > 0) {
-        const auto = carouselPhotos.length * basePerImage;
-        if (Math.abs(auto - carouselDuration) > 1) {
-          setCarouselDuration(auto);
-        }
+    if (carouselPhotos.length > 0) {
+      const auto = carouselPhotos.length * basePerImage;
+      // Solo actualizar si la diferencia es significativa para evitar loops
+      if (Math.abs(auto - carouselDuration) > 1) {
+        setCarouselDuration(auto);
       }
-    };
-    calcDuration();
+    }
+  }, [carouselPhotos.length]); // Solo cuando cambie el número de fotos
 
+  // Efecto 3: Configuración inicial - ubicación, intro, y autenticación
+  useEffect(() => {
     // Recuperar ubicación guardada
     loadUserLocation();
 
@@ -285,34 +309,42 @@ export default function Home() {
 
     // Manejar autenticación de turistas que llegan desde magic link
     const checkAuthState = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        const userId = session.user.id;
+      try {
+        const { data: { session } } = await getSessionSafe();
         
-        // Verificar si tiene perfil
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, role')
-          .eq('id', userId)
-          .maybeSingle();
-
-        // Si no tiene perfil, crearlo como turista
-        if (!profile) {
-          console.log('📝 Creando perfil de turista desde página principal...');
-          await supabase.from('profiles').insert({
-            id: userId,
-            name: session.user.email?.split('@')[0] || 'Turista',
-            role: 'tourist',
-            avatar_url: null
-          });
+        if (session?.user) {
+          const userId = session.user.id;
+          
+          // Verificar si tiene perfil
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          // Si no tiene perfil, crearlo como turista
+          if (!profile) {
+            console.log('📝 Creando perfil de turista desde página principal...');
+            await supabase.from('profiles').insert({
+              id: userId,
+              name: session.user.email?.split('@')[0] || 'Turista',
+              role: 'tourist',
+              avatar_url: null
+            });
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          console.warn('checkAuthState aborted');
+        } else {
+          console.error('checkAuthState error', err);
         }
       }
     };
 
     checkAuthState();
-  }, []);
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo ejecutar al montar
   // update CSS shift variable any time the set of photos changes
   useEffect(() => {
     if (trackRef.current && carouselPhotos.length > 0) {
@@ -332,12 +364,22 @@ export default function Home() {
 
   const fetchData = async () => {
     setLoading(true);
+    const warnIfNotAbort = (label: string, err: any) => {
+      if (!err) return;
+      const msg = err.message || String(err);
+      if (msg.toLowerCase().includes('aborterror')) {
+        console.debug(`${label} aborted, ignoring`);
+      } else {
+        console.warn(`${label}`, err);
+      }
+    };
+
     try {
       const { data: attrs, error: attrsErr } = await supabase.from('attractions').select('*');
-      if (attrsErr) console.warn('Attractions fetch error', attrsErr);
+      warnIfNotAbort('Attractions fetch error', attrsErr);
 
       const { data: vids, error: vidsErr } = await supabase.from('app_videos').select('*');
-      if (vidsErr) console.warn('Videos fetch error', vidsErr);
+      warnIfNotAbort('Videos fetch error', vidsErr);
 
       // Fetch businesses with all columns including coordinates
       const { data: biz, error: bizErr } = await supabase
@@ -348,24 +390,32 @@ export default function Home() {
         .not('lng', 'is', null);
       
       if (bizErr) {
-        console.warn('Businesses fetch error', bizErr);
+        warnIfNotAbort('Businesses fetch error', bizErr);
       } else {
         console.log(`✅ Loaded ${biz?.length || 0} active businesses with coordinates`);
       }
 
       const { data: carousel, error: carouselErr } = await supabase.from('carousel_photos').select('image_url').eq('is_active', true).order('order_position');
       const { data: cfg, error: cfgErr } = await supabase.from('carousel_settings').select('animation_duration').eq('key','global').maybeSingle();
-      if (carouselErr) console.warn('Carousel fetch error', carouselErr);
-      if (cfgErr) console.warn('Carousel settings fetch error', cfgErr);
+      warnIfNotAbort('Carousel fetch error', carouselErr);
+      warnIfNotAbort('Carousel settings fetch error', cfgErr);
       if (cfg && cfg.animation_duration != null) {
         setCarouselDuration(parseFloat(cfg.animation_duration));
       }
+
+      // helper for picking right description based on current locale
+      const localDesc = (obj: any) => {
+        if (locale === 'en' && obj.description_en) return obj.description_en;
+        if (locale === 'pt' && obj.description_pt) return obj.description_pt;
+        if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+        return obj.description || '';
+      };
 
       const mappedBiz = (biz || []).map(b => ({
         ...b,
         isBusiness: true,
         image: b.gallery_images && b.gallery_images.length > 0 ? b.gallery_images[0] : null,
-        description: b.description || b.contact_info || b.category || 'Negocio registrado',
+        description: localDesc(b) || b.contact_info || b.category || 'Negocio registrado',
         info_extra: b.phone || b.address || b.website_url,
         coords: [b.lng, b.lat]
       }));
@@ -374,6 +424,7 @@ export default function Home() {
         ...a,
         isBusiness: false,
         image: a.image_url,
+        description: localDesc(a),
         info: a.info_extra,
         coords: [a.lng, a.lat]
       }));
@@ -381,6 +432,8 @@ export default function Home() {
       const allPlaces = [...mappedAttrs, ...mappedBiz];
       setAttractions(allPlaces);
       setVideos(vids || []);
+      // only consider dataset loaded if there is at least one place
+      setDataLoaded(Array.isArray(allPlaces) && allPlaces.length > 0);
       
       // Set carousel photos, fallback to static if empty
       const carouselUrls = carousel && carousel.length > 0 
@@ -761,14 +814,12 @@ export default function Home() {
           border: `2px solid ${COLOR_WHITE}22`,
           marginBottom: '40px'
         }}>
-          {loading ? (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: 'white' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div className="spinner" style={{ border: `4px solid ${COLOR_BLUE}22`, borderTop: `4px solid ${COLOR_GOLD}`, borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 15px' }}></div>
-                <p style={{ fontWeight: 'bold', fontSize: '1.2rem', color: COLOR_GOLD }}>Santi está desplegando el mapa...</p>
-              </div>
-            </div>
-          ) : (
+          {/* always render map but overlay spinner until data + map are ready */}
+          {/* only mount the heavy Map component after we already have data; this prevents
+              the map from spinning up with an empty dataset and then flashing when it
+              receives markers a moment later. the spinner overlay remains visible until
+              both the map reports ready and we actually have places to show. */}
+          {dataLoaded && (
             <Map
               attractions={filteredAttractions}
               onNarrate={handleNarration}
@@ -780,9 +831,21 @@ export default function Home() {
                 setUserLocation(location);
                 saveUserLocation(location);
               }}
+              onReady={() => {
+                console.log('Parent: map notified ready');
+                setMapReady(true);
+              }}
             />
           )}
-          {/* Panel lateral EXPLORA mejorado */}
+
+          {(loading || !mapReady || !dataLoaded || filteredAttractions.length === 0) && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: 'white', zIndex: 2000, transition: 'opacity 0.3s ease' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div className="spinner" style={{ border: `4px solid ${COLOR_BLUE}22`, borderTop: `4px solid ${COLOR_GOLD}`, borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 15px' }}></div>
+                <p style={{ fontWeight: 'bold', fontSize: '1.2rem', color: COLOR_GOLD }}>Santi está desplegando el mapa...</p>
+              </div>
+            </div>
+          )}          {/* Panel lateral EXPLORA mejorado */}
           {!mapMenuOpen ? (
             <div
               onClick={() => setMapMenuOpen(true)}
@@ -920,7 +983,7 @@ export default function Home() {
             textAlign: 'center',
             textShadow: '0 2px 10px rgba(0,0,0,0.3)'
           }}>
-            Lugares Destacados
+            {t('home.featuredPlaces')}
           </h2>
           <div style={{ 
             display: 'grid', 
@@ -954,7 +1017,7 @@ export default function Home() {
             onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
             onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            🗺️ Explorar Lugares
+            {t('home.explorePlaces')}
           </button>
         </div>
 
@@ -1176,7 +1239,7 @@ export default function Home() {
                     {activePlace.isBusiness ? '🏢 COMERCIO CERTIFICADO' : '⭐ ATRACTIVO TURÍSTICO'}
                   </span>
                 </div>
-                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{activePlace.description}</p>
+                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{getLocaleDesc(activePlace)}</p>
 
                 {activePlace.info && (
                   <div style={{ marginTop: '25px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '20px', borderLeft: `6px solid ${COLOR_GOLD}` }}>

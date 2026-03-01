@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getSessionSafe } from '@/lib/supabaseAuth';
 import { sendWelcomeEmail } from '@/lib/email-notifications';
 
 export default function AuthCallback() {
@@ -11,7 +12,7 @@ export default function AuthCallback() {
         const handleAuthCallback = async () => {
             try {
                 // Obtener la sesión del hash/query params del magic link
-                const { data: { session }, error } = await supabase.auth.getSession();
+                const { data: { session }, error } = await getSessionSafe();
 
                 if (error) {
                     console.error('Error en auth callback:', error);

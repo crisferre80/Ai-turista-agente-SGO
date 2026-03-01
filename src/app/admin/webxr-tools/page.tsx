@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getSessionSafe, getUserSafe } from '@/lib/supabaseAuth';
 import dynamic from 'next/dynamic';
 import { 
   Camera, QrCode, Anchor, Lightbulb, Layers, Video, 
@@ -65,7 +66,7 @@ export default function WebXRToolsPage() {
     
     try {
       // Verificar configuración de Supabase
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await getSessionSafe();
       console.log('📋 Sesión actual:', session ? 'Autenticado' : 'No autenticado');
       
       const { data, error } = await supabase
@@ -115,7 +116,7 @@ export default function WebXRToolsPage() {
   // Verificar autenticación
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getUserSafe();
       const legacyAuth = localStorage.getItem('adminToken');
 
       if (!user && legacyAuth !== 'granted') {

@@ -26,3 +26,35 @@ if (typeof window !== 'undefined' && !isSupabaseConfigured()) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// global safeguard: network errors when contacting auth endpoint often manifest
+// as "TypeError: Failed to fetch" and currently bubble out of every call site.
+// patch the auth client methods to catch those and return null user/session.
+if (supabase && supabase.auth) {
+  const auth = supabase.auth as any;
+  const wrap = (orig: Function) => {
+    return async function(...args: any[]) {
+      try {
+        return await orig.apply(this, args);
+      } catch (err: any) {
+        if (err instanceof TypeError && /failed to fetch/i.test(err.message)) {
+          console.warn('Supabase auth network error (swallowed):', err.message);
+          // return shape matching the real SDK so callers continue gracefully
+          if (orig.name.includes('getUser')) {
+            return { data: { user: null }, error: err };
+          }
+          if (orig.name.includes('getSession')) {
+            return { data: { session: null }, error: err };
+          }
+        }
+        throw err;
+      }
+    };
+  };
+
+  try {
+    auth.getUser = wrap(auth.getUser);
+    auth.getSession = wrap(auth.getSession);
+  } catch {}
+}
+

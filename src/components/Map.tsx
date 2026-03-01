@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import StoryRecorder from './StoryRecorder';
 import { supabase } from '@/lib/supabase';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 declare global {
     interface Window {
@@ -42,10 +43,59 @@ interface MapProps {
     onPlaceFocus?: (place: Attraction) => void;
     onLocationChange?: (coords: [number, number]) => void;
     userLocation?: { latitude: number; longitude: number } | null;
+    // notify parent when mapbox map has finished loading
+    onReady?: () => void;
 }
 
-const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange, userLocation: parentUserLocation }: MapProps) => {
+const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocationChange, userLocation: parentUserLocation, onReady }: MapProps) => {
+    const { t, locale } = useI18n();
     const mapContainer = useRef<HTMLDivElement>(null);
+
+    // helper to pick translated description when attr objects still contain multiple languages
+    // allow explicit any here because raw data may include extra fields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const getTranslatedDesc = (obj: any) => {
+        if (locale === 'en' && obj.description_en) return obj.description_en;
+        if (locale === 'pt' && obj.description_pt) return obj.description_pt;
+        if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+        return obj.description || '';
+    };
+
+    // build the HTML string used inside popups for a given attraction;
+    // extracted so we can regenerate when locale changes without recreating markers
+    const generatePopupHTML = (attr: Attraction) => {
+        const markerColor = attr.isBusiness ? '#20B2AA' : '#D2691E';
+        const imageUrl = attr.image || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768455560/istockphoto-1063378272-612x612_vby7gq.jpg";
+
+        const placeLabel = t('place');
+        const arContentAvailable = t('ar_content_available');
+        const moreInfo = t('more_info');
+        const goText = t('go');
+        const arLabel = 'AR';
+        const arButton = attr.has_ar_content ? `<button onclick="(function(){ window.location.href='/explorar/${attr.id}?openAR=true'; })()" style="flex:1; min-width:90px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;"><span style="font-size:14px;">🥽</span> ${arLabel}</button>` : '';
+
+        const compactContent = `
+                <div style="font-family: system-ui; min-width: 200px;">
+                  <div style="display:flex; gap:10px; align-items:center;">
+                    <img src="${imageUrl}" style="width:80px; height:60px; object-fit:cover; border-radius:8px;" />
+                    <div style="flex:1;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <strong style="color: ${markerColor}; font-size: 15px;">${attr.name}</strong>
+                        <span style="font-size:11px; color:#666; background:#f0f0f0; padding:4px 8px; border-radius:8px;">${attr.category || placeLabel}</span>
+                      </div>
+                      <div style="font-size:12px; color:#666; margin-top:6px;">${(getTranslatedDesc(attr) || '').slice(0, 70)}${(getTranslatedDesc(attr) && getTranslatedDesc(attr).length > 70) ? '...' : ''}</div>
+                      ${attr.has_ar_content ? `<div style="font-size:11px; color:#667eea; margin-top:4px; font-weight:600;">✨ ${arContentAvailable}</div>` : ''}
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                    <button onclick="(function(){ window.location.href='/explorar/${attr.id}'; })()" style="flex:1; min-width:90px; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">${moreInfo}</button>
+                    <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; min-width:90px; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">${goText}</button>
+                    ${arButton}
+                  </div>
+                </div>
+            `;
+        return compactContent;
+    };
     const map = useRef<mapboxgl.Map | null>(null);
     // Refs para controlar animaciones desde funciones globales
     const isAnimatingRef = useRef(false);
@@ -77,7 +127,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const [error, setError] = useState<string | null>(null);
     const [pendingDestination, setPendingDestination] = useState<{ coords: [number, number], name: string } | null>(null);
     const [activeRoute, setActiveRoute] = useState<{ start: [number, number], end: [number, number], name: string } | null>(null);
-    const [tourEnabled, setTourEnabled] = useState(true); // Control manual del tour
+    // disable automatic animation by default to avoid map panning/zooming
+    // on load; tour can be enabled later if needed (e.g. via UI or external call)
+    const [tourEnabled, setTourEnabled] = useState(false); // Control manual del tour
     const markersRef = useRef<mapboxgl.Marker[]>([]);
 
     // Actualizar ref cuando cambia el estado
@@ -118,7 +170,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
     useEffect(() => {
         if (!MAPBOX_TOKEN) {
-            setError("Falta el token de Mapbox en .env.local");
+            setError(t('map.tokenMissing'));
             return;
         }
         if (map.current) return;
@@ -167,7 +219,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     if (typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('santi:narrate', {
                             detail: { 
-                                text: "¡Te encontré! Ahora puedo decirte exactamente cómo llegar a cualquier rincón de Santiago.", 
+                                text: t('map.geolocateGreeting'), 
                                 source: 'map-geolocate' 
                             }
                         }));
@@ -179,6 +231,11 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             m.on('load', () => {
                 map.current = m;
                 setIsMapReady(true);
+
+                // delay ready notification until map has finished rendering tiles
+                m.once('idle', () => {
+                    if (onReady) onReady();
+                });
 
                 // Intentar remover capas de círculo de precisión si existen
                 try {
@@ -341,6 +398,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 });
                 
                 // Iniciar animación automáticamente después de 2 segundos solo si está habilitado
+                // this timer will be set, but startAnimation checks tourEnabledRef so it won't
+                // actually run unless the feature has been turned on (default is false).
                 setTimeout(() => {
                     if (map.current && tourEnabledRef.current) {
                         startAnimation();
@@ -385,6 +444,9 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             console.error("Failed to initialize Mapbox:", err);
             setError("Error al inicializar el mapa.");
         }
+    // note: t is intentionally omitted here; greeting handler will always
+    // read the latest translation from the closure when geolocated.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lng, lat, zoom]);
 
     const drawRoute = useCallback(async (start: [number, number], end: [number, number], destName: string) => {
@@ -425,7 +487,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
 
             // Narrar instrucciones de ruta a través de evento - ChatInterface lo manejará
             console.log('🗺️ Map: Dispatching route narration event for', destName);
-            const routeMessage = `¡Listo! Para llegar a ${destName} recorreremos ${distance}km en ${duration} min. Ruta: ${stepNarrative}.`;
+            const routeMessage = t('map.routeReady', { destName, distance, duration, steps: stepNarrative });
             
             // Enviar evento para que ChatInterface lo narre
             if (typeof window !== 'undefined') {
@@ -476,7 +538,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('santi:narrate', {
                         detail: { 
-                            text: `También podés abrir esta ruta en Google Maps para iniciar la navegación GPS.`, 
+                            text: t('map.googleNavigation'), 
                             source: 'map-route-google',
                             force: false
                         }
@@ -490,13 +552,14 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('santi:narrate', {
                     detail: { 
-                        text: "No pude calcular la ruta. Verifica tu conexión a internet o intenta nuevamente.", 
+                        text: t('map.routeError'), 
                         source: 'map-error' 
                     }
                 }));
             }
         }
-    }, []);
+    // include translation function so narration messages stay current
+    }, [t]);
 
     // Effect to draw pending route when user location becomes available
     useEffect(() => {
@@ -667,28 +730,8 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 tooltip.style.transform = 'translateX(-50%) translateY(6px)';
             };
 
-            const arButton = attr.has_ar_content ? `<button onclick="(function(){ window.location.href='/explorar/${attr.id}?openAR=true'; })()" style="flex:1; min-width:90px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;"><span style="font-size:14px;">🥽</span> AR</button>` : '';
-
-            const compactContent = `
-                <div style="font-family: system-ui; min-width: 200px;">
-                  <div style="display:flex; gap:10px; align-items:center;">
-                    <img src="${imageUrl}" style="width:80px; height:60px; object-fit:cover; border-radius:8px;" />
-                    <div style="flex:1;">
-                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                        <strong style="color: ${markerColor}; font-size: 15px;">${attr.name}</strong>
-                        <span style="font-size:11px; color:#666; background:#f0f0f0; padding:4px 8px; border-radius:8px;">${attr.category || 'Lugar'}</span>
-                      </div>
-                      <div style="font-size:12px; color:#666; margin-top:6px;">${(attr.description || '').slice(0, 70)}${(attr.description && attr.description.length > 70) ? '...' : ''}</div>
-                      ${attr.has_ar_content ? '<div style="font-size:11px; color:#667eea; margin-top:4px; font-weight:600;">✨ Contenido AR disponible</div>' : ''}
-                    </div>
-                  </div>
-                  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-                    <button onclick="(function(){ window.location.href='/explorar/${attr.id}'; })()" style="flex:1; min-width:90px; background:#fff; color:${markerColor}; border:1px solid #eee; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Más info</button>
-                    <button onclick="window.requestRoute(${attr.coords[0]}, ${attr.coords[1]}, '${attr.name.replace(/'/g, "\\'")}')" style="flex:1; min-width:90px; background:${markerColor}; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-weight:700; cursor:pointer">Ir</button>
-                    ${arButton}
-                  </div>
-                </div>
-            `;
+            // use helper to generate popup HTML based on current locale/t
+            const compactContent = generatePopupHTML(attr);
 
             try {
                 const marker = new mapboxgl.Marker(wrapper)
@@ -700,10 +743,29 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 markersRef.current.push(marker);
             } catch { }
 
-
         });
 
+    // we avoid re-creating markers on locale change; popup update effect handles text
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [attractions, isMapReady]);
+
+    // update popup text when the language changes (or underlying data updates)
+    useEffect(() => {
+        if (!isMapReady || !map.current) return;
+        markersRef.current.forEach(marker => {
+            const wrapperEl = marker.getElement() as HTMLElement & { _attrId?: string };
+            const attrId = wrapperEl._attrId;
+            if (!attrId) return;
+            const attr = attractions.find(a => a.id === attrId);
+            if (attr) {
+                const popup = marker.getPopup();
+                if (popup) popup.setHTML(generatePopupHTML(attr));
+            }
+        });
+    // only rerun when locale or attractions themselves change; the callback function
+    // generatePopupHTML will always reflect current t/locale, so we can omit it here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [locale, t, attractions, isMapReady]);
 
     // 2. Global Listeners Effect (Depends on location/ready state, but doesn't recreate markers)
     useEffect(() => {
@@ -717,7 +779,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('santi:narrate', {
                         detail: { 
-                            text: "Necesito tu ubicación para guiarte.", 
+                            text: t('map.needsLocation'), 
                             source: 'map-location' 
                         }
                     }));
@@ -735,7 +797,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('santi:narrate', {
                         detail: { 
-                            text: `Aún no hay historias para ${name}.`, 
+                            text: t('map.noStories', { name }), 
                             source: 'map-stories' 
                         }
                     }));
@@ -771,14 +833,40 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             // Log todos los nombres disponibles
             console.log('4. Available place names:', attractions.map(a => a.name).slice(0, 10));
 
-            const found = attractions.find(a => {
-                const normalizedName = normalize(a.name);
-                const matches = normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
-                if (matches) {
-                    console.log('5. MATCH FOUND:', a.name, 'with coords:', a.coords);
+            let found = attractions.find(a => {
+                // try locale-specific field first if it exists
+                const namesToTry: string[] = [];
+                if (locale && locale !== 'es') {
+                    const key = `name_${locale}` as keyof typeof a;
+                    if (typeof a[key] === 'string' && a[key]) {
+                        namesToTry.push(String(a[key]));
+                    }
                 }
-                return matches;
+                // always include the base (Spanish) name
+                if (a.name) namesToTry.push(a.name);
+
+                for (const nm of namesToTry) {
+                    const normalizedName = normalize(nm);
+                    const matches = normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
+                    if (matches) {
+                        console.log('5. MATCH FOUND using', nm, 'original attr.name', a.name, 'coords:', a.coords);
+                        return true;
+                    }
+                }
+                return false;
             });
+            // fallback: if nothing was found and current locale isn't Spanish, try again using Spanish name explicitly
+            if (!found && locale && locale !== 'es') {
+                console.log('Map: no match in locale', locale, 'trying Spanish fallback');
+                found = attractions.find(a => {
+                    const normalizedName = normalize(a.name);
+                    const matches = normalizedPlaceName.includes(normalizedName) || normalizedName.includes(normalizedPlaceName);
+                    if (matches) {
+                        console.log('5b. SPANISH MATCH FOUND:', a.name, 'coords:', a.coords);
+                    }
+                    return matches;
+                });
+            }
 
             if (found && found.coords) {
                 console.log('6. Flying to coordinates:', found.coords);
@@ -883,7 +971,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         return () => {
             window.removeEventListener('santi:narrate', onNarration as EventListener);
         };
-    }, [isMapReady, attractions, userLocation, drawRoute]);
+    }, [isMapReady, attractions, userLocation, drawRoute, t, locale]);
 
     if (error) {
         return (

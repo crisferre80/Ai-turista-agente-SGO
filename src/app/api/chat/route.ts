@@ -1,6 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { getGeminiModel } from '@/lib/gemini';
 import { createClient } from '@supabase/supabase-js';
+
+// helper to pick localized description from DB objects
+const getLocaleDesc = (obj: any, locale: string) => {
+    if (!obj) return '';
+    if (locale === 'en' && obj.description_en) return obj.description_en;
+    if (locale === 'pt' && obj.description_pt) return obj.description_pt;
+    if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+    return obj.description || '';
+};
 
 const supabaseBase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,7 +59,8 @@ function checkRateLimit(userId: string): { allowed: boolean; remainingRequests: 
 
 export async function POST(req: Request) {
     try {
-        const { messages, userLocation } = await req.json();
+        const { messages, userLocation, locale: reqLocale } = await req.json();
+        const locale = reqLocale || 'es'; // default to spanish if missing
 
         if (!messages) {
             return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
@@ -81,7 +92,7 @@ export async function POST(req: Request) {
                         console.log('👤 Usuario autenticado:', profile.name || user.email);
                     }
                 }
-            } catch (authErr) {
+            } catch {
                 console.log('No hay usuario autenticado o token inválido');
             }
         }
@@ -615,7 +626,7 @@ export async function POST(req: Request) {
                         }
                         const modelNames = models.map(m => m.name).slice(0, 50);
                         throw new Error(`[GoogleGenerativeAI Error]: ${(err as Error).message}. Available models: ${modelNames.join(', ')}`);
-                    } catch (innerErr) {
+                    } catch {
                         throw err;
                     }
                 }
@@ -659,7 +670,7 @@ export async function POST(req: Request) {
             if (placeId && !placeDescription) {
                 const attraction = attractions?.find(a => a.id === placeId);
                 if (attraction) {
-                    placeDescription = attraction.description || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
+                    placeDescription = getLocaleDesc(attraction, locale) || `Descubre ${attraction.name}, un atractivo en la categoría ${attraction.category}.`;
                 } else {
                     const business = businesses?.find(b => b.id === placeId);
                     if (business) {
@@ -924,6 +935,7 @@ export async function POST(req: Request) {
 
         // Debug: Log final response before returning
         console.log('📤 API Response:', {
+            locale,
             replyLength: reply?.length || 0,
             replyPreview: reply?.substring(0, 100) || 'UNDEFINED',
             placeId,

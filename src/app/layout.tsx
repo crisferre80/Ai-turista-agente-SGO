@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+// mapbox GL CSS globally to prevent runtime warning
+import 'mapbox-gl/dist/mapbox-gl.css';
 import PwaInstall from '@/components/PwaInstall';
 import ThreeLoadingGuards from '@/components/ThreeLoadingGuards';
 
@@ -23,13 +25,30 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({
+import { headers } from 'next/headers';
+import { LanguageProvider } from '@/i18n/LanguageProvider';
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // detect preferred locale from Accept-Language header (server-side)
+  const hdrs = await headers();
+  // turbopack may return a plain object instead of Headers instance
+  const accept = (typeof hdrs.get === 'function'
+    ? hdrs.get('accept-language')
+    : (hdrs as Record<string,string>)['accept-language']) || '';
+  let serverLocale = 'es';
+  if (accept) {
+    const primary = accept.split(',')[0].trim().slice(0, 2);
+    if (['es', 'en', 'pt', 'fr'].includes(primary)) {
+      serverLocale = primary;
+    }
+  }
+
   return (
-    <html lang="en">
+    <html lang={serverLocale}>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#1A3A6C" />
@@ -39,9 +58,11 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <ThreeLoadingGuards />
-        {children}
-        <PwaInstall />
+        <LanguageProvider initialLocale={serverLocale}>
+          <ThreeLoadingGuards />
+          {children}
+          <PwaInstall />
+        </LanguageProvider>
       </body>
     </html>
   );

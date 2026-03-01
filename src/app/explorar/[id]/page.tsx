@@ -22,6 +22,9 @@ type Place = {
   id: string;
   name: string;
   description?: string;
+  description_en?: string;
+  description_pt?: string;
+  description_fr?: string;
   image_url?: string;
   category?: string;
   lat?: number;
@@ -45,7 +48,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   try {
     const { data: attr, error: attrErr } = await supabase
       .from('attractions')
-      .select('id,name,description,image_url,category,lat,lng,info_extra,gallery_urls,video_urls,has_ar_content,ar_model_url,ar_hotspots,qr_code')
+      .select('id,name,description,description_en,description_pt,description_fr,image_url,category,lat,lng,info_extra,gallery_urls,video_urls,has_ar_content,ar_model_url,ar_hotspots,qr_code')
       .eq('id', id)
       .maybeSingle();
     if (attrErr) console.warn('Attraction fetch error', attrErr);
@@ -54,6 +57,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         id: string | number;
         name?: string | null;
         description?: string | null;
+        description_en?: string | null;
+        description_pt?: string | null;
+        description_fr?: string | null;
         image_url?: string | null;
         category?: string | null;
         lat?: number | null;
@@ -72,6 +78,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         id: String(a.id),
         name: String(a.name || ''),
         description: a.description || '',
+        description_en: a.description_en || undefined,
+        description_pt: a.description_pt || undefined,
+        description_fr: a.description_fr || undefined,
         image_url: a.image_url || undefined,
         category: a.category || undefined,
         lat: a.lat ?? undefined,
@@ -95,7 +104,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     try {
       const { data: biz, error: bizErr } = await supabase
         .from('business_profiles')
-        .select('id,name,description,category,lat,lng,contact_info,website_url,gallery_images,is_active,payment_status,phone,address')
+        .select('id,name,description,description_en,description_pt,description_fr,category,lat,lng,contact_info,website_url,gallery_images,is_active,payment_status,phone,address')
         .eq('id', id)
         .maybeSingle();
       if (bizErr) console.warn('Business fetch error', bizErr);
@@ -116,6 +125,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           id: String(b.id),
           name: String(b.name || ''),
           description: b.description || '',
+        description_en: b.description_en || undefined,
+        description_pt: b.description_pt || undefined,
+        description_fr: b.description_fr || undefined,
           image_url: b.gallery_images && b.gallery_images.length > 0 ? b.gallery_images[0] : undefined,
           category: b.category || undefined,
           lat: b.lat ?? undefined,

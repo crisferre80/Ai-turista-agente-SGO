@@ -3,7 +3,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getSessionSafe, getUserSafe } from '@/lib/supabaseAuth';
 import { stopSantiNarration } from '@/lib/speech';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 declare global {
     interface Window {
@@ -22,14 +24,34 @@ const COLOR_RED = "#9E1B1B";
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_GOLD = "#F1C40F";
 
-const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation, onLocationUpdate }: {
+
+// lightweight representation of an attraction returned by simple name search
+interface SimpleAttraction {
+    id: string;
+    name: string;
+    description?: string;
+    image_url?: string;
+    info_extra?: string;
+    gallery_urls?: string[];
+    lat?: number;
+    lng?: number;
+    category?: string;
+}
+
+interface PromoMessage {
+    message: string;
+    image_url?: string;
+    video_url?: string;
+}
+
+const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocation }: {
     externalTrigger?: string,
     externalStory?: { url: string, name: string },
     isModalOpen?: boolean,
     userLocation?: { latitude: number; longitude: number } | null,
-    onLocationUpdate?: (location: { latitude: number; longitude: number } | null) => void
 }) => {
     const router = useRouter();
+    const { t, locale } = useI18n();
     
     // State
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
@@ -48,6 +70,20 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [promotionalMessages, setPromotionalMessages] = useState<Array<{message: string, image_url?: string, video_url?: string}>>([]); // Promotional messages from DB (with optional media)
 const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video (buscar/YouTube)
 const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
+
+  // helper for choosing right description based on locale when we query attractions
+  interface DescriptionFields {
+    description?: string;
+    description_en?: string;
+    description_pt?: string;
+    description_fr?: string;
+  }
+  const getLocaleDesc = useCallback((obj: DescriptionFields) => {
+    if (locale === 'en' && obj.description_en) return obj.description_en;
+    if (locale === 'pt' && obj.description_pt) return obj.description_pt;
+    if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+    return obj.description || '';
+  }, [locale]);
 const [showVideoList, setShowVideoList] = useState(false); // Mostrar lista de videos de YouTube
 
 // new promo media modal state
@@ -69,10 +105,22 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
     const [engagementPrompts, setEngagementPrompts] = useState<string[]>([]);
 
     useEffect(() => {
-        loadGuestPrompts();
+        // Frases para visitantes no registrados (incluyen preguntas personales)
+        const guestPrompts = [
+            t('chat.prompt.help'),
+            t('chat.prompt.whereFrom'),
+            t('chat.prompt.name'),
+            t('chat.prompt.age'),
+            t('chat.prompt.moreInfo'),
+            t('chat.prompt.historical'),
+            t('chat.prompt.santiagoMother'),
+            t('chat.prompt.food')
+        ];
+        setEngagementPrompts(guestPrompts);
+
         fetchCloudPhrases();
         fetchPromotionalMessages();
-    }, []);
+    }, [t]);
 
     // Ensure video modal focus is managed: save previous focus, focus close button on open,
     // blur any focused element inside modal before closing and restore previous focus.
@@ -108,21 +156,6 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         setShowVideoList(false);
     };
 
-    const loadGuestPrompts = () => {
-        // Frases para visitantes no registrados (incluyen preguntas personales)
-        const guestPrompts = [
-            "¿Hay algo en que pueda ayudarte?",
-            "¿De dónde nos visitas?",
-            "¿Cómo te llamas?",
-            "¿Cuál es tu edad?",
-            "Cuanto más sepa de vos, mejor podré guiarte.",
-            "¿Te gustaría conocer algún lugar histórico?",
-            "¿Sabías que Santiago es la Madre de Ciudades?",
-            "Si buscas comida rica, puedo recomendarte lugares."
-        ];
-        setEngagementPrompts(guestPrompts);
-    };
-
     const fetchCloudPhrases = async () => {
         const { data } = await supabase.from('santis_phrases').select('phrase');
         if (data && data.length > 0) {
@@ -140,8 +173,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         
         if (data && data.length > 0) {
             // supabase may return nulls
-            const messages = data.map((d: any) => ({
-                message: d.message,
+            const messages: PromoMessage[] = data.map((d: {message?: string|null,image_url?: string|null,video_url?: string|null}) => ({
+                message: d.message || '',
                 image_url: d.image_url || '',
                 video_url: d.video_url || ''
             }));
@@ -237,14 +270,24 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         console.log('ChatInterface: Making TTS request...');
         
         try {
+            // determine language code for TTS providers
+            const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+            const langCode = localeMap[locale] || 'es-AR';
             const response = await fetch('/api/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: cleanText }), // Use cleaned text for TTS
+                body: JSON.stringify({ text: cleanText, languageCode: langCode, voice: undefined, provider: undefined }), // pass language hint
             });
 
             if (response.status === 401) throw new Error("API_KEY_MISSING");
-            if (!response.ok) throw new Error("Audio generation failed");
+            if (!response.ok) {
+                // attempt to log server body for debugging
+                let bodyText;
+                try { bodyText = await response.text(); } catch { bodyText = '<unavailable>'; }
+                console.error('TTS server error body:', bodyText);
+                // include status/code in thrown message so outer catch can report it
+                throw new Error(`Audio generation failed (status ${response.status}): ${bodyText}`);
+            }
 
             // If server returned JSON (fallback instruction), parse and handle
             const contentType = response.headers.get('content-type') || '';
@@ -252,12 +295,16 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 const payload = await response.json();
                 console.log('ChatInterface: TTS endpoint returned JSON payload', payload);
                 if (payload?.fallback) {
-                    // Use browser TTS as fallback with cleaned text
+                    // Use browser TTS as fallback with cleaned text, respect locale
                     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
                         const utter = new SpeechSynthesisUtterance(cleanText); // Use cleaned text
-                        utter.lang = 'es-AR';
+                        const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+                        const langCode = localeMap[locale] || 'es-AR';
+                        utter.lang = langCode;
                         const voices = window.speechSynthesis.getVoices();
-                        utter.voice = voices.find(v => v.lang?.startsWith('es')) || null;
+                        // try to match first two letters
+                        const prefix = langCode.slice(0,2);
+                        utter.voice = voices.find(v => v.lang?.startsWith(prefix)) || null;
                         window.speechSynthesis.cancel();
                         window.speechSynthesis.speak(utter);
                         // Emit start event
@@ -357,15 +404,35 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('santi:narration:end'));
             }
-            if (typeof error === 'object' && error && (error as { message?: string }).message === "API_KEY_MISSING") {
-                alert("Santi no puede hablar porque falta la OPENAI_API_KEY");
-            } else if (typeof error === 'object' && error && (error as { message?: string }).message) {
-                console.error("TTS failed with message:", (error as { message: string }).message);
+            const errMsg = typeof error === 'object' && error && (error as { message?: string }).message ? (error as { message: string }).message : '';
+            if (errMsg === "API_KEY_MISSING") {
+                alert(t('chat.error.noApiKey'));
             } else {
-                console.error("TTS failed with unknown error:", error);
+                // if generation failed, try browser fallback automatically
+                if (errMsg === "Audio generation failed" || errMsg === "Quota exceeded") {
+                    console.log('ChatInterface: falling back to browser TTS due to error', errMsg);
+                    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        const utter = new SpeechSynthesisUtterance(cleanText);
+                        const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+                        utter.lang = localeMap[locale] || 'es-AR';
+                        const voices = window.speechSynthesis.getVoices();
+                        const prefix = utter.lang.slice(0,2);
+                        utter.voice = voices.find(v => v.lang?.startsWith(prefix)) || null;
+                        window.speechSynthesis.cancel();
+                        window.speechSynthesis.speak(utter);
+                        window.dispatchEvent(new CustomEvent('santi:narration:start', { detail: { text: cleanText } }));
+                        utter.onend = () => window.dispatchEvent(new CustomEvent('santi:narration:end'));
+                    }
+                }
+                // log generic error message
+                if (errMsg) {
+                    console.error("TTS failed with message:", errMsg);
+                } else {
+                    console.error("TTS failed with unknown error:", error);
+                }
             }
         }
-    }, [cleanTextForSpeech]);
+    }, [cleanTextForSpeech, locale, t]);
 
     const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
@@ -400,7 +467,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
 
         try {
             // Obtener token del usuario autenticado
-            const { data: { session } } = await supabase.auth.getSession();
+            // fetch session via helper that swallows AbortError
+            const { data: { session } } = await getSessionSafe();
             const headers: HeadersInit = { 'Content-Type': 'application/json' };
             if (session?.access_token) {
                 headers['Authorization'] = `Bearer ${session.access_token}`;
@@ -412,7 +480,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 headers,
                 body: JSON.stringify({
                     messages: [...getApiMessages(), { role: 'user', content: textToSend }],
-                    userLocation: userLocation || undefined
+                    userLocation: userLocation || undefined,
+                    locale // send current locale so backend can localize descriptions
                 }),
             });
 
@@ -435,7 +504,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 return;
             }
             
-            let botReply = data.reply || "Lo siento, tuve un problema al pensar. ¿Podrías repetir?";
+            let botReply = data.reply || t('chat.bot.thinkingError');
             const placeId = data.placeId;
             const placeName = data.placeName;
             const isRouteOnly = data.isRouteOnly; // Flag para indicar consulta de ruta únicamente
@@ -448,7 +517,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 // Verificar si es una lista de videos de YouTube
                 if (relevantVideo.isYouTubeList && relevantVideo.videos && relevantVideo.videos.length > 0) {
                     const videoCount = relevantVideo.videos.length;
-                    botReply = `${botReply}\n\n¡Mirá! Encontré ${videoCount} videos sobre esto en YouTube. Elegí el que más te guste.`;
+                    botReply = `${botReply}\n\n${t('chat.bot.foundVideos', { count: videoCount })}`;
                     setCurrentVideo({ 
                         title: relevantVideo.title, 
                         url: '', 
@@ -462,7 +531,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 } else if (relevantVideo.url) {
                     // Video único (local o YouTube)
                     const videoTitle = relevantVideo.title;
-                    botReply = `${botReply}\n\n¡Mirá! Te muestro imágenes de "${videoTitle}" para que lo veas mejor.`;
+                    botReply = `${botReply}\n\n${t('chat.bot.showingImages', { title: videoTitle })}`;
                     setCurrentVideo({ title: videoTitle, url: relevantVideo.url });
                     setShowVideoList(false);
                     // Mostrar modal después de un pequeño delay
@@ -545,27 +614,27 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                             if (!q) return;
                             const { data: matches } = await supabase
                                 .from('attractions')
-                                .select('id, name, description, image_url, info_extra, gallery_urls, lat, lng, category')
+                                .select('id, name, description, description_en, description_pt, description_fr, image_url, info_extra, gallery_urls, lat, lng, category')
                                 .ilike('name', `%${q}%`)
                                 .limit(1);
 
                             if (matches && matches.length > 0) {
-                                const a: any = matches[0];
+                                const a = matches[0] as SimpleAttraction & { description_en?: string; description_pt?: string; description_fr?: string };
                                 const normalized = {
                                     id: a.id,
                                     name: a.name,
-                                    description: a.description || '',
+                                    description: getLocaleDesc(a),
                                     image: a.image_url || '',
                                     info: a.info_extra || '',
                                     gallery_urls: a.gallery_urls || [],
-                                    coords: [a.lng, a.lat],
+                                    coords: [a.lng || 0, a.lat || 0],
                                     category: a.category || ''
                                 };
 
                                 // Request the map to draw the route (if map is ready)
-                                if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as any).requestRoute === 'function') {
+                                if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as Window & { requestRoute?: (lng:number,lat:number,name:string)=>void }).requestRoute === 'function') {
                                     try {
-                                        window.requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name);
+                                        (window as Window & { requestRoute?: (lng:number,lat:number,name:string)=>void }).requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name);
                                     } catch (err) {
                                         console.warn('requestRoute failed:', err);
                                     }
@@ -602,16 +671,16 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                                 if (!q) return;
                                 const { data: matches } = await supabase
                                     .from('attractions')
-                                    .select('id, name, description, image_url, info_extra, gallery_urls, lat, lng, category')
+                                    .select('id, name, description, description_en, description_pt, description_fr, image_url, info_extra, gallery_urls, lat, lng, category')
                                     .ilike('name', `%${q}%`)
                                     .limit(1);
 
                                 if (matches && matches.length > 0) {
-                                    const a: any = matches[0];
+                                    const a = matches[0] as SimpleAttraction & { description_en?: string; description_pt?: string; description_fr?: string };
                                     const normalized = {
                                         id: a.id,
                                         name: a.name,
-                                        description: a.description || '',
+                                        description: getLocaleDesc(a),
                                         image: a.image_url || '',
                                         info: a.info_extra || '',
                                         gallery_urls: a.gallery_urls || [],
@@ -619,8 +688,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                                         category: a.category || ''
                                     };
 
-                                    if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as any).requestRoute === 'function') {
-                                        try { window.requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name); } catch (err) { /* noop */ }
+                                    if (typeof window !== 'undefined' && 'requestRoute' in window && typeof (window as Window & { requestRoute?: (lng:number,lat:number,name:string)=>void }).requestRoute === 'function') {
+                                        try { (window as Window & { requestRoute?: (lng:number,lat:number,name:string)=>void }).requestRoute?.(normalized.coords[0], normalized.coords[1], normalized.name); } catch { /* noop */ }
                                     }
 
                                     window.dispatchEvent(new CustomEvent('santi:showPlace', { detail: { attraction: normalized } }));
@@ -662,7 +731,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 }
             }, 100);
         }
-    }, [input, getApiMessages, playAudioResponse, router, userLocation]);
+    }, [input, getApiMessages, playAudioResponse, router, userLocation, t, locale, getLocaleDesc]);
 
     // Voice navigation command processor - defined after triggerAssistantMessage and playAudioResponse
     const processVoiceNavigationCommand = useCallback((transcript: string): boolean => {
@@ -801,17 +870,19 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
 
     const playUserStory = useCallback(async (url: string, name: string) => {
         updateInteractionTime();
-        const intro = `¡Epa! Mirá lo que grabó un viajero sobre ${name}. Prestá atención...`;
+        const intro = t('chat.bot.userStoryIntro', { name });
 
         // Add intro message
         setMessages(prev => [...prev, { role: 'assistant', content: intro }]);
 
         try {
             // First, Santi says the intro
+            const localeMap: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+            const langCode = localeMap[locale] || 'es-AR';
             const response = await fetch('/api/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: intro }),
+                body: JSON.stringify({ text: intro, languageCode: langCode }),
             });
             const blob = await response.blob();
             const introUrl = URL.createObjectURL(blob);
@@ -832,7 +903,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         } catch (error) {
             console.error("Story Playback Error:", error);
         }
-    }, []);
+    }, [locale, t]);
 
     // Helper: detect if a message is a business registration prompt
     const isBusinessPromptText = (text?: string | null) => {
@@ -845,7 +916,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
     const handleLlevameClick = async () => {
         try {
             // supabase.auth.getUser() returns { data: { user } }
-            const { data } = await supabase.auth.getUser();
+            const { data } = await getUserSafe();
             const user = (data as { user?: unknown })?.user;
             if (user) {
                 window.location.href = '/mi-negocio';
@@ -890,7 +961,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 // 25% chance to show a promotional message (if available)
                 const pickPromotion = Math.random() < 0.25 && promotionalMessages.length > 0;
                 let prompt = '';
-                let chosenPromo: any = null;
+                let chosenPromo: PromoMessage | null = null;
                 if (pickPromotion) {
                     chosenPromo = promotionalMessages[Math.floor(Math.random() * promotionalMessages.length)];
                     prompt = chosenPromo.message;
@@ -1105,7 +1176,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         }
 
         const recognition = new (SR as new () => ISpeechRecognition)();
-        recognition.lang = 'es-AR';
+        // adjust recognition language to match UI locale (fallback to Spanish dialects)
+        recognition.lang = locale === 'en' ? 'en-US' : locale === 'pt' ? 'pt-BR' : locale === 'fr' ? 'fr-FR' : 'es-AR';
         recognition.continuous = false;
         recognition.interimResults = false;
 
@@ -1564,7 +1636,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                             fontSize: '1.2rem'
                         }} aria-label="Cerrar">✖️</button>
                         {promoMedia.type === 'image' && (
-                            <img src={promoMedia.url} alt="Promotional" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+                            <Image src={promoMedia.url} alt="Promotional" width={800} height={600} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
                         )}
                         {promoMedia.type === 'video' && (
                             <video src={promoMedia.url} controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
@@ -1601,13 +1673,13 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                             setShowBubbleManual(prev => !prev); 
                             setIsIdle(false); 
                             updateInteractionTime(); 
-                            try { stopSantiNarration(); } catch (e) { /* ignore */ }
+                            try { stopSantiNarration(); } catch { /* ignore */ }
                             try {
                                 if (audioRef.current && !audioRef.current.paused) {
                                     audioRef.current.pause();
                                     audioRef.current.currentTime = 0;
                                 }
-                            } catch (e) { /* ignore */ }
+                            } catch { /* ignore */ }
                             setIsSpeaking(false);
                         }}
                         style={{
@@ -1664,7 +1736,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                                         ? <span className="thinking-dots">🧠 Pensando...</span>
                                         : (
                                             <div>
-                                                <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText || "¿En qué te ayudo?"}</span>
+                                                <span style={{ whiteSpace: 'pre-wrap' }}>{displayedText || t('chat.askHelp')}</span>
                                                 {isBusinessPromptText(getLastAssistantMessage()) && (
                                                     <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                                                         <button
@@ -1710,7 +1782,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                       marginRight: '30px',
                       animation: 'pulseText 2s infinite'
                     }}>
-                      ¡Presioná el mic y hablá! 👉
+                      {t('chat.micHint')}
                   </div>
                 )}
 
@@ -2083,6 +2155,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 /* Santi Animation Styles */
                 .robot-avatar {
                     transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    /* ensure aspect ratio is preserved when height is adjusted */
+                    width: auto !important;
                 }
                 
                 .robot-avatar.idle {

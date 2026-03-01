@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import UserAvatar from './UserAvatar';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 const COLOR_GOLD = "#F1C40F";
 const COLOR_WHITE = "#FFFFFF";
@@ -13,6 +14,7 @@ export default function Header() {
   const [pwaAvailable, setPwaAvailable] = useState(false);
   const [pwaInstalled, setPwaInstalled] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const { locale, setLocale, t } = useI18n();
 
   useEffect(() => {
     type PwaDetail = { available?: boolean; installed?: boolean; showIosHint?: boolean };
@@ -107,7 +109,7 @@ export default function Header() {
           fontSize: '1.1rem',
           letterSpacing: 0.5 
         }}>
-          Santi IA
+          {t('santi')}
         </div>
       </Link>
       <nav style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -117,7 +119,7 @@ export default function Header() {
           fontWeight: 600,
           transition: 'color 0.2s'
         }}>
-          Explorar
+          {t('explore')}
         </Link>
         {user ? (
           <UserAvatar size={32} showName={false} />
@@ -132,7 +134,7 @@ export default function Header() {
             boxShadow: `0 4px 15px ${COLOR_GOLD}44`,
             transition: 'transform 0.2s'
           }}>
-            Acreditación
+            {t('accreditation')}
           </Link>
         )}
         {pwaAvailable && !pwaInstalled && (
@@ -145,7 +147,7 @@ export default function Header() {
             border: 'none',
             cursor: 'pointer'
           }}>
-            Instalar
+            {t('install')}
           </button>
         )}
       </nav>

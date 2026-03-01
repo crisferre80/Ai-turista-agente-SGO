@@ -8,6 +8,7 @@ import type { ARData } from '@/types/ar';
 import { isMobileDevice } from '@/lib/webxr';
 import ARScene from './ARPageClient/ARScene';
 import WebXRScene from './ARPageClient/WebXRScene';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 type Attraction = {
   id: string;
@@ -31,6 +32,7 @@ type ARPageClientProps = {
 
 export default function ARPageClient({ attraction }: ARPageClientProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -282,8 +284,8 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[90]">
           <div className="text-white text-center">
             <Camera className="h-16 w-16 mx-auto mb-4 animate-pulse" />
-            <h3 className="text-xl font-bold mb-2">Activando cámara...</h3>
-            <p className="text-gray-300">Por favor, acepta los permisos de cámara</p>
+            <h3 className="text-xl font-bold mb-2">{t('ar.activatingCamera')}</h3>
+            <p className="text-gray-300">{t('ar.cameraPermissionMessage')}</p>
           </div>
         </div>
       )}
@@ -308,7 +310,7 @@ export default function ARPageClient({ attraction }: ARPageClientProps) {
           <button
             onClick={handleClose}
             className="text-white hover:bg-white/20 rounded-full p-2 transition"
-            aria-label="Cerrar AR"
+            aria-label={t('ar.close')}
           >
             <X className="h-6 w-6" />
           </button>

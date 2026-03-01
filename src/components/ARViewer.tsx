@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/i18n/LanguageProvider';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
@@ -190,7 +191,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
           </div>
 
           <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-blue-300 to-purple-300 bg-clip-text text-transparent">
-            Descubriendo {attraction.name}
+            {t('ar.loadingDiscover', { name: attraction.name })}
           </h2>
           <p className="text-blue-200 mb-6 text-sm">{loadingState.currentAsset}</p>
 
@@ -202,7 +203,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
           </div>
 
           <p className="text-xs text-blue-300">
-            Preparando experiencia de Realidad Aumentada...
+            {t('ar.preparing')}
           </p>
         </div>
       </div>
@@ -219,23 +220,23 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
               <AlertTriangle className="h-8 w-8 text-red-300" />
             </div>
 
-            <h2 className="text-xl font-bold text-white mb-3">No se pudo iniciar AR</h2>
+            <h2 className="text-xl font-bold text-white mb-3">{t('ar.errorTitle')}</h2>
             <p className="text-gray-200 mb-6 text-sm leading-relaxed">{error}</p>
 
             <div className="bg-white/5 rounded-xl p-4 mb-6">
-              <h3 className="text-white font-semibold mb-3 text-sm">Para usar Realidad Aumentada:</h3>
+              <h3 className="text-white font-semibold mb-3 text-sm">{t('ar.requirementsHeader')}</h3>
               <div className="space-y-2 text-xs text-gray-300">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-400" />
-                  <span>Usa Chrome, Safari o Edge</span>
+                  <span>{t('ar.req.browser')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-400" />
-                  <span>Activa permisos de cámara</span>
+                  <span>{t('ar.req.cameraPerm')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-400" />
-                  <span>Dispositivo con sensores de movimiento</span>
+                  <span>{t('ar.req.sensors')}</span>
                 </div>
               </div>
             </div>
@@ -244,7 +245,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
               onClick={handleClose}
               className="w-full bg-white text-red-600 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all duration-200 transform hover:scale-105"
             >
-              Entendido
+              {t('understood')}
             </button>
           </div>
         </div>
@@ -252,28 +253,30 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
     );
   }
 
+  const { t } = useI18n();
+
   // Renderizar tutorial de introducción
   if (showTutorial) {
     const tutorialSteps = [
       {
         icon: <Camera className="h-10 w-10 text-blue-400" />,
-        title: "Bienvenido a AR",
-        description: "Descubre " + attraction.name + " con Realidad Aumentada.",
-        detail: "Modelos 3D, multimedia y datos superpuestos en el mundo real."
+        title: t('ar.welcome'),
+        description: t('ar.discover', { name: attraction.name }),
+        detail: t('ar.detail1'),
       },
       {
         icon: <Hand className="h-10 w-10 text-purple-400" />,
-        title: "Toca para interactuar",
-        description: "Toca, pellizca y mueve tu dispositivo para explorar.",
-        detail: "Coloca contenido y descubre información sobre los elementos." 
+        title: t('ar.touchInteract'),
+        description: t('ar.touchDescription'),
+        detail: t('ar.detail2'),
       },
       {
         icon: <Eye className="h-10 w-10 text-green-400" />,
-        title: "Mira y explora",
-        description: "Apunta tu cámara para ver el contenido AR.",
+        title: t('ar.lookExplore'),
+        description: t('ar.lookDescription') || 'Apunta tu cámara para ver el contenido AR.',
         detail: hasCameraPermission
-          ? "Cámara lista — busca una superficie plana para colocar el objeto."
-          : "Permite acceso a la cámara para una experiencia completa."
+          ? t('ar.cameraReady')
+          : t('ar.cameraPermission')
       }
     ];
 
@@ -310,7 +313,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
                 onClick={prevTutorialStep}
                 className="flex-1 bg-white/8 text-white px-4 py-2 rounded-lg text-sm hover:bg-white/12 transition"
               >
-                Anterior
+                {t('ar.prev')}
               </button>
             )}
 
@@ -318,7 +321,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
               onClick={nextTutorialStep}
               className="flex-1 bg-white text-sky-600 px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-95 transition"
             >
-              {tutorialStep === tutorialSteps.length - 1 ? 'Comenzar' : 'Siguiente'}
+              {tutorialStep === tutorialSteps.length - 1 ? t('ar.start') : t('ar.next')}
             </button>
           </div>
 
@@ -327,7 +330,7 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
               onClick={startExperience}
               className="text-blue-200 text-xs hover:text-white transition-colors"
             >
-              Saltar tutorial
+              {t('ar.skipTutorial')}
             </button>
           </div>
         </div>
@@ -364,14 +367,14 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
             <button
               onClick={toggleFullscreen}
               className="text-white bg-white/6 hover:bg-white/12 rounded-lg p-2 transition-all duration-150"
-              aria-label="Pantalla completa"
+              aria-label={t('ar.fullscreen')}
             >
               <Maximize2 className="h-4 w-4" />
             </button>
             <button
               onClick={handleClose}
               className="text-white bg-red-600/10 hover:bg-red-600/20 rounded-lg p-2 transition-all duration-150"
-              aria-label="Cerrar AR"
+              aria-label={t('ar.close')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -400,7 +403,9 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
           <div className="flex items-center gap-3 text-white">
             <div className={`w-3 h-3 rounded-full ${hasCameraPermission ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`} />
             <div className="text-xs">
-              <div className="font-semibold">{hasCameraPermission ? 'AR con cámara' : 'AR en pantalla'}</div>
+              <div className="font-semibold">
+                {hasCameraPermission ? t('ar.modeCamera') : t('ar.modeScreen')}
+              </div>
               {capabilities?.arMode === 'immersive-ar' && (
                 <div className="text-[11px] text-purple-200 bg-purple-500/10 px-2 py-0.5 rounded-full inline-block mt-1">Inmersivo</div>
               )}
@@ -426,10 +431,10 @@ export default function ARViewer({ attraction, onClose, onError }: ARViewerProps
 
             <button
               onClick={handleClose}
-              title="Cerrar"
+              title={t('ar.close')}
               className="bg-white/6 text-white px-3 py-2 rounded-lg text-sm hover:bg-white/10 transition"
             >
-              Cerrar
+              {t('ar.close')}
             </button>
           </div>
         </div>

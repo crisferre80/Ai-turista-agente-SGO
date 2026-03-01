@@ -50,8 +50,16 @@ export const getVoices = (): SpeechSynthesisVoice[] => {
 };
 
 export const getSelectedVoice = (): SpeechSynthesisVoice | null => {
-  // Always use the first Spanish voice as default for Santi's character
-  return voices.find(voice => voice.lang.startsWith('es')) || voices[0] || null;
+  // pick a voice matching the current document language (set by LanguageProvider)
+  const lang =
+    typeof document !== 'undefined' && document.documentElement.lang
+      ? document.documentElement.lang.slice(0, 2)
+      : 'es';
+  // try to find a voice for that lang
+  const byLang = voices.find(v => v.lang.startsWith(lang));
+  if (byLang) return byLang;
+  // fallback to Spanish if not found, otherwise first voice
+  return voices.find(v => v.lang.startsWith('es')) || voices[0] || null;
 };
 
 let _isNarrating = false;
@@ -79,7 +87,7 @@ export const stopSantiNarration = () => {
   } catch (e) { /* ignore */ }
 };
 
-export const santiSpeak = (text: string, opts?: { source?: string, force?: boolean }): void => {
+export const santiSpeak = (text: string, opts?: { source?: string, force?: boolean, languageCode?: string }): void => {
   if (_isNarrating && !opts?.force) {
     console.warn('santiSpeak: already narrating, skipping new narration to avoid overlap');
     return;
@@ -117,9 +125,14 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     try {
       const synth = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(cleanText); // Use cleaned text
-      const spanishVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
-      if (spanishVoice) utterance.voice = spanishVoice;
-      utterance.lang = 'es-ES';
+      // choose voice based on current document language if possible
+      const lang =
+        typeof document !== 'undefined' && document.documentElement.lang
+          ? document.documentElement.lang
+          : 'es-ES';
+      const voiceForLang = voices.find(v => v.lang.startsWith(lang.slice(0,2)));
+      if (voiceForLang) utterance.voice = voiceForLang;
+      utterance.lang = lang;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       
@@ -161,10 +174,18 @@ export const santiSpeak = (text: string, opts?: { source?: string, force?: boole
     }
   };
 
+  // determine language code if not explicitly provided
+  let langCode = opts?.languageCode;
+  if (!langCode && typeof document !== 'undefined') {
+    const loc = document.documentElement.lang.slice(0,2);
+    const map: Record<string,string> = { es: 'es-AR', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR' };
+    langCode = map[loc] || 'es-AR';
+  }
+
   fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: cleanText }), // Use cleaned text
+    body: JSON.stringify({ text: cleanText, languageCode: langCode }), // pass language hint
   })
     .then(response => {
       if (response.status === 401) throw new Error("API_KEY_MISSING");
