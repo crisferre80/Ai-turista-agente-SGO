@@ -39,7 +39,10 @@ interface SimpleAttraction {
 }
 
 interface PromoMessage {
-    message: string;
+    message: string;           // Spanish (required)
+    message_en?: string;       // English (optional)
+    message_pt?: string;       // Portuguese (optional)
+    message_fr?: string;       // French (optional)
     image_url?: string;
     video_url?: string;
 }
@@ -67,7 +70,8 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isHovering, setIsHovering] = useState(false); // Hover state for bubble
     const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
-    const [promotionalMessages, setPromotionalMessages] = useState<Array<{message: string, image_url?: string, video_url?: string}>>([]); // Promotional messages from DB (with optional media)
+    const [promotionalMessages, setPromotionalMessages] = useState<PromoMessage[]>([]); // Promotional messages from DB (with optional media)
+
 const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video (buscar/YouTube)
 const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
 
@@ -167,19 +171,36 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
     const fetchPromotionalMessages = async () => {
         const { data } = await supabase
             .from('promotional_messages')
-            .select('message,image_url,video_url')
+            .select('message,message_en,message_pt,message_fr,image_url,video_url')
             .eq('is_active', true)
             .order('priority', { ascending: false });
         
         if (data && data.length > 0) {
             // supabase may return nulls
-            const messages: PromoMessage[] = data.map((d: {message?: string|null,image_url?: string|null,video_url?: string|null}) => ({
+            const messages: PromoMessage[] = data.map((d: {message?: string|null, message_en?: string|null, message_pt?: string|null, message_fr?: string|null, image_url?: string|null, video_url?: string|null}) => ({
                 message: d.message || '',
+                message_en: d.message_en || undefined,
+                message_pt: d.message_pt || undefined,
+                message_fr: d.message_fr || undefined,
                 image_url: d.image_url || '',
                 video_url: d.video_url || ''
             }));
             setPromotionalMessages(messages);
             console.log('📢 Loaded promotional messages:', messages.length);
+        }
+    };
+
+    // Helper function to get promotional message in the correct language
+    const getPromoMessageForLocale = (promo: PromoMessage, currentLocale: string): string => {
+        switch(currentLocale) {
+            case 'en':
+                return promo.message_en || promo.message;
+            case 'pt':
+                return promo.message_pt || promo.message;
+            case 'fr':
+                return promo.message_fr || promo.message;
+            default:
+                return promo.message;
         }
     };
 
@@ -948,7 +969,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
     const isBusinessPromptText = (text?: string | null) => {
         if (!text) return false;
         const pattern = /(Mi Negocio|registrar un negocio|aparezca en la app|destacad|Comercio Certificado|registrarlo|Mi Negocio)/i;
-        return pattern.test(text) || promotionalMessages.some(p => (text || '').includes(p.message));
+        return pattern.test(text) || promotionalMessages.some(p => (text || '').includes(p.message) || (p.message_en && (text || '').includes(p.message_en)) || (p.message_pt && (text || '').includes(p.message_pt)) || (p.message_fr && (text || '').includes(p.message_fr)));
     };
 
     // Handler for 'Llevame' button - redirect depending on auth state
@@ -1003,7 +1024,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 let chosenPromo: PromoMessage | null = null;
                 if (pickPromotion) {
                     chosenPromo = promotionalMessages[Math.floor(Math.random() * promotionalMessages.length)];
-                    prompt = chosenPromo.message;
+                    prompt = getPromoMessageForLocale(chosenPromo, locale);
                 } else {
                     prompt = engagementPrompts[Math.floor(Math.random() * engagementPrompts.length)];
                 }

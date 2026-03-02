@@ -1266,7 +1266,7 @@ export default function Home() {
                     {activePlace.isBusiness ? '🏢 COMERCIO CERTIFICADO' : '⭐ ATRACTIVO TURÍSTICO'}
                   </span>
                 </div>
-                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{getLocaleDesc(activePlace)}</p>
+                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{getLocaleDesc(activePlace as any)}</p>
 
                 {activePlace.info && (
                   <div style={{ marginTop: '25px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '20px', borderLeft: `6px solid ${COLOR_GOLD}` }}>

@@ -101,7 +101,7 @@ export default function AdminDashboard() {
     const [carouselPhotos, setCarouselPhotos] = useState<CarouselPhoto[]>([]);
     const [carouselDuration, setCarouselDuration] = useState<number>(25); // segundos por bucle completo
     const [phrases, setPhrases] = useState<Array<{id: string, phrase: string, category: string}>>([]);
-    const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, is_active: boolean, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}>>([]);
+    const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, message_en?: string, message_pt?: string, message_fr?: string, is_active: boolean, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}>>([]);
     const [attractionCategories, setAttractionCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
     const [businessCategories, setBusinessCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
 
@@ -1271,7 +1271,7 @@ export default function AdminDashboard() {
     };
 
     const handleCancelEditPromotionalMessage = () => {
-        setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
+        setNewPromotionalMessage({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
         setEditingPromotionalMessageId(null);
     };
 
