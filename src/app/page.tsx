@@ -45,7 +45,6 @@ interface Video {
 }
 
 const GalleryCard = ({ title, img, onClick }: { title: string; img?: string; onClick: () => void }) => {
-    const { t } = useI18n();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -217,11 +216,44 @@ export default function Home() {
     const { t, locale } = useI18n();
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [filters, setFilters] = useState({ atracciones: true, alojamientos: true, gastronomia: true, cultura: true });
+
+  // Helper function to get localized fallback welcome message
+  const getLocalizedFallbackWelcome = () => {
+    const messages: Record<string, string> = {
+      es: "¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.",
+      en: "Hello tourist! Welcome to Santiago del Estero, the Mother of Cities. I'm Santi, your virtual tour guide. What's your name? I'm ready to guide you through this unforgettable adventure.",
+      pt: "Olá turista! Bem-vindo a Santiago del Estero, a Mãe das Cidades. Sou Santi, seu guia turístico virtual. Qual é o seu nome? Estou pronto para guiá-lo nessa aventura inesquecível.",
+      fr: "Bonjour touriste! Bienvenue à Santiago del Estero, la Mère des Villes. Je suis Santi, votre guide touristique virtuel. Quel est votre nom? Je suis prêt à vous guider dans cette aventure inoubliable."
+    };
+    return messages[locale] || messages.es;
+  };
+
+  // Helper function to get localized returning user message
+  const getLocalizedReturningUserMessage = (userName: string) => {
+    const messages: Record<string, string> = {
+      es: `¡Hola ${userName}! Me alegra de verte de nuevo. Soy Santi, tu guía turístico virtual, y estoy listo para mostrarte más maravillas de Santiago del Estero. ¿A dónde querés ir hoy?`,
+      en: `Hello ${userName}! I'm happy to see you again. I'm Santi, your virtual tour guide, and I'm ready to show you more wonders of Santiago del Estero. Where would you like to go today?`,
+      pt: `Olá ${userName}! Fico feliz em vê-lo novamente. Sou Santi, seu guia turístico virtual, e estou pronto para mostrar a você mais maravilhas de Santiago del Estero. Para onde você gostaria de ir hoje?`,
+      fr: `Bonjour ${userName}! Je suis heureux de vous revoir. Je suis Santi, votre guide touristique virtuel, et je suis prêt à vous montrer plus de merveilles de Santiago del Estero. Où aimeriez-vous aller aujourd'hui?`
+    };
+    return messages[locale] || messages.es;
+  };
+
+  // Helper function to get localized simple returning user message
+  const getLocalizedSimpleReturningMessage = () => {
+    const messages: Record<string, string> = {
+      es: "¡Hola de nuevo! Me alegra de verte. Soy Santi, tu guía turístico virtual. ¿A dónde querés ir hoy?",
+      en: "Hello again! I'm happy to see you. I'm Santi, your virtual tour guide. Where would you like to go today?",
+      pt: "Olá novamente! Fico feliz em vê-lo. Sou Santi, seu guia turístico virtual. Para onde você gostaria de ir hoje?",
+      fr: "Bonjour à nouveau! Je suis heureux de vous revoir. Je suis Santi, votre guide touristique virtuel. Où aimeriez-vous aller aujourd'hui?"
+    };
+    return messages[locale] || messages.es;
+  };
   const [narration] = useState<string | undefined>(undefined);
   const [activeStory, setActiveStory] = useState<{ url: string; name: string } | undefined>(undefined);
 
   // helper to return the appropriate description based on current locale
-  const getLocaleDesc = (obj: any) => {
+  const getLocaleDesc = (obj: Record<string, string | null | undefined>) => {
     if (!obj) return '';
     if (locale === 'en' && obj.description_en) return obj.description_en;
     if (locale === 'pt' && obj.description_pt) return obj.description_pt;
@@ -284,7 +316,7 @@ export default function Home() {
         setCarouselDuration(auto);
       }
     }
-  }, [carouselPhotos.length]); // Solo cuando cambie el número de fotos
+  }, [carouselPhotos.length, carouselDuration]); // Solo cuando cambie el número de fotos o duración
 
   // Efecto 3: Configuración inicial - ubicación, intro, y autenticación
   useEffect(() => {
@@ -333,17 +365,16 @@ export default function Home() {
             });
           }
         }
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
           console.warn('checkAuthState aborted');
         } else {
-          console.error('checkAuthState error', err);
+          console.error('checkAuthState error', error);
         }
       }
     };
 
     checkAuthState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Solo ejecutar al montar
   // update CSS shift variable any time the set of photos changes
   useEffect(() => {
@@ -364,9 +395,9 @@ export default function Home() {
 
   const fetchData = async () => {
     setLoading(true);
-    const warnIfNotAbort = (label: string, err: any) => {
+    const warnIfNotAbort = (label: string, err: unknown) => {
       if (!err) return;
-      const msg = err.message || String(err);
+      const msg = (err instanceof Error ? err.message : String(err));
       if (msg.toLowerCase().includes('aborterror')) {
         console.debug(`${label} aborted, ignoring`);
       } else {
@@ -404,7 +435,7 @@ export default function Home() {
       }
 
       // helper for picking right description based on current locale
-      const localDesc = (obj: any) => {
+      const localDesc = (obj: Record<string, string | null | undefined>) => {
         if (locale === 'en' && obj.description_en) return obj.description_en;
         if (locale === 'pt' && obj.description_pt) return obj.description_pt;
         if (locale === 'fr' && obj.description_fr) return obj.description_fr;
@@ -473,20 +504,20 @@ export default function Home() {
   useEffect(() => {
     const onShowPlace = (ev: Event) => {
       try {
-        const detail = (ev as CustomEvent).detail as { attraction?: any } | undefined;
+        const detail = (ev as CustomEvent).detail as { attraction?: Record<string, unknown> } | undefined;
         if (!detail || !detail.attraction) return;
-        const a = detail.attraction;
-        const normalized = {
-          id: a.id,
-          name: a.name,
-          description: a.description || a.info || '',
-          image: a.image || a.image_url || IMG_PATTERN,
-          info: a.info || a.info_extra || '',
-          gallery_urls: a.gallery_urls || [],
-          coords: a.coords || (a.lng && a.lat ? [a.lng, a.lat] : [0, 0]),
+        const a = detail.attraction as Record<string, unknown>;
+        const normalized: Attraction = {
+          id: String(a.id || ''),
+          name: String(a.name || ''),
+          description: String(a.description || a.info || ''),
+          image: String(a.image || a.image_url || IMG_PATTERN),
+          info: String(a.info || a.info_extra || ''),
+          gallery_urls: Array.isArray(a.gallery_urls) ? a.gallery_urls : [],
+          coords: (Array.isArray(a.coords) ? a.coords : (a.lng && a.lat ? [a.lng, a.lat] : [0, 0])) as [number, number],
           isBusiness: !!a.isBusiness,
-          category: a.category || ''
-        } as any;
+          category: String(a.category || '')
+        };
         setActivePlace(normalized);
       } catch (err) {
         console.warn('santi:showPlace handler error', err);
@@ -583,7 +614,7 @@ export default function Home() {
           setTimeout(async () => {
             try {
               const { data: { user } } = await supabase.auth.getUser();
-              let welcomeMessage = "¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.";
+              let welcomeMessage = getLocalizedFallbackWelcome();
               
               if (user) {
                 // Usuario autenticado, obtener su nombre del perfil
@@ -594,17 +625,17 @@ export default function Home() {
                   .single();
                 
                 if (profile?.name) {
-                  welcomeMessage = `¡Hola ${profile.name}! Me alegro de verte de nuevo. Soy Santi, tu guía turístico virtual, y estoy listo para mostrarte más maravillas de Santiago del Estero. ¿A dónde querés ir hoy?`;
+                  welcomeMessage = getLocalizedReturningUserMessage(profile.name);
                 } else {
-                  welcomeMessage = `¡Hola de nuevo! Me alegro de verte. Soy Santi, tu guía turístico virtual. ¿A dónde querés ir hoy?`;
+                  welcomeMessage = getLocalizedSimpleReturningMessage();
                 }
               }
               
               santiNarrate(welcomeMessage, { source: 'intro-welcome' });
             } catch (error) {
               console.error('Error personalizing welcome:', error);
-              // Fallback al mensaje genérico
-              santiNarrate("¡Hola turista! Bienvenido a Santiago del Estero, la Madre de Ciudades. Soy Santi, tu guía turístico virtual. ¿Cómo te llamas? Ya estoy listo para guiarte en esta aventura inolvidable.", { source: 'intro-welcome' });
+              // Fallback al mensaje genérico con localización
+              santiNarrate(getLocalizedFallbackWelcome(), { source: 'intro-welcome' });
             }
           }, 1000); // Dar más tiempo para que se establezca el chat
         }}
@@ -653,7 +684,7 @@ export default function Home() {
             color: COLOR_BLUE,
             letterSpacing: '-0.2px',
             textAlign: 'center'
-          }}>📸 Postales de Santiago del Estero</h3>
+          }}>{t('home.postcards')}</h3>
           <div className="carousel-container" style={{
             position: 'relative',
             height: '280px',
@@ -882,7 +913,7 @@ export default function Home() {
               padding: 20,
               border: `2px solid ${COLOR_GOLD}`,
               color: '#1e293b',
-              zIndex: 5,
+              zIndex: 1001,
               boxShadow: '0 15px 50px rgba(0,0,0,0.4)'
             }}>
               {/* Header del panel EXPLORA */}

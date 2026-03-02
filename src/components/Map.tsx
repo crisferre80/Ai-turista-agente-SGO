@@ -103,10 +103,11 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const startTimeRef = useRef(Date.now());
     const pausedElapsedRef = useRef(0);
     const isOrbitingRef = useRef(false);
+    const waypointsRef = useRef<Array<{ center: [number, number]; zoom: number; name: string; markerIndex: number }>>([]);
     // Refs para evitar capturas en efectos pesados
     const attractionsRef = useRef(attractions);
     const parentUserLocationRef = useRef(parentUserLocation);
-    const tourEnabledRef = useRef(true); // Ref para acceder desde funciones globales
+    const tourEnabledRef = useRef(false); // Ref para acceder desde funciones globales
     // Inicializar ubicación local con la del parent si existe
     const [userLocation, setUserLocation] = useState<[number, number] | null>(
         parentUserLocation ? [parentUserLocation.longitude, parentUserLocation.latitude] : null
@@ -261,12 +262,20 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     markerIndex: idx
                 }));
                 
+                // Actualizar ref para acceso desde el botón
+                waypointsRef.current = waypoints;
+                
                 let currentWaypointIndex = 0;
                 let isTransitioning = false;
                 let orbitStartTime = 0;
                 
                 const animateTour = () => {
-                    if (!map.current || !isAnimatingRef.current || waypoints.length === 0 || !tourEnabledRef.current) return;
+                    if (!map.current || !isAnimatingRef.current || waypoints.length === 0 || !tourEnabledRef.current) {
+                        if (waypoints.length === 0) {
+                            console.warn('🎬 No hay atractivos disponibles para el tour');
+                        }
+                        return;
+                    }
                     
                     const currentTime = Date.now();
                     
@@ -356,7 +365,18 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 };
                 
                 const startAnimation = () => {
-                    if (isAnimatingRef.current || !tourEnabledRef.current) return;
+                    if (isAnimatingRef.current) {
+                        console.warn('🎬 Tour ya está animándose');
+                        return;
+                    }
+                    if (!tourEnabledRef.current) {
+                        console.warn('🎬 Tour no está habilitado');
+                        return;
+                    }
+                    if (waypoints.length === 0) {
+                        console.warn('🎬 No hay waypoints (atractivos) disponibles para animar');
+                        return;
+                    }
                     isAnimatingRef.current = true;
                     console.log('🎬 Iniciando tour de dron con órbitas');
                     animateTour();
@@ -372,6 +392,10 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     }
                     console.log('⏸️ Tour de dron detenido');
                 };
+                
+                // Exponer funciones globalmente para que sean accesibles desde el botón
+                (window as any).startMapAnimation = startAnimation;
+                (window as any).stopMapAnimation = stopAnimation;
                 
                 const resetInactivityTimer = () => {
                     // Detener animación inmediatamente cuando hay interacción
@@ -401,8 +425,11 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 // this timer will be set, but startAnimation checks tourEnabledRef so it won't
                 // actually run unless the feature has been turned on (default is false).
                 setTimeout(() => {
-                    if (map.current && tourEnabledRef.current) {
+                    if (map.current && tourEnabledRef.current && waypoints.length > 0) {
+                        console.log('⏱️ Iniciando tour automático después de 2s (waypoints disponibles)');
                         startAnimation();
+                    } else {
+                        console.log('⏱️ No se inició tour automático - waypoints:', waypoints.length, 'tourEnabled:', tourEnabledRef.current);
                     }
                 }, 2000);
                 
@@ -1019,30 +1046,38 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                     const newTourEnabled = !tourEnabled;
                     setTourEnabled(newTourEnabled);
                     
+                    // Actualizar ref inmediatamente sin esperar al re-render
+                    tourEnabledRef.current = newTourEnabled;
+                    
                     if (newTourEnabled) {
-                        console.log('\u25b6\ufe0f Tour del mapa activado');
-                        // Iniciar el tour si est\u00e1 habilitado
-                        if (typeof window !== 'undefined' && map.current) {
-                            // Reiniciar timer de inactividad
-                            setTimeout(() => {
-                                if (isAnimatingRef.current === false && tourEnabled) {
-                                    isAnimatingRef.current = true;
-                                    console.log('\ud83c\udfac Reiniciando tour...');
+                        console.log('\u25b6\ufe0f Tour del mapa activado - iniciando animación');
+                        // Iniciar animación inmediatamente si hay mapa y waypoints
+                        const waypointCount = waypointsRef.current.length;
+                        if (map.current && waypointCount > 0) {
+                            if (!isAnimatingRef.current) {
+                                console.log('\ud83c\udfac Llamando startMapAnimation con ' + waypointCount + ' waypoints');
+                                if (typeof (window as any).startMapAnimation === 'function') {
+                                    (window as any).startMapAnimation();
                                 }
-                            }, 2000);
+                            } else {
+                                console.log('\ud83c\udfac Tour ya está en progreso');
+                            }
+                        } else {
+                            console.warn('\ud83c\udfac No se puede iniciar tour: mapa no listo o no hay waypoints. Waypoints:', waypointCount);
                         }
                     } else {
                         console.log('\u23f8\ufe0f Tour del mapa pausado');
-                        // Detener animaci\u00f3n inmediatamente
-                        if (typeof window !== 'undefined' && window.stopMapAnimation) {
-                            window.stopMapAnimation();
+                        // Detener animación inmediatamente
+                        isAnimatingRef.current = false;
+                        if (typeof (window as any).stopMapAnimation === 'function') {
+                            (window as any).stopMapAnimation();
                         }
                     }
                 }}
                 style={{
                     position: 'absolute',
-                    top: '20px',
-                    left: '20px',
+                    top: '10px',
+                    right: '80px',
                     background: tourEnabled ? 'rgba(255,255,255,0.95)' : 'rgba(255,193,7,0.95)',
                     backdropFilter: 'blur(10px)',
                     borderRadius: '12px',

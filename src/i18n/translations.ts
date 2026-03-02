@@ -133,6 +133,16 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     'home.explorePlaces': '🗺️ Explorar Lugares',
     'home.featuredPlaces': 'Lugares Destacados',
+    'home.postcards': '📸 Postales de Santiago del Estero',
+    
+    // intro overlay
+    'intro.title': 'SANTIAGO DEL ESTERO',
+    'intro.subtitle': 'Madre de Ciudades',
+    'intro.greetingNew': '¡Epa chango! Te doy la bienvenida a mi tierra. Soy Santi y hoy voy a ser tu guía virtual en este viaje inolvidable.',
+    'intro.greetingReturning': '¡Hola de nuevo {userName}! Me alegra de verte otra vez por acá. Preparate para seguir descubriendo Santiago.',
+    'intro.cta': '¡VAMOS A RECORRER! 🧉',
+    'intro.hello': '¡HOLA! 👋',
+    
     // i18n selector
     'lang.selectLabel': 'Idioma',
     'lang.auto': 'Automático',
@@ -253,6 +263,16 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     'home.explorePlaces': '🗺️ Explore Places',
     'home.featuredPlaces': 'Featured places',
+    'home.postcards': '📸 Santiago del Estero Postcards',
+    
+    // intro overlay
+    'intro.title': 'SANTIAGO DEL ESTERO',
+    'intro.subtitle': 'Mother of Cities',
+    'intro.greetingNew': 'Welcome, friend! I\'m Santi, your virtual guide. Today I will help you discover the best of Santiago.',
+    'intro.greetingReturning': 'Welcome back {userName}! I\'m happy to see you again. Let\'s continue exploring Santiago.',
+    'intro.cta': 'LET\'S EXPLORE! 🧉',
+    'intro.hello': 'HI! 👋',
+    
     'lang.selectLabel': 'Language',
     'lang.auto': 'Automatic',
 
@@ -361,6 +381,16 @@ export const translations: Record<Locale, Record<string, string>> = {
     'ar.errorTitle': 'Não foi possível iniciar AR',
     'home.featuredPlaces': 'Lugares em destaque',
     'home.explorePlaces': '🗺️ Explorar Lugares',
+    'home.postcards': '📸 Postais de Santiago del Estero',
+    
+    // intro overlay
+    'intro.title': 'SANTIAGO DEL ESTERO',
+    'intro.subtitle': 'Mãe das Cidades',
+    'intro.greetingNew': 'Olá, amigo! Sou Santi, seu guia virtual. Hoje vou ajudá-lo a descobrir o melhor de Santiago.',
+    'intro.greetingReturning': 'Bem-vindo de volta {userName}! Fico feliz em vê-lo novamente. Vamos continuar explorando Santiago.',
+    'intro.cta': 'VAMOS EXPLORAR! 🧉',
+    'intro.hello': 'OLÁ! 👋',
+    
     'ar.requirementsHeader': 'Para usar Realidade Aumentada:',
     'ar.req.browser': 'Use Chrome, Safari ou Edge',
     'ar.req.cameraPerm': 'Ative permissões de câmera',
@@ -466,6 +496,15 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     'home.featuredPlaces': 'Lieux en vedette',
     'home.explorePlaces': '🗺️ Explorer les lieux',
+    'home.postcards': '📸 Cartes postales de Santiago del Estero',
+    
+    // intro overlay
+    'intro.title': 'SANTIAGO DEL ESTERO',
+    'intro.subtitle': 'Mère des Cités',
+    'intro.greetingNew': 'Bienvenue, ami ! Je suis Santi, votre guide virtuel. Aujourd\'hui, je vais vous aider à découvrir le meilleur de Santiago.',
+    'intro.greetingReturning': 'Bienvenue de retour {userName}! Je suis heureux de vous revoir. Continuons à explorer Santiago.',
+    'intro.cta': "ALLONS EXPLORER! 🧉",
+    'intro.hello': 'BONJOUR! 👋',
 
     'ar.welcome': "Bienvenue dans l'AR",        
     'ar.discover': 'Découvrez {name} en réalité augmentée.',

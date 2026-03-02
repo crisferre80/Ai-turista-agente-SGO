@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useI18n } from '@/i18n/LanguageProvider';
+import { locales } from '@/i18n/translations';
 
 const SANTI_AVATAR = "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png";
 
@@ -21,6 +23,7 @@ const FALLBACK_IMAGES = [
 ];
 
 const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
+    const { t, locale, setLocale } = useI18n();
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isVisible, setIsVisible] = useState(true);
     const [images] = useState<string[]>(INTRO_IMAGES);
@@ -136,6 +139,46 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                     <div className="confetti" style={{ backgroundColor: '#F1C40F', top: '80%', left: '75%' }}></div>
                 </div>
 
+                {/* Language selector in top right */}
+                <div style={{
+                    position: 'absolute',
+                    top: 20,
+                    right: 20,
+                    zIndex: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                }}>
+                    <label style={{
+                        color: 'white',
+                        fontWeight: 'bold',
+                        textShadow: '0 2px 10px rgba(0,0,0,0.8)',
+                        fontSize: '0.9rem'
+                    }}>
+                        {t('lang.selectLabel')}:
+                    </label>
+                    <select
+                        value={locale}
+                        onChange={(e) => setLocale(e.target.value as any)}
+                        style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: '2px solid #F1C40F',
+                            background: 'rgba(20, 20, 20, 0.9)',
+                            color: '#F1C40F',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            fontSize: '0.95rem'
+                        }}
+                    >
+                        {locales.map((loc) => (
+                            <option key={loc} value={loc}>
+                                {loc === 'es' ? 'Español' : loc === 'en' ? 'English' : loc === 'pt' ? 'Português' : 'Français'}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 {/* Contenido principal */}
                 <div className="intro-content" style={{ zIndex: 10, color: 'white', padding: '40px', width: '100%', maxWidth: '1100px' }}>
                     <div className="intro-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24, alignItems: 'center' }}>
@@ -150,7 +193,7 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 WebkitBackgroundClip: 'text',
                                 WebkitTextFillColor: 'transparent',
                                 letterSpacing: '-2px'
-                            }}>SANTIAGO DEL ESTERO</h1>
+                            }}>{t('intro.title')}</h1>
                             <h2 style={{
                                 fontSize: '1.5rem',
                                 color: '#F1C40F',
@@ -159,7 +202,7 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 letterSpacing: '4px',
                                 marginBottom: 30,
                                 textShadow: '0 2px 4px rgba(0,0,0,0.5)'
-                            }}>Madre de Ciudades</h2>
+                            }}>{t('intro.subtitle')}</h2>
                             <p style={{
                                 fontSize: 'clamp(1.1rem, 4vw, 1.4rem)',
                                 lineHeight: 1.6,
@@ -168,9 +211,9 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 maxWidth: 500
                             }}>
                                 {userName ? (
-                                    <>¡Hola de nuevo <strong>{userName}</strong>! Me alegro de verte otra vez por acá. Preparate para seguir descubriendo Santiago.</>
+                                    <>{t('intro.greetingReturning', { userName })}</>
                                 ) : (
-                                    <>¡Epa chango! Te doy la bienvenida a mi tierra. Soy <strong>Santi</strong> y hoy voy a ser tu guía virtual en este viaje inolvidable.</>
+                                    <>{t('intro.greetingNew')}</>
                                 )}
                             </p>
                             <button onClick={handleStart} className="start-button" style={{
@@ -187,7 +230,9 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                 borderBottom: '6px solid #F1C40F',
                                 position: 'relative',
                                 overflow: 'hidden'
-                            }}>¡VAMOS A RECORRER! 🧉</button>
+                            }}>
+                                {t('intro.cta')}
+                            </button>
                         </div>
 
                         {/* Avatar grande a un costado */}
@@ -221,7 +266,9 @@ const IntroOverlay = ({ onComplete }: { onComplete: () => void }) => {
                                         animationDelay: '0.8s',
                                         opacity: 0,
                                         transform: 'scale(0.5)'
-                                    }}>¡HOLA! 👋</div>
+                                    }}>
+                                        {t('intro.hello')}
+                                    </div>
                                 </div>
                             </div>
                         </div>

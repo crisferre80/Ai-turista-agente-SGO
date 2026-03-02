@@ -116,7 +116,7 @@ export default function AdminDashboard() {
     });
     const [placeDescLang, setPlaceDescLang] = useState<'es'|'en'|'pt'|'fr'>('es');
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
-    const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
+    const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
     const [editingPromotionalMessageId, setEditingPromotionalMessageId] = useState<string | null>(null);
     const [newVideo, setNewVideo] = useState({ title: '', url: '' });
     // gallery states restored
@@ -279,7 +279,7 @@ export default function AdminDashboard() {
         const { data, error: carouselErr } = await supabase.from('carousel_photos').select('id,image_url,title,order_position,is_active').order('order_position', { ascending: true });
         carouselData = data;
         const { data: phraseData, error: phraseErr } = await supabase.from('santis_phrases').select('id,phrase,category').order('created_at', { ascending: false });
-        const { data: promotionalData } = await supabase.from('promotional_messages').select('id,business_name,message,is_active,category,priority,show_probability,image_url,video_url').order('priority', { ascending: false });
+        const { data: promotionalData } = await supabase.from('promotional_messages').select('id,business_name,message,message_en,message_pt,message_fr,is_active,category,priority,show_probability,image_url,video_url').order('priority', { ascending: false });
         const { data: plansData, error: plansErr } = await supabase.from('business_plans').select('*').order('priority', { ascending: true });
         const { data: configData, error: configErr } = await supabase.from('carousel_settings').select('animation_duration').eq('key','global').maybeSingle();
 
@@ -328,6 +328,9 @@ export default function AdminDashboard() {
                 id: string;
                 business_name: string;
                 message: string;
+                message_en?: string;
+                message_pt?: string;
+                message_fr?: string;
                 is_active: boolean;
                 category: string;
                 priority: number;
@@ -1195,7 +1198,7 @@ export default function AdminDashboard() {
     const handleAddPromotionalMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newPromotionalMessage.business_name.trim() || !newPromotionalMessage.message.trim()) {
-            alert('Por favor completa el nombre del negocio y el mensaje');
+            alert('Por favor completa el nombre del negocio y el mensaje en español');
             return;
         }
         
@@ -1209,6 +1212,9 @@ export default function AdminDashboard() {
                 .update({
                     business_name: newPromotionalMessage.business_name.trim(),
                     message: newPromotionalMessage.message.trim(),
+                    message_en: newPromotionalMessage.message_en?.trim() || null,
+                    message_pt: newPromotionalMessage.message_pt?.trim() || null,
+                    message_fr: newPromotionalMessage.message_fr?.trim() || null,
                     category: newPromotionalMessage.category,
                     priority: newPromotionalMessage.priority,
                     show_probability: newPromotionalMessage.show_probability,
@@ -1219,7 +1225,7 @@ export default function AdminDashboard() {
             
             if (error) alert(error.message);
             else {
-                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
+                setNewPromotionalMessage({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 setEditingPromotionalMessageId(null);
                 fetchData();
             }
@@ -1228,6 +1234,9 @@ export default function AdminDashboard() {
             const { error } = await supabase.from('promotional_messages').insert([{
                 business_name: newPromotionalMessage.business_name.trim(),
                 message: newPromotionalMessage.message.trim(),
+                message_en: newPromotionalMessage.message_en?.trim() || null,
+                message_pt: newPromotionalMessage.message_pt?.trim() || null,
+                message_fr: newPromotionalMessage.message_fr?.trim() || null,
                 category: newPromotionalMessage.category,
                 priority: newPromotionalMessage.priority,
                 show_probability: newPromotionalMessage.show_probability,
@@ -1237,16 +1246,19 @@ export default function AdminDashboard() {
             }]);
             if (error) alert(error.message);
             else {
-                setNewPromotionalMessage({ business_name: '', message: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
+                setNewPromotionalMessage({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 fetchData();
             }
         }
     };
 
-    const handleEditPromotionalMessage = (message: {id: string, business_name: string, message: string, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}) => {
+    const handleEditPromotionalMessage = (message: {id: string, business_name: string, message: string, message_en?: string, message_pt?: string, message_fr?: string, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}) => {
         setNewPromotionalMessage({
             business_name: message.business_name,
             message: message.message,
+            message_en: message.message_en || '',
+            message_pt: message.message_pt || '',
+            message_fr: message.message_fr || '',
             category: message.category,
             priority: message.priority,
             show_probability: message.show_probability,
@@ -2884,6 +2896,45 @@ export default function AdminDashboard() {
                                     required
                                 />
                             </div>
+                            
+                            {/* Mensajes en otros idiomas */}
+                            <div style={{ 
+                                background: 'rgba(100, 150, 200, 0.1)', 
+                                padding: '15px', 
+                                borderRadius: '8px',
+                                borderLeft: '4px solid #4995cc'
+                            }}>
+                                <h4 style={{ marginTop: 0, marginBottom: '12px', color: '#1a3a6c' }}>🌐 Traducciones (Opcional)</h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={labelStyle}>🇬🇧 English</label>
+                                        <textarea
+                                            style={{ ...inputStyle, minHeight: '80px', resize: 'vertical', fontSize: '0.9rem' }}
+                                            value={newPromotionalMessage.message_en}
+                                            onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, message_en: e.target.value })}
+                                            placeholder="English version..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>🇧🇷 Português</label>
+                                        <textarea
+                                            style={{ ...inputStyle, minHeight: '80px', resize: 'vertical', fontSize: '0.9rem' }}
+                                            value={newPromotionalMessage.message_pt}
+                                            onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, message_pt: e.target.value })}
+                                            placeholder="Versão em português..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>🇫🇷 Français</label>
+                                        <textarea
+                                            style={{ ...inputStyle, minHeight: '80px', resize: 'vertical', fontSize: '0.9rem' }}
+                                            value={newPromotionalMessage.message_fr}
+                                            onChange={e => setNewPromotionalMessage({ ...newPromotionalMessage, message_fr: e.target.value })}
+                                            placeholder="Version française..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px' }}>
                                 <div>
                                     <label style={labelStyle}>Categoría</label>
@@ -3088,7 +3139,7 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
                                     <p style={{ 
-                                        margin: '0', 
+                                        margin: '0 0 12px 0', 
                                         fontSize: '0.95rem', 
                                         fontStyle: 'italic', 
                                         color: '#475569',
@@ -3096,6 +3147,55 @@ export default function AdminDashboard() {
                                     }}>
                                         &quot;{promo.message}&quot;
                                     </p>
+                                    {/* Translation status badges */}
+                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            padding: '3px 6px',
+                                            borderRadius: '4px',
+                                            background: '#dcfce7',
+                                            color: '#166534',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            🇪🇸 ES
+                                        </span>
+                                        {promo.message_en && (
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                padding: '3px 6px',
+                                                borderRadius: '4px',
+                                                background: '#dbeafe',
+                                                color: '#1e40af',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                🇬🇧 EN
+                                            </span>
+                                        )}
+                                        {promo.message_pt && (
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                padding: '3px 6px',
+                                                borderRadius: '4px',
+                                                background: '#fed7aa',
+                                                color: '#92400e',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                🇧🇷 PT
+                                            </span>
+                                        )}
+                                        {promo.message_fr && (
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                padding: '3px 6px',
+                                                borderRadius: '4px',
+                                                background: '#fce7f3',
+                                                color: '#831843',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                🇫🇷 FR
+                                            </span>
+                                        )}
+                                    </div>
                                     {promo.image_url && (
                                         <NextImage src={promo.image_url} alt="promo" width={200} height={112} style={{ maxWidth: '200px', marginTop: '10px', borderRadius: '6px' }} />
                                     )}
