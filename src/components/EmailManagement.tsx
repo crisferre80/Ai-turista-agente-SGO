@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { generateUniqueFileName } from '@/lib/sanitize-filename';
+import { getErrorMessage, logError } from '@/lib/error-handler';
 
 const COLOR_BLUE = "#1A3A6C";
 const COLOR_RED = "#9E1B1B";
@@ -129,8 +131,8 @@ export default function EmailManagement() {
             setCurrentTemplate({ name: '', subject: '', html_content: '', category: 'marketing' });
             loadData();
         } catch (error) {
-            console.error('Error guardando plantilla:', error);
-            alert('Error al guardar la plantilla');
+            logError('Guardar plantilla de email', error);
+            alert(getErrorMessage(error));
         }
     };
 
@@ -165,8 +167,8 @@ export default function EmailManagement() {
             setCurrentContact({ email: '', name: '', tags: [] });
             loadData();
         } catch (error) {
-            console.error('Error guardando contacto:', error);
-            alert('Error al guardar el contacto');
+            logError('Guardar contacto de email', error);
+            alert(getErrorMessage(error));
         }
     };
 
@@ -183,8 +185,8 @@ export default function EmailManagement() {
             alert('Plantilla eliminada');
             loadData();
         } catch (error) {
-            console.error('Error eliminando plantilla:', error);
-            alert('Error al eliminar la plantilla');
+            logError('Eliminar plantilla de email', error);
+            alert(getErrorMessage(error));
         }
     };
 
@@ -201,8 +203,8 @@ export default function EmailManagement() {
             alert('Contacto eliminado');
             loadData();
         } catch (error) {
-            console.error('Error eliminando contacto:', error);
-            alert('Error al eliminar el contacto');
+            logError('Eliminar contacto de email', error);
+            alert(getErrorMessage(error));
         }
     };
 
@@ -224,8 +226,8 @@ export default function EmailManagement() {
                 alert('Error al enviar campaña: ' + result.error);
             }
         } catch (error) {
-            console.error('Error enviando campaña:', error);
-            alert('Error al enviar la campaña');
+            logError('Enviar campaña de email', error);
+            alert(getErrorMessage(error));
         } finally {
             setLoading(false);
         }
@@ -235,7 +237,7 @@ export default function EmailManagement() {
         setUploadingImage(true);
         try {
             const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
+            const fileName = generateUniqueFileName(`email-${Date.now()}.${fileExt}`);
             const filePath = `email-images/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
@@ -305,8 +307,8 @@ export default function EmailManagement() {
                 alert('Error al enviar email de prueba');
             }
         } catch (error) {
-            console.error('Error enviando email de prueba:', error);
-            alert('Error al enviar email de prueba');
+            logError('Enviar email de prueba', error);
+            alert(getErrorMessage(error));
         } finally {
             setLoading(false);
         }

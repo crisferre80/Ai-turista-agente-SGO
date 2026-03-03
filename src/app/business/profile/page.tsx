@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
+import { generateUniqueFileName } from '@/lib/sanitize-filename';
+import { getErrorMessage, logError } from '@/lib/error-handler';
 
 interface Business {
   id: string;
@@ -177,7 +179,7 @@ export default function BusinessProfilePage() {
     try {
       const uploadPromises = files.map(async (file) => {
         const fileExt = file.name.split('.').pop();
-        const fileName = `business-${business.id}-${Date.now()}-${Math.random()}.${fileExt}`;
+        const fileName = generateUniqueFileName(`business-${business.id}-${file.name}`);
         const filePath = `business-galleries/${fileName}`;
 
         const { error: uploadError } = await supabase.storage

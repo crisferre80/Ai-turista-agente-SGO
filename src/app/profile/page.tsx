@@ -1,7 +1,10 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { generateUniqueFileName } from '@/lib/sanitize-filename';
+import { getErrorMessage, logError } from '@/lib/error-handler';
 import { takePhoto } from '@/lib/photoService';
 import Header from '@/components/Header';
 import { mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
@@ -111,27 +114,41 @@ export default function ProfilePage() {
         fetchProfile();
         fetchNarrations();
         fetchCategories();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchCategories = async () => {
         console.log('🔍 Fetching categories from database...');
         try {
-            const { data, error } = await supabase
-                .from('categories')
-                .select('name, icon')
-                .eq('type', 'attraction')
-                .order('name');
-
-            if (error) {
-                console.error('❌ Error fetching categories:', error);
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+            
+            if (!supabaseUrl || !supabaseKey) {
+                console.error('❌ Supabase not configured');
                 const fallback = mergeWithDefaultCategories().filter(cat => cat.type === 'attraction');
                 setCategories(fallback.map(cat => ({ name: cat.name, icon: cat.icon })));
-            } else {
-                console.log('✅ Categories fetched:', data);
-                const merged = mergeWithDefaultCategories((data || []).map(cat => ({ ...cat, type: 'attraction' as const })))
-                    .filter(cat => cat.type === 'attraction');
-                setCategories(merged.map(cat => ({ name: cat.name, icon: cat.icon })));
+                return;
             }
+            
+            const url = `${supabaseUrl}/rest/v1/categories?select=name,icon,type&type=eq.attraction`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'apikey': supabaseKey,
+                    'Authorization': `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('✅ Categories fetched:', data);
+            const merged = mergeWithDefaultCategories((data || []).map((cat: { name: string; icon: string; type: string }) => ({ ...cat, type: 'attraction' as const })))
+                .filter(cat => cat.type === 'attraction');
+            setCategories(merged.map(cat => ({ name: cat.name, icon: cat.icon })));
         } catch (err) {
             console.error('❌ Exception fetching categories:', err);
             const fallback = mergeWithDefaultCategories().filter(cat => cat.type === 'attraction');
@@ -185,7 +202,7 @@ export default function ProfilePage() {
         setLoading(false);
     };
 
-    const loadProfileWithStats = async (profileData: any, userId: string) => {
+    const loadProfileWithStats = async (profileData: Record<string, unknown>, userId: string) => {
         // Obtener estadísticas de reseñas
         const { count: reviewsCount } = await supabase
             .from('user_reviews')
@@ -198,6 +215,7 @@ export default function ProfilePage() {
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId);
 
+        // @ts-expect-error - profileData comes from external API
         const profileWithStats: UserProfile = {
             ...profileData,
             stats: {
@@ -209,33 +227,35 @@ export default function ProfilePage() {
         };
         
         setProfile(profileWithStats);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = profileData as any;
         setFormData({
-            name: profileData.name || '',
-            bio: profileData.bio || '',
-            age: profileData.age,
-            gender: profileData.gender || '',
-            country: profileData.country || '',
-            city: profileData.city || '',
-            email: profileData.email || '',
-            phone: profileData.phone || '',
-            visit_purpose: profileData.visit_purpose || '',
-            travel_group: profileData.travel_group || '',
-            accommodation_type: profileData.accommodation_type || '',
-            transport_mode: profileData.transport_mode || '',
-            trip_duration: profileData.trip_duration,
-            budget_range: profileData.budget_range || '',
-            interests: profileData.interests || [],
-            accessibility_needs: profileData.accessibility_needs || [],
-            dietary_restrictions: profileData.dietary_restrictions || [],
-            visit_frequency: profileData.visit_frequency || '',
-            favorite_experiences: profileData.favorite_experiences || '',
-            recommended_places: profileData.recommended_places || '',
-            would_return: profileData.would_return,
-            overall_satisfaction: profileData.overall_satisfaction,
-            improvement_suggestions: profileData.improvement_suggestions || '',
-            favorite_categories: profileData.preferences?.favorite_categories || [],
-            language: profileData.preferences?.language || 'es',
-            notifications: profileData.preferences?.notifications || true
+            name: data.name || '',
+            bio: data.bio || '',
+            age: data.age,
+            gender: data.gender || '',
+            country: data.country || '',
+            city: data.city || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            visit_purpose: data.visit_purpose || '',
+            travel_group: data.travel_group || '',
+            accommodation_type: data.accommodation_type || '',
+            transport_mode: data.transport_mode || '',
+            trip_duration: data.trip_duration,
+            budget_range: data.budget_range || '',
+            interests: data.interests || [],
+            accessibility_needs: data.accessibility_needs || [],
+            dietary_restrictions: data.dietary_restrictions || [],
+            visit_frequency: data.visit_frequency || '',
+            favorite_experiences: data.favorite_experiences || '',
+            recommended_places: data.recommended_places || '',
+            would_return: data.would_return,
+            overall_satisfaction: data.overall_satisfaction,
+            improvement_suggestions: data.improvement_suggestions || '',
+            favorite_categories: data.preferences?.favorite_categories || [],
+            language: data.preferences?.language || 'es',
+            notifications: data.preferences?.notifications || true
         });
     };
 
@@ -281,7 +301,7 @@ export default function ProfilePage() {
 
         if (avatarFile) {
             const fileExt = avatarFile.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
+            const fileName = generateUniqueFileName(`avatar-${Date.now()}.${fileExt}`);
             const filePath = `avatars/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
@@ -333,7 +353,7 @@ export default function ProfilePage() {
                 });
 
             if (error) {
-                alert(error.message);
+                alert(getErrorMessage(error));
             } else {
                 setEditing(false);
                 fetchProfile();
@@ -447,12 +467,13 @@ export default function ProfilePage() {
                     }}>
                         {/* Avatar Section */}
                         <div style={{ position: 'relative' }}>
-                            <img
+                            <Image
                                 src={profile?.avatar_url || 'https://via.placeholder.com/150'}
                                 alt="Avatar"
+                                width={120}
+                                height={120}
+                                priority={false}
                                 style={{
-                                    width: '120px',
-                                    height: '120px',
                                     borderRadius: '50%',
                                     objectFit: 'cover',
                                     border: `4px solid ${COLOR_GOLD}`,
@@ -1385,7 +1406,7 @@ export default function ProfilePage() {
                                                         borderRadius: '12px',
                                                         fontStyle: 'italic'
                                                     }}>
-                                                        "{profile.favorite_experiences}"
+                                                        &quot;{profile.favorite_experiences}&quot;
                                                     </div>
                                                 </div>
                                             )}
@@ -1402,7 +1423,7 @@ export default function ProfilePage() {
                                                         borderRadius: '12px',
                                                         fontStyle: 'italic'
                                                     }}>
-                                                        "{profile.recommended_places}"
+                                                        &quot;{profile.recommended_places}&quot;
                                                     </div>
                                                 </div>
                                             )}
@@ -1449,7 +1470,7 @@ export default function ProfilePage() {
                                                         borderRadius: '12px',
                                                         fontStyle: 'italic'
                                                     }}>
-                                                        💡 "{profile.improvement_suggestions}"
+                                                        💡 &quot;{profile.improvement_suggestions}&quot;
                                                     </div>
                                                 </div>
                                             )}

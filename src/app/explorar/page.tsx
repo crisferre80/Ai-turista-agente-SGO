@@ -15,9 +15,6 @@ import { mergeWithDefaultCategories, normalizeCategoryName, type CategoryItem } 
 // Palette adapted from PlaceDetailClient
 const COLOR_PRIMARY = "#1A3A6C"; // Azul oscuro principal
 const COLOR_ACCENT = "#C5A065"; // Dorado suave
-const COLOR_SECONDARY = "#555555"; // Texto secundario neutro
-const COLOR_TEXT = "#333333"; // Gris oscuro legible
-const COLOR_BACKGROUND = "#ffffff"; // Blanco base
 
 type PlaceType = {
     id: string;
@@ -48,8 +45,6 @@ export default function ExplorePage() {
     const [galleryModal, setGalleryModal] = useState<{urls: string[], name: string} | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [reviewModal, setReviewModal] = useState<{isOpen: boolean, attractionId?: string, businessId?: string, locationName: string} | null>(null);
-    const [highlightId, setHighlightId] = useState<string | null>(null);
-    const [isMobile, setIsMobile] = useState(false);
     const [categories, setCategories] = useState<CategoryItem[]>([]);
     const router = useRouter();
 
@@ -64,33 +59,7 @@ export default function ExplorePage() {
         console.log('🔄 Categories state changed:', categories.length, 'categories');
     }, [categories]);
 
-    useEffect(() => {
-        // Check if a place was requested via marker 'Más info' button
-        const openPlaceId = typeof window !== 'undefined' ? localStorage.getItem('openPlaceId') : null;
-        if (openPlaceId) {
-            localStorage.removeItem('openPlaceId');
-            // Wait for DOM to render the list, then scroll and highlight
-            setTimeout(() => {
-                const el = document.getElementById(`place-${openPlaceId}`);
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setHighlightId(openPlaceId);
-                    setTimeout(() => setHighlightId(null), 4000);
-                }
-            }, 300);
-        }
 
-        // Detect mobile screen
-        const checkMobile = () => {
-            setIsMobile(window.innerWidth < 768);
-        };
-
-        if (typeof window !== 'undefined') {
-            checkMobile();
-            window.addEventListener('resize', checkMobile);
-            return () => window.removeEventListener('resize', checkMobile);
-        }
-    }, []);
 
     const fetchData = async () => {
         setLoading(true);
@@ -135,19 +104,32 @@ export default function ExplorePage() {
     const fetchCategories = async () => {
         console.log('🔍 Fetching all categories from database...');
         try {
-            const { data, error } = await supabase
-                .from('categories')
-                .select('name, icon, type')
-                .order('type', { ascending: false })
-                .order('name');
-
-            if (error) {
-                console.error('❌ Error fetching categories:', error);
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+            
+            if (!supabaseUrl || !supabaseKey) {
+                console.error('❌ Supabase not configured');
                 setCategories(mergeWithDefaultCategories());
-            } else {
-                console.log('✅ Categories fetched:', data);
-                setCategories(mergeWithDefaultCategories(data || []));
+                return;
             }
+            
+            const url = `${supabaseUrl}/rest/v1/categories?select=name,icon,type`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'apikey': supabaseKey,
+                    'Authorization': `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('✅ Categories fetched:', data);
+            setCategories(mergeWithDefaultCategories(data || []));
         } catch (err) {
             console.error('❌ Exception fetching categories:', err);
             setCategories(mergeWithDefaultCategories());

@@ -7,6 +7,8 @@ import AdminMap from '@/components/AdminMap';
 import AdminAISettings from '@/components/AdminAISettings';
 import { takePhoto } from '@/lib/photoService';
 import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
+import { generateUniqueFileName } from '@/lib/sanitize-filename';
+import { getErrorMessage, logError } from '@/lib/error-handler';
 
 // Tipos básicos usados en este panel
 
@@ -58,6 +60,20 @@ interface BusinessRecord {
     lng: number;
 }
 
+interface UserRecord {
+    id: string;
+    name: string;
+    email: string;
+    role: 'tourist' | 'business' | 'admin';
+    avatar_url: string | null;
+    created_at: string;
+    bio?: string;
+    country?: string;
+    city?: string;
+    age?: number;
+    phone?: string;
+}
+
 interface CarouselPhoto {
     id: string;
     image_url: string;
@@ -104,6 +120,13 @@ export default function AdminDashboard() {
     const [promotionalMessages, setPromotionalMessages] = useState<Array<{id: string, business_name: string, message: string, message_en?: string, message_pt?: string, message_fr?: string, is_active: boolean, category: string, priority: number, show_probability: number, image_url?: string, video_url?: string}>>([]);
     const [attractionCategories, setAttractionCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
     const [businessCategories, setBusinessCategories] = useState<Array<{name: string, icon: string, type: string}>>([]);
+    // Usuarios
+    const [users, setUsers] = useState<UserRecord[]>([]);
+    const [userSearchTerm, setUserSearchTerm] = useState('');
+    const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'tourist' | 'business' | 'admin'>('all');
+    const [selectedUserDetail, setSelectedUserDetail] = useState<UserRecord | null>(null);
+    const [showUserModal, setShowUserModal] = useState(false);
+    const [editingUserRole, setEditingUserRole] = useState<'tourist' | 'business' | 'admin' | null>(null);
 
     // Form States
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -146,6 +169,7 @@ export default function AdminDashboard() {
     };
     const setPlaceDesc = (lang: string, val: string) => {
         setNewPlace(prev => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const copy = { ...prev } as any;
             if (lang === 'en') copy.desc_en = val;
             else if (lang === 'pt') copy.desc_pt = val;
@@ -167,6 +191,7 @@ export default function AdminDashboard() {
     };
     const setBizDesc = (lang: string, val: string) => {
         setNewBusiness(prev => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const copy = { ...prev } as any;
             if (lang === 'en') copy.description_en = val;
             else if (lang === 'pt') copy.description_pt = val;
@@ -347,30 +372,64 @@ export default function AdminDashboard() {
     const fetchCategories = useCallback(async () => {
         console.log('🔍 Admin: Fetching categories...');
         try {
-            const { data, error } = await supabase
-                .from('categories')
-                .select('name, icon, type')
-                .order('type', { ascending: false })
-                .order('name');
-
-            if (error) {
-                console.error('❌ Admin: Error fetching categories:', error);
-                const fallback = getDefaultCategories();
-                setAttractionCategories(fallback.filter(cat => cat.type === 'attraction'));
-                setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
-            } else {
-                console.log('✅ Admin: Categories fetched:', data);
-                const mergedCategories = mergeWithDefaultCategories(data || []);
-                const attractions = mergedCategories.filter(cat => cat.type === 'attraction');
-                const businesses = mergedCategories.filter(cat => cat.type === 'business');
-                setAttractionCategories(attractions);
-                setBusinessCategories(businesses);
+            // Usar REST API directo para evitar problemas con Supabase-js
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+            
+            if (!supabaseUrl || !supabaseKey) {
+                throw new Error('Supabase not configured');
             }
+            
+            const url = `${supabaseUrl}/rest/v1/categories?select=name,icon,type`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'apikey': supabaseKey,
+                    'Authorization': `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('✅ Admin: Categories fetched:', data);
+            const mergedCategories = mergeWithDefaultCategories(data || []);
+            const attractions = mergedCategories.filter(cat => cat.type === 'attraction');
+            const businesses = mergedCategories.filter(cat => cat.type === 'business');
+            setAttractionCategories(attractions);
+            setBusinessCategories(businesses);
         } catch (error) {
             console.error('Admin categories fetch error', error);
             const fallback = getDefaultCategories();
             setAttractionCategories(fallback.filter(cat => cat.type === 'attraction'));
             setBusinessCategories(fallback.filter(cat => cat.type === 'business'));
+        }
+    }, []);
+
+    // Fetch Users for Admin Panel
+    const fetchUsers = useCallback(async () => {
+        console.log('🔍 Fetching all users from API...');
+        try {
+            const response = await fetch('/api/admin/users');
+            console.log('📡 API response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ API error response:', errorText);
+                throw new Error(`API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('✅ Users fetched:', data.length || 0, data);
+            setUsers(data as UserRecord[]);
+        } catch (err) {
+            console.error('❌ Exception fetching users:', err);
+            logError('Cargar usuarios del admin', err);
+            alert(getErrorMessage(err));
+            setUsers([]);
         }
     }, []);
 
@@ -385,8 +444,9 @@ export default function AdminDashboard() {
             setIsAuthorized(true);
             fetchData();
             fetchCategories();
+            fetchUsers();
         }
-    }, [router, fetchData, fetchCategories]);
+    }, [router, fetchData, fetchCategories, fetchUsers]);
 
     useEffect(() => {
         checkAuth();
@@ -684,7 +744,7 @@ export default function AdminDashboard() {
         try {
             const compressed = await compressImage(file);
             const fileExt = "jpg";
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const fileName = generateUniqueFileName(`${Date.now()}.${fileExt}`);
             const filePath = `uploads/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
@@ -696,8 +756,8 @@ export default function AdminDashboard() {
             const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
             return publicUrl;
         } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            alert('Error subiendo: ' + msg);
+            logError('Subir archivo', e);
+            alert(getErrorMessage(e));
             return null;
         }
     };
@@ -800,8 +860,8 @@ export default function AdminDashboard() {
             const filename = `${table}-${new Date().toISOString().slice(0,10)}.sql`;
             downloadString(sql, filename, 'application/sql');
         } catch (err) {
-            console.error('sql export error', err);
-            alert('Error al exportar la tabla en SQL. Revisa la consola.');
+            logError('Exportar categorías SQL', err);
+            alert(getErrorMessage(err));
         }
         setExporting(false);
     };
@@ -857,8 +917,8 @@ export default function AdminDashboard() {
             const filename = `${table}-${new Date().toISOString().slice(0,10)}.csv`;
             downloadString(csv, filename, 'text/csv');
         } catch (err) {
-            console.error('csv export error', err);
-            alert('Error al exportar la tabla. Revisa la consola.');
+            logError('Exportar categorías CSV', err);
+            alert(getErrorMessage(err));
         }
         setExporting(false);
     };
@@ -969,8 +1029,8 @@ export default function AdminDashboard() {
             resetPlaceForm();
             fetchData();
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Error desconocido';
-            alert('Error: ' + msg);
+            logError('Guardar lugar', err);
+            alert(getErrorMessage(err));
         }
         setLoading(false);
     };
@@ -1027,8 +1087,8 @@ export default function AdminDashboard() {
                 else if (bizDescLang === 'fr') setNewBusiness({ ...newBusiness, description_fr: data.description });
             }
         } catch (error) {
-            console.error('Error:', error);
-            alert('Error al generar descripción. Verifica tu conexión e intenta nuevamente.');
+            logError('Generar descripción IA', error);
+            alert(getErrorMessage(error));
         } finally {
             setGeneratingDesc(false);
         }
@@ -1061,8 +1121,8 @@ export default function AdminDashboard() {
             const data = await response.json();
             setNewPromotionalMessage({ ...newPromotionalMessage, message: data.message });
         } catch (error) {
-            console.error('Error:', error);
-            alert('Error al generar mensaje promocional. Verifica tu conexión e intenta nuevamente.');
+            logError('Generar mensaje promocional IA', error);
+            alert(getErrorMessage(error));
         } finally {
             setGeneratingPromo(false);
         }
@@ -1075,8 +1135,11 @@ export default function AdminDashboard() {
             lat: p.lat,
             lng: p.lng,
             desc: p.description || '',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             desc_en: (p as any).description_en || '',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             desc_pt: (p as any).description_pt || '',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             desc_fr: (p as any).description_fr || '',
             img: p.image_url || '',
             info: p.info_extra || '',
@@ -1188,8 +1251,9 @@ export default function AdminDashboard() {
     const handleAddPhrase = async (e: React.FormEvent) => {
         e.preventDefault();
         const { error } = await supabase.from('santis_phrases').insert([{ phrase: newPhrase.text, category: newPhrase.category }]);
-        if (error) alert(error.message);
-        else {
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
             setNewPhrase({ text: '', category: 'general' });
             fetchData();
         }
@@ -1223,8 +1287,9 @@ export default function AdminDashboard() {
                 })
                 .eq('id', editingPromotionalMessageId);
             
-            if (error) alert(error.message);
-            else {
+            if (error) {
+                alert(getErrorMessage(error));
+            } else {
                 setNewPromotionalMessage({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 setEditingPromotionalMessageId(null);
                 fetchData();
@@ -1244,8 +1309,9 @@ export default function AdminDashboard() {
                 image_url: newPromotionalMessage.image_url || '',
                 video_url: newPromotionalMessage.video_url || ''
             }]);
-            if (error) alert(error.message);
-            else {
+            if (error) {
+                alert(getErrorMessage(error));
+            } else {
                 setNewPromotionalMessage({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
                 fetchData();
             }
@@ -1280,8 +1346,11 @@ export default function AdminDashboard() {
         if (!isAuth) return;
         
         const { error } = await supabase.from('promotional_messages').update({ is_active: !currentStatus }).eq('id', id);
-        if (error) alert(error.message);
-        else fetchData();
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
+            fetchData();
+        }
     };
 
     const handleDeletePromotionalMessage = async (id: string) => {
@@ -1291,8 +1360,11 @@ export default function AdminDashboard() {
         if (!isAuth) return;
         
         const { error } = await supabase.from('promotional_messages').delete().eq('id', id);
-        if (error) alert(error.message);
-        else fetchData();
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
+            fetchData();
+        }
     };
 
     const handleAddCategory = async (e: React.FormEvent) => {
@@ -1313,8 +1385,8 @@ export default function AdminDashboard() {
             setNewCategory({ name: '', icon: '', type: 'attraction' });
             fetchCategories();
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Error desconocido';
-            alert('Error: ' + msg);
+            logError('Agregar categoría', err);
+            alert(getErrorMessage(err));
         }
     };
 
@@ -1330,8 +1402,9 @@ export default function AdminDashboard() {
         }
 
         const { error } = await supabase.from('app_videos').insert([{ title: newVideo.title, video_url: videoUrl }]);
-        if (error) alert(error.message);
-        else {
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
             setNewVideo({ title: '', url: '' });
             fetchData();
         }
@@ -1340,8 +1413,11 @@ export default function AdminDashboard() {
     const deletePlace = async (id: string) => {
         if (!confirm('¿Borrar este lugar?')) return;
         const { error } = await supabase.from('attractions').delete().eq('id', id);
-        if (error) alert(error.message);
-        else fetchData();
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
+            fetchData();
+        }
     };
 
     const handleAddCarouselPhoto = async (e: React.FormEvent) => {
@@ -1394,8 +1470,11 @@ export default function AdminDashboard() {
         if (!(await ensureAuthenticated())) return;
         if (!confirm('¿Eliminar esta foto del carrusel?')) return;
         const { error } = await supabase.from('carousel_photos').delete().eq('id', id);
-        if (error) alert(error.message);
-        else fetchData();
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
+            fetchData();
+        }
     };
 
     const moveCarouselPhoto = async (id: string, delta: number) => {
@@ -1409,13 +1488,13 @@ export default function AdminDashboard() {
         // update each row separately to avoid accidental nulling
         const { error: err1 } = await supabase.from('carousel_photos').update({ order_position: target }).eq('id', photo.id);
         if (err1) {
-            alert(err1.message);
+            alert(getErrorMessage(err1));
             return;
         }
         if (other) {
             const { error: err2 } = await supabase.from('carousel_photos').update({ order_position: current }).eq('id', other.id);
             if (err2) {
-                alert(err2.message);
+                alert(getErrorMessage(err2));
                 return;
             }
         }
@@ -1425,15 +1504,18 @@ export default function AdminDashboard() {
     const toggleCarouselPhotoStatus = async (id: string, currentStatus: boolean) => {
         if (!(await ensureAuthenticated())) return;
         const { error } = await supabase.from('carousel_photos').update({ is_active: !currentStatus }).eq('id', id);
-        if (error) alert(error.message);
-        else fetchData();
+        if (error) {
+            alert(getErrorMessage(error));
+        } else {
+            fetchData();
+        }
     };
 
     const saveCarouselSettings = async () => {
         setLoading(true);
         const { error } = await supabase.from('carousel_settings').upsert({ key: 'global', animation_duration: carouselDuration });
         if (error) {
-            alert('Error al guardar configuración del carrusel: ' + error.message);
+            alert(getErrorMessage(error));
         } else {
             alert('Configuración guardada');
         }
@@ -1477,9 +1559,8 @@ export default function AdminDashboard() {
             setNewPlan({ name: '', display_name: '', price_monthly: 0, price_yearly: 0, features: [], mercadopago_id: '', max_images: 5, priority: 0 });
             fetchData();
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Error desconocido';
-            console.error('Admin: Save plan error:', err);
-            alert('Error: ' + msg);
+            logError('Guardar plan de negocio', err);
+            alert(getErrorMessage(err));
         }
         setLoading(false);
     };
@@ -1508,8 +1589,9 @@ export default function AdminDashboard() {
             const { error } = await supabase.from('business_plans').update(updates).eq('id', id);
             if (error) throw error;
             fetchData();
-        } catch {
-            alert('Error actualizando plan');
+        } catch (err) {
+            logError('Actualizar plan de negocio', err);
+            alert(getErrorMessage(err));
         }
     };
 
@@ -1519,8 +1601,9 @@ export default function AdminDashboard() {
             const { error } = await supabase.from('business_plans').delete().eq('id', id);
             if (error) throw error;
             fetchData();
-        } catch {
-            alert('Error eliminando plan');
+        } catch (err) {
+            logError('Eliminar plan de negocio', err);
+            alert(getErrorMessage(err));
         }
     };
 
@@ -1625,6 +1708,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('promociones'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'promociones')}>💼 Mensajes Promocionales</button>
                     <button onClick={() => { setActiveTab('emails'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'emails')}>📧 Emails</button>
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
+                    <button onClick={() => { setActiveTab('usuarios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'usuarios')}>👥 Usuarios</button>
                     <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
                     <button onClick={() => { setActiveTab('backup'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'backup')}>💾 Copia</button>
                 </div>
@@ -1666,6 +1750,7 @@ export default function AdminDashboard() {
                                 activeTab === 'videos' ? 'Multimedia' :
                                 activeTab === 'emails' ? 'Emails' :
                                 activeTab === 'planes' ? 'Planes de Pago' :
+                                activeTab === 'usuarios' ? 'Gestión de Usuarios' :
                                 activeTab === 'ai' ? 'IA y TTS' :
                                 activeTab === 'backup' ? 'Copia de Seguridad' :
                                 'Santi'}
@@ -1752,6 +1837,7 @@ export default function AdminDashboard() {
                                             <button
                                                 key={l}
                                                 type="button"
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                                 onClick={() => setPlaceDescLang(l as any)}
                                                 style={{
                                                     padding: '4px 8px',
@@ -2234,6 +2320,7 @@ export default function AdminDashboard() {
                                             <button
                                                 key={l}
                                                 type="button"
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                                 onClick={() => setBizDescLang(l as any)}
                                                 style={{
                                                     padding: '4px 8px',
@@ -2685,6 +2772,416 @@ export default function AdminDashboard() {
                                     </ul>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab: USUARIOS */}
+                {activeTab === 'usuarios' && (
+                    <div style={cardStyle}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            {/* Búsqueda y Filtros */}
+                            <div style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                gap: '15px',
+                                padding: '20px',
+                                background: `${COLOR_GOLD}11`,
+                                borderRadius: '12px',
+                                border: `2px solid ${COLOR_GOLD}33`
+                            }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <label style={labelStyle}>🔍 Buscar Usuario</label>
+                                    <input 
+                                        style={inputStyle}
+                                        placeholder="Buscar por nombre, email o ciudad..."
+                                        value={userSearchTerm}
+                                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <label style={labelStyle}>📁 Filtrar por Rol</label>
+                                    <select 
+                                        style={inputStyle}
+                                        value={userRoleFilter}
+                                        onChange={(e) => setUserRoleFilter(e.target.value as 'all' | 'tourist' | 'business' | 'admin')}
+                                    >
+                                        <option value="all">Todos los roles</option>
+                                        <option value="tourist">🧳 Turistas</option>
+                                        <option value="business">🏢 Negocios</option>
+                                        <option value="admin">⚙️ Administradores</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Estadísticas */}
+                            <div style={{ 
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                                gap: '15px'
+                            }}>
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'white',
+                                    borderRadius: '12px',
+                                    border: '2px solid #e2e8f0',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: COLOR_BLUE }}>
+                                        {users.length}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>Total Usuarios</div>
+                                </div>
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'white',
+                                    borderRadius: '12px',
+                                    border: '2px solid #e2e8f0',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#F1C40F' }}>
+                                        {users.filter(u => u.role === 'tourist').length}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>Turistas</div>
+                                </div>
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'white',
+                                    borderRadius: '12px',
+                                    border: '2px solid #e2e8f0',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10B981' }}>
+                                        {users.filter(u => u.role === 'business').length}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>Negocios</div>
+                                </div>
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'white',
+                                    borderRadius: '12px',
+                                    border: '2px solid #e2e8f0',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#EF4444' }}>
+                                        {users.filter(u => u.role === 'admin').length}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>Administradores</div>
+                                </div>
+                            </div>
+
+                            {/* Tabla de Usuarios */}
+                            <div style={{
+                                overflowX: 'auto',
+                                borderRadius: '12px',
+                                border: `2px solid ${COLOR_GOLD}33`
+                            }}>
+                                <table style={{
+                                    width: '100%',
+                                    borderCollapse: 'collapse',
+                                    backgroundColor: 'white'
+                                }}>
+                                    <thead>
+                                        <tr style={{ 
+                                            background: `${COLOR_GOLD}22`,
+                                            borderBottom: `2px solid ${COLOR_GOLD}33`
+                                        }}>
+                                            <th style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Nombre</th>
+                                            <th style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Email</th>
+                                            <th style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Rol</th>
+                                            <th style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Ubicación</th>
+                                            <th style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Registro</th>
+                                            <th style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', color: COLOR_BLUE, fontSize: '14px' }}>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {users
+                                            .filter(u => {
+                                                const matchesSearch = userSearchTerm === '' || 
+                                                    u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                                    u.email?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                                    u.city?.toLowerCase().includes(userSearchTerm.toLowerCase());
+                                                const matchesRole = userRoleFilter === 'all' || u.role === userRoleFilter;
+                                                return matchesSearch && matchesRole;
+                                            })
+                                            .map((user) => (
+                                                <tr key={user.id} style={{
+                                                    borderBottom: `1px solid #e2e8f0`,
+                                                    transition: 'background-color 0.2s'
+                                                }}>
+                                                    <td style={{ padding: '15px', fontSize: '14px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            {user.avatar_url && (
+                                                                <NextImage src={user.avatar_url} alt={user.name || 'Usuario'} width={32} height={32} style={{
+                                                                    borderRadius: '50%',
+                                                                    objectFit: 'cover'
+                                                                }} />
+                                                            )}
+                                                            <span style={{ fontWeight: '500' }}>{user.name || 'Sin nombre'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '15px', fontSize: '14px', color: '#333', fontWeight: '500', minWidth: '200px', wordBreak: 'break-word' }}>
+                                                        {user.email}
+                                                    </td>
+                                                    <td style={{ padding: '15px', fontSize: '13px' }}>
+                                                        <span style={{
+                                                            padding: '4px 12px',
+                                                            borderRadius: '20px',
+                                                            background: user.role === 'admin' ? '#EF4444' : 
+                                                                       user.role === 'business' ? '#10B981' : 
+                                                                       '#F1C40F',
+                                                            color: user.role === 'admin' ? 'white' :
+                                                                   user.role === 'business' ? 'white' :
+                                                                   '#000',
+                                                            fontWeight: 'bold',
+                                                            display: 'inline-block'
+                                                        }}>
+                                                            {user.role === 'tourist' ? '🧳' : 
+                                                             user.role === 'business' ? '🏢' : 
+                                                             '⚙️'} {user.role}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                                                        {user.city && user.country ? `${user.city}, ${user.country}` : user.city || user.country || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '15px', fontSize: '13px', color: '#666' }}>
+                                                        {user.created_at ? new Date(user.created_at).toLocaleDateString('es-AR') : '-'}
+                                                    </td>
+                                                    <td style={{ padding: '15px', textAlign: 'center' }}>
+                                                        <button 
+                                                            onClick={() => {
+                                                                setSelectedUserDetail(user);
+                                                                setShowUserModal(true);
+                                                            }}
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                background: COLOR_BLUE,
+                                                                color: 'white',
+                                                                border: 'none',
+                                                                borderRadius: '6px',
+                                                                cursor: 'pointer',
+                                                                fontSize: '12px',
+                                                                fontWeight: 'bold'
+                                                            }}
+                                                        >
+                                                            Ver Detalles
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {(users.filter(u => {
+                                const matchesSearch = userSearchTerm === '' || 
+                                    u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                    u.email?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                    u.city?.toLowerCase().includes(userSearchTerm.toLowerCase());
+                                const matchesRole = userRoleFilter === 'all' || u.role === userRoleFilter;
+                                return matchesSearch && matchesRole;
+                            }).length === 0) && (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '40px',
+                                    color: '#999',
+                                    background: '#f9fafb',
+                                    borderRadius: '12px'
+                                }}>
+                                    <p style={{ fontSize: '16px', fontWeight: 'bold' }}>No se encontraron usuarios</p>
+                                    <p style={{ fontSize: '14px' }}>Intenta con otros términos de búsqueda</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal de Detalles de Usuario */}
+                {showUserModal && selectedUserDetail && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        padding: '20px'
+                    }}>
+                        <div style={{
+                            background: 'white',
+                            borderRadius: '16px',
+                            padding: '30px',
+                            maxWidth: '500px',
+                            width: '100%',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h2 style={{ margin: 0, color: COLOR_BLUE }}>Detalles del Usuario</h2>
+                                <button 
+                                    onClick={() => setShowUserModal(false)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        fontSize: '24px',
+                                        cursor: 'pointer',
+                                        color: '#999'
+                                    }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            {/* Información básica */}
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '20px',
+                                marginBottom: '25px'
+                            }}>
+                                {selectedUserDetail.avatar_url && (
+                                    <div style={{ textAlign: 'center' }}>
+                                        <NextImage 
+                                            src={selectedUserDetail.avatar_url} 
+                                            alt={selectedUserDetail.name || 'Usuario'}
+                                            width={80}
+                                            height={80}
+                                            style={{
+                                                borderRadius: '50%',
+                                                objectFit: 'cover',
+                                                border: `3px solid ${COLOR_GOLD}`
+                                            }}
+                                        />
+                                    </div>
+                                )}
+
+                                <div style={{ background: '#f9fafb', padding: '15px', borderRadius: '8px' }}>
+                                    <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '12px', fontWeight: 'bold' }}>NOMBRE</p>
+                                    <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>{selectedUserDetail.name}</p>
+                                </div>
+
+                                <div style={{ background: '#f9fafb', padding: '15px', borderRadius: '8px' }}>
+                                    <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '12px', fontWeight: 'bold' }}>EMAIL</p>
+                                    <p style={{ margin: 0, fontSize: '14px' }}>{selectedUserDetail.email}</p>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                                    <div style={{ background: '#f9fafb', padding: '15px', borderRadius: '8px' }}>
+                                        <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '12px', fontWeight: 'bold' }}>ROL</p>
+                                        <select 
+                                            value={editingUserRole || selectedUserDetail.role}
+                                            onChange={(e) => setEditingUserRole(e.target.value as 'tourist' | 'business' | 'admin')}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                borderRadius: '6px',
+                                                border: `2px solid ${COLOR_GOLD}`,
+                                                background: 'white',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <option value="tourist">🧳 Turista</option>
+                                            <option value="business">🏢 Negocio</option>
+                                            <option value="admin">⚙️ Administrador</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ background: '#f9fafb', padding: '15px', borderRadius: '8px' }}>
+                                        <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '12px', fontWeight: 'bold' }}>REGISTRO</p>
+                                        <p style={{ margin: 0, fontSize: '13px' }}>
+                                            {selectedUserDetail.created_at ? new Date(selectedUserDetail.created_at).toLocaleDateString('es-AR') : '-'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {(selectedUserDetail.city || selectedUserDetail.country || selectedUserDetail.age || selectedUserDetail.phone) && (
+                                    <>
+                                        <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '15px 0' }} />
+                                        <h4 style={{ margin: '10px 0 15px 0', color: COLOR_BLUE, fontSize: '14px', fontWeight: 'bold' }}>INFORMACIÓN ADICIONAL</h4>
+                                        
+                                        {selectedUserDetail.city && (
+                                            <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                                                <strong>Ciudad:</strong> {selectedUserDetail.city}
+                                            </div>
+                                        )}
+                                        {selectedUserDetail.country && (
+                                            <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                                                <strong>País:</strong> {selectedUserDetail.country}
+                                            </div>
+                                        )}
+                                        {selectedUserDetail.age && (
+                                            <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                                                <strong>Edad:</strong> {selectedUserDetail.age} años
+                                            </div>
+                                        )}
+                                        {selectedUserDetail.phone && (
+                                            <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                                                <strong>Teléfono:</strong> {selectedUserDetail.phone}
+                                            </div>
+                                        )}
+                                        {selectedUserDetail.bio && (
+                                            <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                                                <strong>Biografía:</strong> {selectedUserDetail.bio}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Botones de acción */}
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button 
+                                    onClick={async () => {
+                                        if (editingUserRole && editingUserRole !== selectedUserDetail.role) {
+                                            const { error } = await supabase
+                                                .from('profiles')
+                                                .update({ role: editingUserRole })
+                                                .eq('id', selectedUserDetail.id);
+                                            
+                                            if (!error) {
+                                                console.log('✅ Rol actualizado:', editingUserRole);
+                                                setEditingUserRole(null);
+                                                fetchUsers();
+                                                alert(`Rol actualizado a: ${editingUserRole}`);
+                                            } else {
+                                                alert(getErrorMessage(error));
+                                            }
+                                        }
+                                        setShowUserModal(false);
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: COLOR_BLUE,
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    {editingUserRole ? 'Guardar Cambios' : 'Guardar'}
+                                </button>
+                                <button 
+                                    onClick={() => setShowUserModal(false)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: '#e2e8f0',
+                                        color: '#333',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
