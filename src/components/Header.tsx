@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import UserAvatar from './UserAvatar';
+import WeatherWidget from './WeatherWidget';
 import { useI18n } from '@/i18n/LanguageProvider';
 
 const COLOR_GOLD = "#F1C40F";
@@ -135,6 +136,9 @@ export default function Header() {
       </Link>
       
       <nav style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, marginLeft: 'auto' }}>
+        {/* Weather Widget */}
+        {!isMobile && <WeatherWidget />}
+        
         {!isMobile && (
           <Link href="/explorar" style={{ 
             color: COLOR_WHITE, 

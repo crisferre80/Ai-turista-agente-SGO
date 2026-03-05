@@ -4,8 +4,9 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { generateUniqueFileName } from '@/lib/sanitize-filename';
-import { getErrorMessage, logError } from '@/lib/error-handler';
+import { getErrorMessage } from '@/lib/error-handler';
 import { takePhoto } from '@/lib/photoService';
+import { resizeImage } from '@/lib/image-utils';
 import Header from '@/components/Header';
 import { mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 
@@ -109,6 +110,20 @@ export default function ProfilePage() {
         notifications: true
     });
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
+
+    // when user chooses/photographs an avatar we resize immediately for preview/upload
+    const handleAvatarFile = async (file: File) => {
+        try {
+            const small = await resizeImage(file, 500, 500, 0.8);
+            file = small; // use resized version
+        } catch (e) {
+            console.warn('resize avatar fallo, usando original', e);
+        }
+        setAvatarFile(file);
+        if (profile) {
+            setProfile({ ...profile, avatar_url: URL.createObjectURL(file) });
+        }
+    };
 
     useEffect(() => {
         fetchProfile();
@@ -300,13 +315,21 @@ export default function ProfilePage() {
         let avatarUrl = profile?.avatar_url;
 
         if (avatarFile) {
-            const fileExt = avatarFile.name.split('.').pop();
+            // reduce tamaño/comprimir antes de enviar
+            let fileToSend = avatarFile;
+            try {
+                fileToSend = await resizeImage(avatarFile, 500, 500, 0.8);
+            } catch (e) {
+                console.warn('No se pudo redimensionar avatar, se sube original', e);
+            }
+
+            const fileExt = fileToSend.name.split('.').pop();
             const fileName = generateUniqueFileName(`avatar-${Date.now()}.${fileExt}`);
             const filePath = `avatars/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('images')
-                .upload(filePath, avatarFile);
+                .upload(filePath, fileToSend);
 
             if (!uploadError) {
                 const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
@@ -344,11 +367,6 @@ export default function ProfilePage() {
                     would_return: formData.would_return,
                     overall_satisfaction: formData.overall_satisfaction,
                     improvement_suggestions: formData.improvement_suggestions,
-                    preferences: {
-                        favorite_categories: formData.favorite_categories,
-                        language: formData.language,
-                        notifications: formData.notifications
-                    },
                     updated_at: new Date()
                 });
 
@@ -366,12 +384,7 @@ export default function ProfilePage() {
                     ...profile, 
                     name: formData.name, 
                     bio: formData.bio, 
-                    avatar_url: avatarUrl || profile.avatar_url,
-                    preferences: {
-                        favorite_categories: formData.favorite_categories,
-                        language: formData.language,
-                        notifications: formData.notifications
-                    }
+                    avatar_url: avatarUrl || profile.avatar_url
                 });
             }
             setEditing(false);
@@ -466,7 +479,7 @@ export default function ProfilePage() {
                         flexWrap: 'wrap'
                     }}>
                         {/* Avatar Section */}
-                        <div style={{ position: 'relative' }}>
+                        <div style={{ position: 'relative', width: '120px', height: '120px', flexShrink: 0 }}>
                             <Image
                                 src={profile?.avatar_url || 'https://via.placeholder.com/150'}
                                 alt="Avatar"
@@ -474,6 +487,8 @@ export default function ProfilePage() {
                                 height={120}
                                 priority={false}
                                 style={{
+                                    width: '120px',
+                                    height: '120px',
                                     borderRadius: '50%',
                                     objectFit: 'cover',
                                     border: `4px solid ${COLOR_GOLD}`,
@@ -486,10 +501,7 @@ export default function ProfilePage() {
                                         const photo = await takePhoto();
                                         if (photo) {
                                             const file = new File([photo.blob], `avatar-${Date.now()}.${photo.format}`, { type: `image/${photo.format}` });
-                                            setAvatarFile(file);
-                                            if (profile) {
-                                                setProfile({ ...profile, avatar_url: URL.createObjectURL(file) });
-                                            }
+                                            await handleAvatarFile(file);
                                         }
                                     }}
                                     style={{

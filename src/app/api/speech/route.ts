@@ -80,11 +80,17 @@ export async function POST(req: Request) {
             // actually call Google TTS API
             const apiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`;
             console.log('Google TTS request to', apiUrl, 'body', requestBody);
+            
+            // Create abort controller with 10 second timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody),
-            });
+                signal: controller.signal
+            }).finally(() => clearTimeout(timeoutId));
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -150,6 +156,16 @@ export async function POST(req: Request) {
 
     } catch (error) {
         console.error('Error in speech route:', error);
+        
+        // Handle timeout/abort errors
+        if (error instanceof Error && error.name === 'AbortError') {
+            console.error('🕐 TTS request timeout (10s)');
+            return NextResponse.json({ 
+                error: 'Request timed out. Service may be overloaded.',
+                fallback: true 
+            }, { status: 504 });
+        }
+        
         const apiError = (error as any);
         if (apiError && typeof apiError === 'object' && 'status' in apiError) {
             if (apiError.status === 429) return NextResponse.json({ error: 'Quota exceeded', fallback: true }, { status: 429 });

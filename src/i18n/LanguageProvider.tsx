@@ -88,8 +88,14 @@ export const LanguageProvider: React.FC<{
   }, [locale]);
 
   const t = (key: string, params?: Record<string, string | number>): string => {
+    // lookup order: current locale -> spanish (default) -> english -> pt -> fr -> key
     let str =
-      translations[locale]?.[key] || translations['es']?.[key] || key;
+      translations[locale]?.[key] ||
+      translations['es']?.[key] ||
+      translations['en']?.[key] ||
+      translations['pt']?.[key] ||
+      translations['fr']?.[key] ||
+      key;
     if (params) {
       Object.entries(params).forEach(([k, v]) => {
         str = str.replace(new RegExp(`\{${k}\}`, 'g'), String(v));

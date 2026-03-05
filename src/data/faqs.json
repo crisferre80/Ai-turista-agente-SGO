@@ -1,0 +1,116 @@
+{
+  "es": {
+    "historia_santiago": {
+      "keywords": ["historia", "historico", "conocer historia", "historia santiago", "pasado", "colonial", "antiguo"],
+      "reply": "¡Perfecto! Para conocer la historia de Santiago del Estero te recomiendo visitar el **Centro Cultural del Bicentenario (CCB)**. Es el espacio cultural más importante de la provincia, con exposiciones sobre historia, patrimonio y cultura santiagueña. También puedes visitar el Museo de Ciencias Antropológicas y Naturales, y recorrer el casco histórico con sus edificios coloniales.",
+      "placeId": "b9d806e2-27c2-4f22-bcf4-264316c34288",
+      "placeName": "Centro Cultural del Bicentenario"
+    },
+    "museos": {
+      "keywords": ["museo", "museos", "exposiciones", "arte", "cultura"],
+      "reply": "Santiago del Estero tiene varios museos imperdibles:\n\n- **Centro Cultural del Bicentenario (CCB)**: El principal, con historia y cultura local\n- **Museo de Ciencias Antropológicas y Naturales**: Arqueología y paleontología\n- **Museo Histórico Provincial**: En la Casa de Rosas\n\nTe recomiendo comenzar por el CCB, es una experiencia completa.",
+      "placeId": "b9d806e2-27c2-4f22-bcf4-264316c34288",
+      "placeName": "Centro Cultural del Bicentenario"
+    },
+    "ccb_info": {
+      "keywords": ["ccb", "centro cultural", "bicentenario", "centro cultural bicentenario"],
+      "reply": "El **Centro Cultural del Bicentenario (CCB)** es el espacio cultural más emblemático de Santiago del Estero. Inaugurado para los festejos del Bicentenario, alberga exposiciones de arte, historia y patrimonio provincial. Cuenta con salas de exhibición, auditorio, biblioteca y espacios para eventos culturales. Es parada obligada para conocer la identidad santiagueña.",
+      "placeId": "b9d806e2-27c2-4f22-bcf4-264316c34288",
+      "placeName": "Centro Cultural del Bicentenario"
+    },
+    "que_hacer": {
+      "keywords": ["que hacer", "qué hacer", "actividades", "planes", "recomendaciones", "sugerencias"],
+      "reply": "¡Hay mucho para hacer en Santiago del Estero! Algunas opciones:\n\n🏛️ **Cultura**: Visita el CCB, Museo Histórico, recorre el casco histórico\n🌳 **Naturaleza**: Termas de Río Hondo, Dique Frontal, Parque Aguirre\n🎵 **Folclore**: Peñas, festivales de chacarera, música en vivo\n🍴 **Gastronomía**: Empanadas, locro, tamales en restaurantes tradicionales\n\n¿Te interesa algo en particular?",
+      "placeId": null,
+      "placeName": null
+    },
+    "termas": {
+      "keywords": ["termas", "aguas termales", "rio hondo", "relax", "spa"],
+      "reply": "Las **Termas de Río Hondo** son famosas a nivel nacional por sus aguas termales con propiedades terapéuticas. Ubicadas a 65 km de la capital, son ideales para relajarse y disfrutar de tratamientos de spa. La ciudad termal cuenta con numerosos hoteles con piletas termales, restaurantes y un hermoso lago para actividades náuticas.",
+      "placeId": null,
+      "placeName": "Termas de Río Hondo"
+    },
+    "comida_tipica": {
+      "keywords": ["comida", "gastronomia", "comer", "empanadas", "platos", "tipico", "regional"],
+      "reply": "La gastronomía santiagueña es deliciosa y variada:\n\n🥟 **Empanadas**: Las más famosas del norte argentino (cortadas a cuchillo)\n🍲 **Locro**: Guiso tradicional con maíz, carne y verduras\n🫔 **Tamales**: Masa de maíz con relleno envuelto en chala\n🥘 **Asado con cuero**: Especialidad regional\n🧉 **Mate cocido con leche**: Típico desayuno santiagueño\n\nTe puedo recomendar restaurantes tradicionales si querés.",
+      "placeId": null,
+      "placeName": null
+    },
+    "iglesias": {
+      "keywords": ["iglesia", "catedral", "templo", "religioso", "capilla", "santuario"],
+      "reply": "Las principales iglesias y sitios religiosos de Santiago del Estero:\n\n⛪ **Catedral Basílica**: En Plaza Libertad, estilo colonial\n🙏 **Convento de Santo Domingo**: Histórico convento del siglo XVI\n✨ **Santuario de la Virgen de Loreto**: Patrona de la aviación argentina\n\nLa Catedral es especialmente hermosa y está en el corazón de la ciudad.",
+      "placeId": null,
+      "placeName": null
+    },
+    "plaza_libertad": {
+      "keywords": ["plaza libertad", "plaza principal", "plaza", "centro"],
+      "reply": "La **Plaza Libertad** es el corazón de Santiago del Estero. Frente a la Catedral Basílica y rodeada de edificios históricos, es el punto de encuentro de santiagueños y turistas. Tiene hermosos árboles centenarios, bancos para descansar, y es ideal para pasear y disfrutar del ambiente de la ciudad. Por las tardes se llena de vida con artesanos y músicos callejeros.",
+      "placeId": null,
+      "placeName": "Plaza Libertad"
+    },
+    "como_llegar": {
+      "keywords": ["como llegar", "cómo llegar", "transporte", "omnibus", "terminal", "colectivo", "bus"],
+      "reply": "Para moverte en Santiago del Estero:\n\n🚌 **Terminal de Ómnibus**: Conecta con todo el país, muy moderna y bien ubicada\n🚕 **Taxis/Remises**: Abundantes y económicos en toda la ciudad\n🚗 **Auto particular**: La ciudad es fácil de recorrer, estacionamiento accesible\n📍 **A pie**: El centro histórico es compacto y se recorre caminando\n\n¿Necesitas indicaciones para llegar a algún lugar específico?",
+      "placeId": "1ef96501-ae15-4df7-93b1-4d072fdd2d4f",
+      "placeName": "Terminal de Omnibus de Santiago del Estero"
+    },
+    "parques_naturaleza": {
+      "keywords": ["parque", "verde", "naturaleza", "aire libre", "picnic", "arboles"],
+      "reply": "Los mejores espacios verdes de Santiago del Estero:\n\n🌳 **Parque Aguirre**: El pulmón verde de la ciudad, ideal para caminatas y deportes\n🌊 **Dique Frontal**: Lago artificial con vistas hermosas, deportes acuáticos\n🏞️ **Costanera**: Para pasear, hacer ejercicio y disfrutar del atardecer\n\nEl Parque Aguirre es perfecto para una tarde de relax o picnic familiar.",
+      "placeId": null,
+      "placeName": null
+    },
+    "vida_nocturna": {
+      "keywords": ["noche", "nocturna", "bailar", "bar", "boliche", "diversion", "salir"],
+      "reply": "La vida nocturna santiagueña es variada:\n\n🎵 **Peñas folclóricas**: Música en vivo, chacarera y zambas (¡imperdible!)\n🍺 **Bares y cervecerías**: En el centro y zona universitaria\n💃 **Boliches**: Especialmente activos los fines de semana\n🎭 **Teatro y espectáculos**: En el CCB y otros espacios culturales\n\nLas peñas son la experiencia más auténtica para conocer la cultura local.",
+      "placeId": null,
+      "placeName": null
+    },
+    "cuando_visitar": {
+      "keywords": ["cuando ir", "cuándo ir", "mejor epoca", "mejor época", "temporada", "clima"],
+      "reply": "**Mejor época para visitar Santiago del Estero:**\n\n🌸 **Primavera (Sep-Nov)**: Clima agradable, ideal para turismo\n☀️ **Verano (Dic-Feb)**: Muy caluroso (35-40°C), perfecto para termas\n🍂 **Otoño (Mar-May)**: Temperaturas suaves, época de festivales\n❄️ **Invierno (Jun-Ago)**: Suave (15-20°C), ideal para recorrer la ciudad\n\nEvita el verano si no toleras el calor intenso. Otoño y primavera son ideales.",
+      "placeId": null,
+      "placeName": null
+    },
+    "saludos": {
+      "keywords": ["hola", "buenos dias", "buenas tardes", "buenas noches", "hey", "ola"],
+      "reply": "¡Hola, chango! Soy Santi, tu guía virtual de Santiago del Estero 😊🌟\n\nEstoy aquí para ayudarte a descubrir todos los rincones de mi hermosa provincia. Puedo recomendarte lugares históricos, museos, restaurantes, parques y mucho más.\n\n¿Qué te gustaría conocer o hacer hoy?",
+      "placeId": null,
+      "placeName": null
+    }
+  },
+  "en": {
+    "santiago_history": {
+      "keywords": ["history", "historic", "colonial", "past", "antigua", "heritage"],
+      "reply": "To learn about the history of Santiago del Estero, I recommend visiting the **Centro Cultural del Bicentenario (CCB)**. It's the most important cultural space in the province, with exhibitions on history, heritage and local culture. You can also visit the Museum of Anthropological and Natural Sciences, and tour the historic center with its colonial buildings.",
+      "placeId": "b9d806e2-27c2-4f22-bcf4-264316c34288",
+      "placeName": "Centro Cultural del Bicentenario"
+    },
+    "what_to_do": {
+      "keywords": ["what to do", "activities", "things to do", "recommendations", "suggestions"],
+      "reply": "There's plenty to do in Santiago del Estero!\n\n🏛️ **Culture**: Visit CCB, Historic Museum, tour the old town\n🌳 **Nature**: Termas de Río Hondo, Dique Frontal, Aguirre Park\n🎵 **Folklore**: Peñas, chacarera festivals, live music\n🍴 **Food**: Empanadas, locro, tamales at traditional restaurants\n\nWhat interests you most?",
+      "placeId": null,
+      "placeName": null
+    },
+    "greetings": {
+      "keywords": ["hello", "hi", "hey", "good morning", "good afternoon"],
+      "reply": "Hello! I'm Santi, your virtual guide to Santiago del Estero 😊🌟\n\nI'm here to help you discover all the corners of this beautiful province. I can recommend historical sites, museums, restaurants, parks and much more.\n\nWhat would you like to know or do today?",
+      "placeId": null,
+      "placeName": null
+    }
+  },
+  "pt": {
+    "historia_santiago": {
+      "keywords": ["historia", "historico", "conhecer historia", "passado", "colonial", "antigo"],
+      "reply": "Para conhecer a história de Santiago del Estero, recomendo visitar o **Centro Cultural del Bicentenario (CCB)**. É o espaço cultural mais importante da província, com exposições sobre história, patrimônio e cultura local. Você também pode visitar o Museu de Ciências Antropológicas e Naturais, e percorrer o centro histórico com seus edifícios coloniais.",
+      "placeId": "b9d806e2-27c2-4f22-bcf4-264316c34288",
+      "placeName": "Centro Cultural del Bicentenario"
+    },
+    "saudacoes": {
+      "keywords": ["ola", "oi", "bom dia", "boa tarde", "boa noite"],
+      "reply": "Olá! Sou Santi, seu guia virtual de Santiago del Estero 😊🌟\n\nEstou aqui para ajudá-lo a descobrir todos os cantos desta linda província. Posso recomendar locais históricos, museus, restaurantes, parques e muito mais.\n\nO que você gostaria de conhecer ou fazer hoje?",
+      "placeId": null,
+      "placeName": null
+    }
+  }
+}

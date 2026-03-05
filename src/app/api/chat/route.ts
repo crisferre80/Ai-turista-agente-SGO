@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getGeminiModel } from '@/lib/gemini';
 import { createClient } from '@supabase/supabase-js';
+import { querySanti, isLocationQuery, isRouteQuery } from '@/lib/queryEngine';
 
 // helper to pick localized description from DB objects
 const getLocaleDesc = (obj: any, locale: string) => {
@@ -130,10 +131,35 @@ function checkRateLimit(userId: string): { allowed: boolean; remainingRequests: 
 
 export async function POST(req: Request) {
     try {
-        const { messages, userLocation, locale: reqLocale } = await req.json();
+        const { messages, userLocation, weather: reqWeather, locale: reqLocale } = await req.json();
         const locale = reqLocale || 'es'; // default to spanish if missing
         
         console.log('🌐 Chat API received request with locale:', locale, 'reqLocale:', reqLocale);
+
+        // --- weather context (optional) ------------------------------------------------
+        let weatherContext = '';
+        // prefer weather provided by client (widget) if available
+        if (reqWeather && typeof reqWeather === 'object' && reqWeather.description) {
+            const desc = reqWeather.description;
+            const temp = reqWeather.temp;
+            weatherContext = `Clima actual (provisto por el cliente): ${desc}${temp != null ? `, ${temp}°C` : ''}. ` +
+                             'Usa esta información para adaptar tus recomendaciones (p.ej. si está lloviendo evita parques al aire libre y sugiere museos o compras, si hace mucho calor habla de actividades frescas).';
+        } else if (userLocation && userLocation.latitude != null && userLocation.longitude != null && process.env.OPENWEATHER_API_KEY) {
+            try {
+                const wurl = `https://api.openweathermap.org/data/2.5/weather?lat=${userLocation.latitude}&lon=${userLocation.longitude}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric&lang=es`;
+                const wres = await fetch(wurl);
+                if (wres.ok) {
+                    const wdata = await wres.json();
+                    const desc = wdata.weather?.[0]?.description || '';
+                    const temp = wdata.main?.temp;
+                    weatherContext = `Clima actual en la ubicación del usuario: ${desc}${temp != null ? `, ${temp}°C` : ''}. ` +
+                                     'Usa esta información para adaptar tus recomendaciones (p.ej. si está lloviendo evita parques al aire libre y sugiere museos o compras, si hace mucho calor habla de actividades frescas).';
+                }
+            } catch (e) {
+                console.warn('No se pudo obtener contexto del clima:', e);
+            }
+        }
+        // --------------------------------------------------------------------------------
 
         if (!messages) {
             return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
@@ -184,8 +210,36 @@ export async function POST(req: Request) {
             }, { status: 429 });
         }
 
-        // Detectar consultas de RUTA/DIRECCIONES (prioridad 1)
+        // ============================================================
+        // PRIORIDAD 0: QUERY ENGINE - Buscar en FAQs primero
+        // ============================================================
         const lastMessage = messages[messages.length - 1];
+        const userQuery = (lastMessage?.content?.toString() || '').toLowerCase();
+        
+        console.log('🎯 PASO 0: Consultando Query Engine (FAQs)...');
+        const faqResult = await querySanti(userQuery, locale);
+        
+        // Si encontramos una FAQ con alta confianza, responder inmediatamente
+        if (faqResult.source === 'faq' && faqResult.confidence === 'high') {
+            console.log('⚡ RESPUESTA INSTANTÁNEA desde FAQ:', {
+                score: faqResult.score,
+                keywords: faqResult.matchedKeywords,
+                hasPlace: !!faqResult.placeId
+            });
+            
+            return NextResponse.json({
+                reply: faqResult.reply,
+                source: 'faq',
+                placeId: faqResult.placeId,
+                placeName: faqResult.placeName,
+                isInfoQuery: true, // FAQs son siempre informativas
+                isRouteOnly: false
+            });
+        }
+        
+        console.log('🔄 FAQ confidence bajo, continuando con búsqueda completa');
+        
+        // Detectar consultas de RUTA/DIRECCIONES (prioridad 1)
         const routeKeywords = [
             'cómo llegar', 'como llegar', 'cómo llego', 'como llego',
             'cómo voy', 'como voy', 'cómo ir', 'como ir',
@@ -288,10 +342,8 @@ export async function POST(req: Request) {
 
         // ============================================================
         // PASO 1: BUSCAR DIRECTAMENTE EN LA BASE DE DATOS LOCAL
-        // Antes de llamar a Gemini, intentar encontrar un lugar en la BD
+        // Si no hubo match en FAQs, buscar en la BD local
         // ============================================================
-        
-        const userQuery = lastMessage?.content?.toLowerCase() || '';
         
         console.log('🔍 PASO 1: Buscando en BD local antes de usar Gemini...');
         console.log('📝 Consulta del usuario:', userQuery);
@@ -337,6 +389,26 @@ export async function POST(req: Request) {
         
         console.log('🔑 Palabras clave expandidas con sinónimos:', allSearchWords.join(', '));
         
+        // Palabras genéricas que NO deben dar score (como "santiago", "estero")
+        const genericWords = new Set(['santiago', 'estero', 'ciudad', 'provincia']);
+        
+        // Palabras clave IMPORTANTES que requieren categoría relevante
+        const importantTopics = {
+            historia: ['museo', 'historico', 'cultural', 'patrimonio', 'colonial', 'monumento'],
+            arte: ['museo', 'galeria', 'cultural', 'arte', 'pintura', 'escultura'],
+            natura: ['parque', 'reserva', 'natural', 'ecologico', 'flora', 'fauna'],
+            religion: ['iglesia', 'templo', 'religioso', 'catedral', 'capilla', 'santuario']
+        };
+        
+        // Detectar tema principal de la consulta
+        let mainTopic: string | null = null;
+        for (const [topic, keywords] of Object.entries(importantTopics)) {
+            if (allSearchWords.some(w => keywords.includes(w) || w === topic)) {
+                mainTopic = topic;
+                break;
+            }
+        }
+        
         // Buscar coincidencias en attractions
         let foundPlace = null;
         let foundPlaceType = null;
@@ -355,12 +427,32 @@ export async function POST(req: Request) {
                 if (name === normalizedQuery) {
                     score = 100;
                 } else {
-                    // Contar cuántas palabras clave coinciden
+                    // Contar cuántas palabras clave coinciden (excluyendo genéricas)
                     for (const word of allSearchWords) {
-                        if (name.includes(word)) score += 15;  // Aumentado de 10
-                        if (category.includes(word)) score += 8;  // Aumentado de 5
-                        if (description.includes(word)) score += 4;  // Aumentado de 3
-                        if (infoExtra.includes(word)) score += 3;
+                        // Ignorar palabras genéricas
+                        if (genericWords.has(word)) continue;
+                        
+                        if (name.includes(word)) score += 15;
+                        if (category.includes(word)) score += 25;  // MUCHO más peso en categoría
+                        if (description.includes(word)) score += 8;
+                        if (infoExtra.includes(word)) score += 5;
+                    }
+                    
+                    // BOOST ESPECIAL: Si hay tema principal detectado, verificar si la categoría es relevante
+                    if (mainTopic && importantTopics[mainTopic as keyof typeof importantTopics]) {
+                        const relevantCategories = importantTopics[mainTopic as keyof typeof importantTopics];
+                        const hasRelevantCategory = relevantCategories.some(cat => 
+                            category.includes(cat) || name.includes(cat) || description.includes(cat)
+                        );
+                        
+                        if (hasRelevantCategory) {
+                            score += 50;  // GRAN BOOST por categoría relevante
+                            console.log(`🎯 BOOST +50 para "${attraction.name}": categoría relevante para tema "${mainTopic}"`);
+                        } else if (score > 0) {
+                            // PENALIZACIÓN: Si tiene algo de score pero NO en categoría relevante
+                            score = Math.floor(score * 0.3);  // Reducir al 30%
+                            console.log(`⚠️ PENALIZACIÓN para "${attraction.name}": NO relevante para tema "${mainTopic}"`);
+                        }
                     }
                 }
                 
@@ -372,8 +464,8 @@ export async function POST(req: Request) {
             }
         }
         
-        // Buscar en businesses solo si no encontró buena coincidencia (score >= 10)
-        if (bestScore < 10 && businesses && businesses.length > 0) {
+        // Buscar en businesses solo si no encontró buena coincidencia (score >= 20)
+        if (bestScore < 20 && businesses && businesses.length > 0) {
             for (const business of businesses) {
                 const name = normalizeText(business.name as string);
                 const category = normalizeText((business.category as string) || '');
@@ -385,9 +477,26 @@ export async function POST(req: Request) {
                     score = 100;
                 } else {
                     for (const word of allSearchWords) {
+                        // Ignorar palabras genéricas
+                        if (genericWords.has(word)) continue;
+                        
                         if (name.includes(word)) score += 15;
-                        if (category.includes(word)) score += 8;
+                        if (category.includes(word)) score += 25;
                         if (contact.includes(word)) score += 3;
+                    }
+                    
+                    // Aplicar boost/penalización por tema si aplica
+                    if (mainTopic && importantTopics[mainTopic as keyof typeof importantTopics]) {
+                        const relevantCategories = importantTopics[mainTopic as keyof typeof importantTopics];
+                        const hasRelevantCategory = relevantCategories.some(cat => 
+                            category.includes(cat) || name.includes(cat)
+                        );
+                        
+                        if (hasRelevantCategory) {
+                            score += 50;
+                        } else if (score > 0) {
+                            score = Math.floor(score * 0.3);
+                        }
                     }
                 }
                 
@@ -401,15 +510,15 @@ export async function POST(req: Request) {
         
         console.log(`🎯 Mejor coincidencia: ${foundPlace ? (foundPlace.name as string) : 'NINGUNA'} (score: ${bestScore})`);
         
-        // Si encontramos un lugar con suficiente confianza (score >= 10), responder directamente sin Gemini
-        // Aumentado threshold de 5 a 10 para evitar resultados falsos
+        // Si encontramos un lugar con suficiente confianza (score >= 20), responder directamente sin Gemini
+        // Aumentado threshold de 10 a 20 para evitar resultados falsos positivos
         let reply: string = '';
         let placeId: string | null = null;
         let placeName: string | null = null;
         let placeDescription: string | null = null;
         let skipGemini = false;
         
-        if (foundPlace && bestScore >= 10) {
+        if (foundPlace && bestScore >= 20) {
             console.log('✅ Lugar encontrado en BD local (score suficientemente alto):', foundPlace.name);
             placeId = foundPlace.id;
             placeName = foundPlace.name as string;
@@ -444,7 +553,7 @@ export async function POST(req: Request) {
         } else {
             console.log('❌ No se encontró lugar en BD local con suficiente confianza, usando Gemini para búsqueda inteligente...');
             if (bestScore > 0) {
-                console.log(`⚠️ Score encontrado (${bestScore}) es menor que el threshold (10) - delegando a Gemini para análisis semántico`);
+                console.log(`⚠️ Score encontrado (${bestScore}) es menor que el threshold (20) - delegando a Gemini para análisis semántico`);
             }
         }
         
@@ -536,24 +645,26 @@ export async function POST(req: Request) {
     4. If you find places in the local list that match the query, RECOMMEND THEM FIRST mentioning they are registered in the app.
     5. If you DON'T find something in the local list, use your web knowledge but clarify: "I'm consulting my global database...".
     6. Always promote local tourism and be very friendly.
-    7. When recommending a specific place from "LOCAL REGISTERED INFORMATION", make sure to write its name EXACTLY as it appears in the list so the system can find it and show its location or route on the map automatically.
-    8. CRITICAL - ROUTE QUERIES: When the user asks "how to get", "directions", "how do I go" to a place:
+    7. Take into account the current weather context provided below; tailor your suggestions accordingly (e.g., if it's raining, prefer indoor activities like museums or shopping over parks or outdoor events, if it's sunny/hot favor outdoor experiences).
+    8. When recommending a specific place from "LOCAL REGISTERED INFORMATION", make sure to write its name EXACTLY as it appears in the list so the system can find it and show its location or route on the map automatically.
+    9. CRITICAL - ROUTE QUERIES: When the user asks "how to get", "directions", "how do I go" to a place:
        - Mention the EXACT name of the place in your answer only once
        - Say something brief like: "Sure! I'll show you the route to [PLACE NAME] on the map."
        - DON'T describe the place, DON'T give extra details, ONLY the route confirmation
        - The system will automatically show the route on the map
        - DON'T mention coordinates or specific locations in these cases
-    9. Differentiate between INFORMATION queries (show place details) and ROUTE queries (only draw path)
-    10. Be conversational but brief for route queries.
-    11. VIDEO SEARCH: When the user asks to see videos, show videos, or asks about events/shows (e.g., "marcha de los bombos", "carnival", "chacarera", "MotoGP", "football", etc.):
+    10. Differentiate between INFORMATION queries (show place details) and ROUTE queries (only draw path)
+    11. Be conversational but brief for route queries.
+    12. VIDEO SEARCH: When the user asks to see videos, show videos, or asks about events/shows (e.g., "marcha de los bombos", "carnival", "chacarera", "MotoGP", "football", etc.):
        - ALWAYS respond that you're searching for videos on YouTube
        - Say something like: "Sure! I'm searching for videos about [TOPIC] on YouTube..."
        - DON'T say you can't show videos
        - The system will automatically search and show a list of videos for the user to choose from
        - Be enthusiastic about the results you're going to show
-    ${userProfile ? `12. PERSONALIZATION: The user is already registered. Use their name (${userProfile.name}) naturally and DON'T ask for information you already have (name, age, origin). Personalize your recommendations based on their preferences.` : '12. If the user is not registered, you can ask their name and get to know them better.'}
+    ${userProfile ? `13. PERSONALIZATION: The user is already registered. Use their name (${userProfile.name}) naturally and DON'T ask for information you already have (name, age, origin). Personalize your recommendations based on their preferences.` : '13. If the user is not registered, you can ask their name and get to know them better.'}
 
     Current app context:
+    ${weatherContext}
     ${localContext}
     ${userContext}
     `;

@@ -72,6 +72,15 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
     const [promotionalMessages, setPromotionalMessages] = useState<PromoMessage[]>([]); // Promotional messages from DB (with optional media)
 
+    // weather data (mirrors widget) so we can send it to the chat backend
+    interface WeatherData {
+        temp: number;
+        description: string;
+        icon: string;
+        city: string;
+    }
+    const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+
 const [showVideoModal, setShowVideoModal] = useState(false); // Modal de video (buscar/YouTube)
 const [currentVideo, setCurrentVideo] = useState<{ title: string; url: string; videos?: { id: string; title: string; url: string; thumbnail: string; channelTitle: string; description: string }[] } | null>(null); // Video actual o lista de videos
 
@@ -97,6 +106,25 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
     // External triggers effects will be registered after callbacks are defined
 
     // Refs
+
+    // fetch weather for chat context (similar to WeatherWidget)
+    useEffect(() => {
+        if (!userLocation) return;
+        const fetchWeather = async (lat: number, lon: number) => {
+            try {
+                const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || res.statusText);
+                }
+                const data = await res.json();
+                setWeatherData(data);
+            } catch (err) {
+                console.warn('ChatInterface: could not load weather data', err);
+            }
+        };
+        fetchWeather(userLocation.latitude, userLocation.longitude);
+    }, [userLocation]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -535,6 +563,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 body: JSON.stringify({
                     messages: [...getApiMessages(), { role: 'user', content: textToSend }],
                     userLocation: userLocation || undefined,
+                    weather: weatherData || undefined,
                     locale // send current locale so backend can localize descriptions
                 }),
             });

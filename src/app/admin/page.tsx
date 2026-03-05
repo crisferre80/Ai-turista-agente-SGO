@@ -139,6 +139,68 @@ export default function AdminDashboard() {
     });
     const [placeDescLang, setPlaceDescLang] = useState<'es'|'en'|'pt'|'fr'>('es');
     const [newPhrase, setNewPhrase] = useState({ text: '', category: 'general' });
+
+    // estado para traducciones automáticas
+    const [translateItem, setTranslateItem] = useState<PlaceRecord | null>(null);
+    const [translateLang, setTranslateLang] = useState<'en'|'pt'|'fr'>('en');
+    const [translateField, setTranslateField] = useState<'name'|'description'>('description');
+    const [translateResult, setTranslateResult] = useState<string>('');
+    const [translating, setTranslating] = useState(false);
+
+    const closeTranslator = () => setTranslateItem(null);
+    const doTranslate = async () => {
+        if (!translateItem) return;
+        setTranslating(true);
+        const original = translateItem[translateField] || '';
+        const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: original, target: translateLang })
+        });
+        const json = await res.json();
+        setTranslating(false);
+        if (json.translatedText) setTranslateResult(json.translatedText);
+        else alert('Error traduciendo: ' + (json.error||''));
+    };
+    const saveTranslation = async () => {
+        if (!translateItem) return;
+        const col = `${translateField}_${translateLang}`;
+        await supabase.from('attractions').update({ [col]: translateResult }).eq('id', translateItem.id);
+        fetchData();
+        closeTranslator();
+    };
+
+    const TranslateModal = () => {
+        if (!translateItem) return null;
+        return (
+            <div style={{ position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000 }}>
+                <div style={{ background:'white',padding:20,borderRadius:12,width:'90%',maxWidth:500 }}>
+                    <h3>Traducir {translateField} a {translateLang.toUpperCase()}</h3>
+                    <textarea readOnly rows={3} style={{ width:'100%' }} value={translateItem[translateField] || ''} />
+                    <div style={{ margin:'10px 0' }}>
+                        <select value={translateLang} onChange={e=>setTranslateLang(e.target.value as any)}>
+                            <option value="en">English</option>
+                            <option value="pt">Português</option>
+                            <option value="fr">Français</option>
+                        </select>
+                        <select value={translateField} onChange={e=>setTranslateField(e.target.value as any)} style={{ marginLeft:8 }}>
+                            <option value="name">Nombre</option>
+                            <option value="description">Descripción</option>
+                        </select>
+                        <button onClick={doTranslate} disabled={translating} style={{ marginLeft:8 }}>{translating?'⏳':'Traducir'}</button>
+                    </div>
+                    {translateResult && (
+                        <>
+                            <textarea rows={3} style={{ width:'100%' }} value={translateResult} onChange={e=>setTranslateResult(e.target.value)} />
+                            <button onClick={saveTranslation} style={{ marginTop:8 }}>Guardar</button>
+                        </>
+                    )}
+                    <button onClick={closeTranslator} style={{ marginTop:12 }}>Cerrar</button>
+                </div>
+            </div>
+        );
+    };
+
     const [newPromotionalMessage, setNewPromotionalMessage] = useState({ business_name: '', message: '', message_en: '', message_pt: '', message_fr: '', category: 'general', priority: 5, show_probability: 25, image_url: '', video_url: '' });
     const [editingPromotionalMessageId, setEditingPromotionalMessageId] = useState<string | null>(null);
     const [newVideo, setNewVideo] = useState({ title: '', url: '' });
@@ -1942,6 +2004,8 @@ export default function AdminDashboard() {
                             </div>
                         </div>
                         
+                        {/* modal de traducción */}
+                        {translateItem && <TranslateModal />}
                         <div className="content-grid">
                             {places
                                 .filter(p => 
@@ -1959,8 +2023,46 @@ export default function AdminDashboard() {
                                         <p style={{ margin: '6px 0 0 0', fontSize: '11px', color: '#64748b' }}>
                                             Galería: {(p.gallery_urls || []).length} fotos
                                         </p>
+                                        
+                                        {/* Indicadores de traducciones */}
+                                        <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '4px', 
+                                                background: '#e0e7ff',
+                                                color: '#4338ca',
+                                                fontWeight: '600'
+                                            }}>ES</span>
+                                            <span style={{ 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '4px', 
+                                                background: p.description_en ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_en ? '#166534' : '#991b1b',
+                                                fontWeight: '600'
+                                            }}>{p.description_en ? '✓ EN' : '✗ EN'}</span>
+                                            <span style={{ 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '4px', 
+                                                background: p.description_pt ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_pt ? '#166534' : '#991b1b',
+                                                fontWeight: '600'
+                                            }}>{p.description_pt ? '✓ PT' : '✗ PT'}</span>
+                                            <span style={{ 
+                                                fontSize: '9px', 
+                                                padding: '2px 6px', 
+                                                borderRadius: '4px', 
+                                                background: p.description_fr ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_fr ? '#166534' : '#991b1b',
+                                                fontWeight: '600'
+                                            }}>{p.description_fr ? '✓ FR' : '✗ FR'}</span>
+                                        </div>
+                                        
                                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
                                             <button onClick={(e) => { e.stopPropagation(); startEditing(p); }} style={{ ...btnAction, color: '#20B2AA' }}>Editar</button>
+                                            <button onClick={(e)=>{ e.stopPropagation(); setTranslateItem(p); }} style={{ ...btnAction, color:'#9333ea' }}>🈂️ Traducir</button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -2400,9 +2502,45 @@ export default function AdminDashboard() {
                                 <div key={b.id} style={listItem}>
                                     <div className="responsive-row row-center">
                                         <NextImage src={b.image_url || "https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"} width={45} height={45} style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} alt={b.name || 'Negocio'} />
-                                        <div>
+                                        <div style={{ flex: 1 }}>
                                             <strong style={{ fontSize: '1rem' }}>{b.name}</strong>
-                                            <p style={{ margin: '0', fontSize: '0.8rem', color: '#777' }}>{b.category} • {b.contact_info}</p>
+                                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#777' }}>{b.category} • {b.contact_info}</p>
+                                            
+                                            {/* Indicadores de traducciones */}
+                                            <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ 
+                                                    fontSize: '9px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '4px', 
+                                                    background: '#e0e7ff',
+                                                    color: '#4338ca',
+                                                    fontWeight: '600'
+                                                }}>ES</span>
+                                                <span style={{ 
+                                                    fontSize: '9px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '4px', 
+                                                    background: b.description_en ? '#dcfce7' : '#fee2e2',
+                                                    color: b.description_en ? '#166534' : '#991b1b',
+                                                    fontWeight: '600'
+                                                }}>{b.description_en ? '✓ EN' : '✗ EN'}</span>
+                                                <span style={{ 
+                                                    fontSize: '9px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '4px', 
+                                                    background: b.description_pt ? '#dcfce7' : '#fee2e2',
+                                                    color: b.description_pt ? '#166534' : '#991b1b',
+                                                    fontWeight: '600'
+                                                }}>{b.description_pt ? '✓ PT' : '✗ PT'}</span>
+                                                <span style={{ 
+                                                    fontSize: '9px', 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '4px', 
+                                                    background: b.description_fr ? '#dcfce7' : '#fee2e2',
+                                                    color: b.description_fr ? '#166534' : '#991b1b',
+                                                    fontWeight: '600'
+                                                }}>{b.description_fr ? '✓ FR' : '✗ FR'}</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>

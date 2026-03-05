@@ -253,13 +253,14 @@ export default function Home() {
   const [activeStory, setActiveStory] = useState<{ url: string; name: string } | undefined>(undefined);
 
   // helper to return the appropriate description based on current locale
-  const getLocaleDesc = (obj: Record<string, string | null | undefined>) => {
+  // obj may be an Attraction or Business with various description fields
+  const getLocaleDesc = (obj: Partial<Attraction> | null | undefined) => {
     if (!obj) return '';
-    if (locale === 'en' && obj.description_en) return obj.description_en;
-    if (locale === 'pt' && obj.description_pt) return obj.description_pt;
-    if (locale === 'fr' && obj.description_fr) return obj.description_fr;
+    if (locale === 'en' && (obj as Record<string, string | undefined>).description_en) return (obj as Record<string, string>).description_en;
+    if (locale === 'pt' && (obj as Record<string, string | undefined>).description_pt) return (obj as Record<string, string>).description_pt;
+    if (locale === 'fr' && (obj as Record<string, string | undefined>).description_fr) return (obj as Record<string, string>).description_fr;
     // fall back to whatever description or business info we stored during fetch
-    return obj.description || obj.contact_info || obj.category || '';
+    return obj.description || (obj as Record<string, string | undefined>).contact_info || obj.category || '';
   };
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1266,7 +1267,7 @@ export default function Home() {
                     {activePlace.isBusiness ? '🏢 COMERCIO CERTIFICADO' : '⭐ ATRACTIVO TURÍSTICO'}
                   </span>
                 </div>
-                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{getLocaleDesc(activePlace as any)}</p>
+                <p style={{ color: '#E2E8F0', lineHeight: '1.8', fontSize: '1.1rem' }}>{getLocaleDesc(activePlace)}</p>
 
                 {activePlace.info && (
                   <div style={{ marginTop: '25px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '20px', borderLeft: `6px solid ${COLOR_GOLD}` }}>

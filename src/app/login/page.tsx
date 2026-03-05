@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { logError } from '@/lib/error-handler';
 import type { AuthError } from '@supabase/supabase-js';
 
 export default function LoginPage() {
@@ -94,7 +95,7 @@ export default function LoginPage() {
                             .maybeSingle();
 
                         if (profileError) {
-                            console.error('Error verificando perfil:', profileError);
+                            logError('verificando perfil', profileError);
                         } else if (!profile) {
                             // Fallback: crear perfil manualmente
                             const { error: insertError } = await supabase
@@ -106,8 +107,16 @@ export default function LoginPage() {
                                     avatar_url: null
                                 });
                             
-                            if (insertError && insertError.code !== '23505') {
-                                console.error('Error creando perfil:', insertError);
+                            if (insertError) {
+                                // algunos objetos de error llegan vacíos ({}), no los mostramos
+                                if (Object.keys(insertError).length === 0) {
+                                    // nada que hacer
+                                } else if (insertError.code && insertError.code !== '23505') {
+                                    logError('creando perfil', insertError);
+                                } else if (!insertError.code) {
+                                    // si no tiene código, también logueamos para diagnóstico
+                                    logError('creando perfil (sin código)', insertError);
+                                }
                             }
                         }
                     }
@@ -252,17 +261,21 @@ export default function LoginPage() {
                 border: `2px solid ${COLOR_GOLD}33`
             }}>
                 {/* Logo */}
-                <Image
-                    src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
-                    alt="Santi"
-                    width={120}
-                    height={120}
-                    style={{ 
-                        marginBottom: '15px',
-                        filter: 'drop-shadow(0 8px 20px rgba(241,196,15,0.4))',
-                        borderRadius: '50%'
-                    }}
-                />
+                <div style={{ width: '60px', height: '90px', margin: '0 auto' }}>
+                    <Image
+                        src="https://res.cloudinary.com/dhvrrxejo/image/upload/v1768412755/guiarobotalpha_vv5jbj.png"
+                        alt="Santi"
+                        width={40}
+                        height={40}
+                        style={{ 
+                            width: '100%',
+                            height: '100%',
+                            marginBottom: '15px',
+                            filter: 'drop-shadow(0 8px 20px rgba(241,196,15,0.4))',
+                            borderRadius: '50%'
+                        }}
+                    />
+                </div>
 
                 {/* Botón Tour - Solo para turistas */}
                 {!isAdminMode && (
@@ -272,7 +285,7 @@ export default function LoginPage() {
                             background: `linear-gradient(135deg, ${COLOR_GOLD}, #FFD93D)`,
                             color: COLOR_BLUE,
                             border: 'none',
-                            padding: '10px 20px',
+                            padding: '4px 10px',
                             borderRadius: '25px',
                             fontSize: '13px',
                             fontWeight: '700',
@@ -305,7 +318,7 @@ export default function LoginPage() {
                     fontWeight: '950',
                     letterSpacing: '-0.5px'
                 }}>
-                    {isAdminMode ? '🔐 Acceso Administrativo' : '🌎 Bienvenido a SantiGo'}
+                    {isAdminMode ? '🔐 Acceso Administrativo' : '🌎 Bienvenido a Santi Guia'}
                 </h1>
                 <p style={{ 
                     color: '#64748b', 
