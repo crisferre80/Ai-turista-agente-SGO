@@ -25,6 +25,9 @@ interface Attraction {
   name: string;
   image: string;
   description: string;
+  description_en?: string;
+  description_pt?: string;
+  description_fr?: string;
   coords: [number, number];
   isBusiness?: boolean;
   info?: string;
@@ -52,9 +55,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     const mapContainer = useRef<HTMLDivElement>(null);
 
     // helper to pick translated description when attr objects still contain multiple languages
-    // allow explicit any here because raw data may include extra fields
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const getTranslatedDesc = (obj: any) => {
+    const getTranslatedDesc = (obj: Attraction) => {
         if (locale === 'en' && obj.description_en) return obj.description_en;
         if (locale === 'pt' && obj.description_pt) return obj.description_pt;
         if (locale === 'fr' && obj.description_fr) return obj.description_fr;
@@ -397,8 +398,12 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 };
                 
                 // Exponer funciones globalmente para que sean accesibles desde el botón
-                (window as any).startMapAnimation = startAnimation;
-                (window as any).stopMapAnimation = stopAnimation;
+                const globalWindow = window as Window & {
+                    startMapAnimation?: () => void;
+                    stopMapAnimation?: () => void;
+                };
+                globalWindow.startMapAnimation = startAnimation;
+                globalWindow.stopMapAnimation = stopAnimation;
                 
                 const resetInactivityTimer = () => {
                     // Detener animación inmediatamente cuando hay interacción
@@ -776,8 +781,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         offset: 35,
                         maxWidth: popupMaxWidth,
                         closeOnMove: false,
-                        closeOnClick: false,
-                        autoPan: true
+                        closeOnClick: false
                     }).setHTML(compactContent))
                     .addTo(currentMap);
 
@@ -1070,22 +1074,30 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                         const waypointCount = waypointsRef.current.length;
                         if (map.current && waypointCount > 0) {
                             if (!isAnimatingRef.current) {
-                                console.log('\ud83c\udfac Llamando startMapAnimation con ' + waypointCount + ' waypoints');
-                                if (typeof (window as any).startMapAnimation === 'function') {
-                                    (window as any).startMapAnimation();
+                                console.log('🎬 Llamando startMapAnimation con ' + waypointCount + ' waypoints');
+                                const globalWindow = window as Window & {
+                                    startMapAnimation?: () => void;
+                                    stopMapAnimation?: () => void;
+                                };
+                                if (typeof globalWindow.startMapAnimation === 'function') {
+                                    globalWindow.startMapAnimation();
                                 }
                             } else {
-                                console.log('\ud83c\udfac Tour ya está en progreso');
+                                console.log('🎬 Tour ya está en progreso');
                             }
                         } else {
-                            console.warn('\ud83c\udfac No se puede iniciar tour: mapa no listo o no hay waypoints. Waypoints:', waypointCount);
+                            console.warn('🎬 No se puede iniciar tour: mapa no listo o no hay waypoints. Waypoints:', waypointCount);
                         }
                     } else {
-                        console.log('\u23f8\ufe0f Tour del mapa pausado');
+                        console.log('⏸️ Tour del mapa pausado');
                         // Detener animación inmediatamente
                         isAnimatingRef.current = false;
-                        if (typeof (window as any).stopMapAnimation === 'function') {
-                            (window as any).stopMapAnimation();
+                        const globalWindow = window as Window & {
+                            startMapAnimation?: () => void;
+                            stopMapAnimation?: () => void;
+                        };
+                        if (typeof globalWindow.stopMapAnimation === 'function') {
+                            globalWindow.stopMapAnimation();
                         }
                     }
                 }}
