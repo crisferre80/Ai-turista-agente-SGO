@@ -132,6 +132,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
     // on load; tour can be enabled later if needed (e.g. via UI or external call)
     const [tourEnabled, setTourEnabled] = useState(false); // Control manual del tour
     const markersRef = useRef<mapboxgl.Marker[]>([]);
+    const activePopupRef = useRef<mapboxgl.Popup | null>(null);
 
     // Actualizar ref cuando cambia el estado
     useEffect(() => {
@@ -268,6 +269,25 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                 let currentWaypointIndex = 0;
                 let isTransitioning = false;
                 let orbitStartTime = 0;
+
+                const openWaypointPopup = (markerIndex: number) => {
+                    if (!map.current) return;
+
+                    // cerrar popup abierto previo
+                    if (activePopupRef.current) {
+                        activePopupRef.current.remove();
+                        activePopupRef.current = null;
+                    }
+
+                    const targetMarker = markersRef.current[markerIndex];
+                    if (!targetMarker) return;
+
+                    const popup = targetMarker.getPopup();
+                    if (!popup) return;
+
+                    popup.addTo(map.current);
+                    activePopupRef.current = popup;
+                };
                 
                 const animateTour = () => {
                     if (!map.current || !isAnimatingRef.current || waypoints.length === 0 || !tourEnabledRef.current) {
@@ -315,16 +335,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                             });
                             
                             setTimeout(() => {
-                                // Cerrar popups anteriores al llegar
-                                markersRef.current.forEach(marker => {
-                                    const popup = marker.getPopup();
-                                    if (popup) popup.remove();
-                                });
-                                const marker = markersRef.current[nextWaypoint.markerIndex];
-                                if (marker) {
-                                    const popup = marker.getPopup();
-                                    if (popup && map.current) popup.addTo(map.current);
-                                }
+                                openWaypointPopup(nextWaypoint.markerIndex);
                                 isOrbitingRef.current = true;
                                 orbitStartTime = Date.now();
                                 isTransitioning = false;
@@ -345,15 +356,7 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
                             });
                             
                             setTimeout(() => {
-                                markersRef.current.forEach(marker => {
-                                    const popup = marker.getPopup();
-                                    if (popup) popup.remove();
-                                });
-                                const marker = markersRef.current[waypoint.markerIndex];
-                                if (marker) {
-                                    const popup = marker.getPopup();
-                                    if (popup && map.current) popup.addTo(map.current);
-                                }
+                                openWaypointPopup(waypoint.markerIndex);
                                 isOrbitingRef.current = true;
                                 orbitStartTime = Date.now();
                                 isTransitioning = false;
@@ -649,7 +652,11 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
         if (!isMapReady || !map.current) return;
         const currentMap = map.current;
 
-        // Clean up old markers
+        // Clean up old markers and popups
+        if (activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current = null;
+        }
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
 
@@ -761,9 +768,17 @@ const Map = ({ attractions = [], onNarrate, onStoryPlay, onPlaceFocus, onLocatio
             const compactContent = generatePopupHTML(attr);
 
             try {
+                const popupMaxWidth = (typeof window !== 'undefined' && window.innerWidth < 640) ? '260px' : '320px';
+
                 const marker = new mapboxgl.Marker(wrapper)
                     .setLngLat(attr.coords as [number, number])
-                    .setPopup(new mapboxgl.Popup({ offset: 35, maxWidth: '320px' }).setHTML(compactContent))
+                    .setPopup(new mapboxgl.Popup({
+                        offset: 35,
+                        maxWidth: popupMaxWidth,
+                        closeOnMove: false,
+                        closeOnClick: false,
+                        autoPan: true
+                    }).setHTML(compactContent))
                     .addTo(currentMap);
 
                 (wrapper as unknown as HTMLElement & { _attrId: string })._attrId = attr.id;
