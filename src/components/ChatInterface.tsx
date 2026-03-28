@@ -338,6 +338,16 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                     // Use the correct language code for the selected voice
                     actualLanguageCode = voiceConfig.languageCode || actualLanguageCode;
                     provider = voiceConfig.provider || 'google';
+
+                    // Prevent incompatible voice+language combinations
+                    if (configuredVoice && actualLanguageCode) {
+                        const configuredLang = configuredVoice.match(/^([a-z]{2}-[A-Z]{2})/);
+                        if (configuredLang && configuredLang[1] !== actualLanguageCode) {
+                            console.warn('Mismatched voice language code in config:', configuredVoice, 'vs', actualLanguageCode, 'ignoring voice to avoid Google TTS 400');
+                            configuredVoice = null;
+                        }
+                    }
+
                     console.log(`ChatInterface: Using configured voice for ${langPrefix}: ${configuredVoice || '(default)'} with lang ${actualLanguageCode}`);
                 }
             } catch (fetchErr) {

@@ -57,15 +57,29 @@ export async function POST(req: Request) {
             }
             if (!finalLanguageCode) finalLanguageCode = 'es-419';
 
-            // if a voice is specified but its language doesn't match the code, drop it
-            if (ttsEngine && finalLanguageCode && !ttsEngine.toLowerCase().startsWith(finalLanguageCode.slice(0,2).toLowerCase())) {
-                console.log('Voice', ttsEngine, 'does not match language code', finalLanguageCode, 'dropping voice so Google can pick default');
+            // if a voice is specified and has a country variant, compare with language code
+            const engineLangMatch = ttsEngine?.match(/^([a-z]{2}-[A-Z]{2})/);
+            const engineLanguageCode = engineLangMatch ? engineLangMatch[1] : null;
+
+            if (ttsEngine && finalLanguageCode && engineLanguageCode && engineLanguageCode !== finalLanguageCode) {
+                // mismatched region (es-US vs es-AR etc.) is invalid for Google TTS
+                if (engineLanguageCode.slice(0,2) === finalLanguageCode.slice(0,2)) {
+                    console.warn('Google TTS voice region mismatch:', ttsEngine, 'vs languageCode', finalLanguageCode, 'dropping voice to keep languageCode');
+                } else {
+                    console.warn('Google TTS voice and language are incompatible:', ttsEngine, 'vs', finalLanguageCode, 'dropping voice');
+                }
                 ttsEngine = '';
             }
 
             console.log('Using language code:', finalLanguageCode, 'for voice:', ttsEngine);
 
-            const requestBody: any = {
+            type GoogleTtsRequest = {
+                input: { text: string };
+                voice: { languageCode: string; name?: string };
+                audioConfig: { audioEncoding: 'MP3'; sampleRateHertz: number };
+            };
+
+            const requestBody: GoogleTtsRequest = {
                 input: { text },
                 voice: {
                     languageCode: finalLanguageCode
@@ -166,7 +180,7 @@ export async function POST(req: Request) {
             }, { status: 504 });
         }
         
-        const apiError = (error as any);
+        const apiError = error as { status?: number; message?: string } | undefined;
         if (apiError && typeof apiError === 'object' && 'status' in apiError) {
             if (apiError.status === 429) return NextResponse.json({ error: 'Quota exceeded', fallback: true }, { status: 429 });
             if (apiError.status === 401) return NextResponse.json({ error: 'Auth failed', fallback: true }, { status: 401 });
