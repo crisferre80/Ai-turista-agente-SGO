@@ -184,8 +184,10 @@ export default function WebXRToolsPage() {
         marginBottom: '30px',
         boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
         display: 'flex',
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        gap: '15px'
       }}>
         <button
           className="webxr-hamburger"
@@ -239,7 +241,7 @@ export default function WebXRToolsPage() {
         </div>
 
         {/* Selector de atractivo */}
-        <div style={{ minWidth: '300px' }}>
+        <div style={{ minWidth: '180px', maxWidth: '100%', flex: '1 1 260px' }}>
           <label style={{ 
             display: 'block', 
             fontSize: '12px', 
@@ -257,6 +259,7 @@ export default function WebXRToolsPage() {
             }}
             style={{
               width: '100%',
+              minWidth: 0,
               padding: '10px 15px',
               borderRadius: '10px',
               border: '2px solid #e5e7eb',

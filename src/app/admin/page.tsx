@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -178,12 +178,12 @@ export default function AdminDashboard() {
                     <h3>Traducir {translateField} a {translateLang.toUpperCase()}</h3>
                     <textarea readOnly rows={3} style={{ width:'100%' }} value={translateItem[translateField] || ''} />
                     <div style={{ margin:'10px 0' }}>
-                        <select value={translateLang} onChange={e=>setTranslateLang(e.target.value as any)}>
+                        <select value={translateLang} onChange={e=>setTranslateLang(e.target.value as 'en'|'pt'|'fr')}>
                             <option value="en">English</option>
                             <option value="pt">Português</option>
                             <option value="fr">Français</option>
                         </select>
-                        <select value={translateField} onChange={e=>setTranslateField(e.target.value as any)} style={{ marginLeft:8 }}>
+                        <select value={translateField} onChange={e=>setTranslateField(e.target.value as 'name'|'description')} style={{ marginLeft:8 }}>
                             <option value="name">Nombre</option>
                             <option value="description">Descripción</option>
                         </select>
@@ -266,7 +266,12 @@ export default function AdminDashboard() {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
     const [businessFile, setBusinessFile] = useState<File | null>(null);
+    const [newPlaceSelectedFileName, setNewPlaceSelectedFileName] = useState('');
+    const [newBusinessSelectedFileName, setNewBusinessSelectedFileName] = useState('');
     const [carouselFile, setCarouselFile] = useState<File | null>(null);
+    const placeFileInputRef = useRef<HTMLInputElement>(null);
+    const galleryFileInputRef = useRef<HTMLInputElement>(null);
+    const businessFileInputRef = useRef<HTMLInputElement>(null);
     const [newCarouselPhoto, setNewCarouselPhoto] = useState({ title: '', description: '' });
     const [generatingDesc, setGeneratingDesc] = useState(false);
     const [generatingPromo, setGeneratingPromo] = useState(false);
@@ -1679,6 +1684,58 @@ export default function AdminDashboard() {
             background: 'linear-gradient(135deg, #e8f4f8 0%, #fef3e0 100%)', 
             fontFamily: 'system-ui, -apple-system, sans-serif' 
         }}>
+            <style>{`
+                .admin-attraction-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 24px;
+                    width: 100%;
+                }
+                
+                @media (max-width: 1200px) {
+                    .admin-attraction-grid {
+                        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                        gap: 20px;
+                    }
+                }
+                
+                @media (max-width: 768px) {
+                    .admin-attraction-grid {
+                        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+                        gap: 16px;
+                    }
+                }
+                
+                @media (max-width: 480px) {
+                    .admin-attraction-grid {
+                        grid-template-columns: 1fr;
+                        gap: 12px;
+                    }
+                }
+                
+                .admin-attraction-card {
+                    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+                }
+                
+                .admin-attraction-card:hover {
+                    transform: translateY(-4px);
+                    box-shadow: 0 12px 28px rgba(0,0,0,0.15) !important;
+                    border-color: rgba(241, 196, 15, 0.3) !important;
+                }
+                
+                .admin-attraction-card-image {
+                    width: 100%;
+                    height: 160px;
+                    object-fit: cover;
+                    background-color: #f0f0f0;
+                }
+                
+                @media (max-width: 480px) {
+                    .admin-attraction-card-image {
+                        height: 140px;
+                    }
+                }
+            `}</style>
 
             {/* Mobile Header */}
             <div style={{ 
@@ -1789,10 +1846,10 @@ export default function AdminDashboard() {
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
-                    marginBottom: '40px',
-                    padding: '30px',
+                    marginBottom: '10px',
+                    padding: '10px',
                     background: 'white',
-                    borderRadius: '32px',
+                    borderRadius: '15px',
                     boxShadow: '0 15px 50px rgba(0,0,0,0.12)',
                     border: `2px solid ${COLOR_GOLD}22`
                 }}>
@@ -1824,12 +1881,12 @@ export default function AdminDashboard() {
                 {activeTab === 'lugares' && (
                     <div style={cardStyle}>
                         <div className="form-grid">
-                            <form onSubmit={handleAddPlace} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            <form onSubmit={handleAddPlace} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <Input label="Nombre" value={newPlace.name} onChange={v => setNewPlace({ ...newPlace, name: v })} />
-                                <div className="responsive-row" style={{ gap: '15px' }}>
-                                    <div className="responsive-col">
-                                        <label style={labelStyle}>Categoría</label>
-                                        <select style={inputStyle} value={newPlace.category} onChange={e => setNewPlace({ ...newPlace, category: e.target.value })}>
+                                <div className="responsive-row" style={{ gap: '4px', marginBottom: '2px' }}>
+                                    <div className="responsive-col" style={{ marginBottom: '0' }}>
+                                        <label style={{ ...labelStyle, marginBottom: '3px' }}>Categoría</label>
+                                        <select style={{ ...inputStyle, marginBottom: '0' }} value={newPlace.category} onChange={e => setNewPlace({ ...newPlace, category: e.target.value })}>
                                             {attractionCategories.map(cat => (
                                                 <option key={cat.name} value={cat.name}>
                                                     {cat.icon} {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
@@ -1839,33 +1896,101 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
 
-                                <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '12px', border: '1px solid #eee' }}>
-                                    <label style={labelStyle}>Imagen Principal (Auto-reducida)</label>
-                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
-                                        <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} style={{ flex: 1 }} />
-                                        <button type="button" onClick={() => captureImage('place')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
+                                <div style={{ background: '#f9f9f9', padding: '10px', borderRadius: '10px', border: '1px solid #eee', marginBottom: '4px' }}>
+                                    <label style={{ ...labelStyle, marginBottom: '6px', fontSize: '0.85rem' }}>Imagen Principal</label>
+                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                        <input
+                                            ref={placeFileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={e => {
+                                                const file = e.target.files?.[0] || null;
+                                                setUploadFile(file);
+                                                setNewPlaceSelectedFileName(file?.name || '');
+                                                if (file) setNewPlace(prev => ({ ...prev, img: URL.createObjectURL(file) }));
+                                            }}
+                                        />
                                         <button
                                             type="button"
-                                            onClick={() => router.push(editingId ? `/admin/image-manager?mode=place-main&attractionId=${editingId}` : '/admin/image-manager?mode=place-main-new')}
-                                            style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
+                                            className="icon-button"
+                                            onClick={() => placeFileInputRef.current?.click()}
+                                            style={{ padding: '8px 12px', background: '#334155', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                                            aria-label="Seleccionar imagen"
                                         >
-                                            🗂️ Galería
+                                            📁 <span className="icon-label">Seleccionar</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
+                                            onClick={() => captureImage('place')}
+                                            style={{ width: '38px', height: '38px', padding: '0', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            aria-label="Cámara"
+                                        >
+                                            📸 <span className="icon-label">Cámara</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
+                                            onClick={() => router.push(editingId ? `/admin/image-manager?mode=place-main&attractionId=${editingId}` : '/admin/image-manager?mode=place-main-new')}
+                                            style={{ width: '38px', height: '38px', padding: '0', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            aria-label="Galería"
+                                        >
+                                            🗂 <span className="icon-label">Galería</span>
                                         </button>
                                     </div>
-                                    {newPlace.img && <NextImage src={newPlace.img} width={120} height={80} style={{ height: '80px', width: 'auto', borderRadius: '4px', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '10px' }} alt="Vista previa" />}
+                                    {newPlaceSelectedFileName && (
+                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: '#565656' }}>
+                                            Archivo seleccionado: {newPlaceSelectedFileName}
+                                        </p>
+                                    )}
+                                    {galleryFiles.length > 0 && (
+                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: '#565656' }}>
+                                            Galería: {galleryFiles.map(f => f.name).join(', ')}
+                                        </p>
+                                    )}
+                                    {newPlace.img && <NextImage src={newPlace.img} width={120} height={80} style={{ height: '80px', width: 'auto', borderRadius: '4px', border: '1px solid #ddd', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '6px', maxHeight: '90px' }} alt="Vista previa" />}
                                     <Input label="O URL" value={newPlace.img} onChange={v => setNewPlace({ ...newPlace, img: v })} />
 
-                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
-                                        <input type="file" multiple accept="image/*" onChange={e => setGalleryFiles(Array.from(e.target.files || []))} style={{ flex: 1 }} />
-                                        <button type="button" onClick={() => captureImage('gallery')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Galería</button>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                        <input
+                                            ref={galleryFileInputRef}
+                                            type="file"
+                                            multiple
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={e => setGalleryFiles(Array.from(e.target.files || []))}
+                                        />
                                         <button
                                             type="button"
+                                            className="icon-button"
+                                            onClick={() => galleryFileInputRef.current?.click()}
+                                            style={{ padding: '8px 12px', background: '#334155', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                                        >
+                                            📁 <span className="icon-label">Seleccionar</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
+                                            onClick={() => captureImage('gallery')}
+                                            style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                                        >
+                                            📸 <span className="icon-label">Galería</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
                                             onClick={() => router.push(editingId ? `/admin/image-manager?mode=place-gallery&attractionId=${editingId}` : '/admin/image-manager?mode=place-gallery-new')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
-                                            🗂️ Buckets
+                                            🗂️ <span className="icon-label">Buckets</span>
                                         </button>
                                     </div>
+                                    {galleryFiles.length > 0 && (
+                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: '#565656' }}>
+                                            Archivos seleccionados: {galleryFiles.map(f => f.name).join(', ')}
+                                        </p>
+                                    )}
                                     <p style={{ fontSize: '11px', color: '#888' }}>{newPlace.gallery.length} fotos existentes en galería.</p>
                                 </div>
 
@@ -2006,73 +2131,164 @@ export default function AdminDashboard() {
                         
                         {/* modal de traducción */}
                         {translateItem && <TranslateModal />}
-                        <div className="content-grid">
+                        <div className="admin-attraction-grid">
                             {places
                                 .filter(p => 
                                     p.name.toLowerCase().includes(placeSearch.toLowerCase()) &&
                                     (placeCategoryFilter === '' || p.category === placeCategoryFilter)
                                 )
                                 .map(p => (
-                                <div key={p.id} style={placeCard} onClick={() => startEditing(p)}>
-                                    <div style={{ position: 'relative' }}>
-                                        <NextImage src={p.image_url || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300"} width={300} height={120} style={{ maxWidth: '100%', width: 'auto', height: '120px', objectFit: 'cover' }} alt={p.name} />
-                                        <span style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(0,0,0,0.5)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px' }}>{p.category}</span>
+                                <div key={p.id} style={placeCard} className="admin-attraction-card">
+                                    {/* Imagen Principal */}
+                                    <div style={{ position: 'relative', width: '100%', height: '160px', overflow: 'hidden', backgroundColor: '#f0f0f0', cursor: 'pointer' }} onClick={() => startEditing(p)}>
+                                        <NextImage 
+                                            src={p.image_url || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300"} 
+                                            width={300} 
+                                            height={160} 
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                            alt={p.name} 
+                                        />
+                                        {/* Badge de Categoría */}
+                                        <span style={{ 
+                                            position: 'absolute', 
+                                            top: '12px', 
+                                            right: '12px', 
+                                            background: `${COLOR_BLUE}cc`, 
+                                            color: 'white', 
+                                            padding: '6px 12px', 
+                                            borderRadius: '20px', 
+                                            fontSize: '12px',
+                                            fontWeight: '600',
+                                            backdropFilter: 'blur(4px)'
+                                        }}>{p.category}</span>
                                     </div>
-                                    <div style={{ padding: '12px' }}>
-                                        <h4 style={{ margin: '0', fontSize: '14px' }}>{p.name}</h4>
-                                        <p style={{ margin: '6px 0 0 0', fontSize: '11px', color: '#64748b' }}>
-                                            Galería: {(p.gallery_urls || []).length} fotos
-                                        </p>
-                                        
-                                        {/* Indicadores de traducciones */}
-                                        <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
-                                            <span style={{ 
-                                                fontSize: '9px', 
-                                                padding: '2px 6px', 
-                                                borderRadius: '4px', 
-                                                background: '#e0e7ff',
-                                                color: '#4338ca',
-                                                fontWeight: '600'
-                                            }}>ES</span>
-                                            <span style={{ 
-                                                fontSize: '9px', 
-                                                padding: '2px 6px', 
-                                                borderRadius: '4px', 
-                                                background: p.description_en ? '#dcfce7' : '#fee2e2',
-                                                color: p.description_en ? '#166534' : '#991b1b',
-                                                fontWeight: '600'
-                                            }}>{p.description_en ? '✓ EN' : '✗ EN'}</span>
-                                            <span style={{ 
-                                                fontSize: '9px', 
-                                                padding: '2px 6px', 
-                                                borderRadius: '4px', 
-                                                background: p.description_pt ? '#dcfce7' : '#fee2e2',
-                                                color: p.description_pt ? '#166534' : '#991b1b',
-                                                fontWeight: '600'
-                                            }}>{p.description_pt ? '✓ PT' : '✗ PT'}</span>
-                                            <span style={{ 
-                                                fontSize: '9px', 
-                                                padding: '2px 6px', 
-                                                borderRadius: '4px', 
-                                                background: p.description_fr ? '#dcfce7' : '#fee2e2',
-                                                color: p.description_fr ? '#166534' : '#991b1b',
-                                                fontWeight: '600'
-                                            }}>{p.description_fr ? '✓ FR' : '✗ FR'}</span>
+
+                                    {/* Contenido Principal */}
+                                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                                        {/* Título y Meta */}
+                                        <div style={{ cursor: 'pointer', marginBottom: '12px' }} onClick={() => startEditing(p)}>
+                                            <h4 style={{ 
+                                                margin: '0 0 6px 0', 
+                                                fontSize: '15px',
+                                                fontWeight: '700',
+                                                color: COLOR_BLUE,
+                                                lineHeight: '1.4',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2 as any,
+                                                WebkitBoxOrient: 'vertical' as any
+                                            }}>{p.name}</h4>
+                                            <p style={{ 
+                                                margin: '0', 
+                                                fontSize: '12px', 
+                                                color: '#64748b',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}>
+                                                📸 {(p.gallery_urls || []).length} fotos
+                                            </p>
                                         </div>
                                         
-                                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
-                                            <button onClick={(e) => { e.stopPropagation(); startEditing(p); }} style={{ ...btnAction, color: '#20B2AA' }}>Editar</button>
-                                            <button onClick={(e)=>{ e.stopPropagation(); setTranslateItem(p); }} style={{ ...btnAction, color:'#9333ea' }}>🈂️ Traducir</button>
+                                        {/* Indicadores de Traducciones */}
+                                        <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                                            <span style={{ 
+                                                fontSize: '10px', 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                background: '#e0e7ff',
+                                                color: '#4338ca',
+                                                fontWeight: '700',
+                                                flex: 0
+                                            }}>ES</span>
+                                            <span style={{ 
+                                                fontSize: '10px', 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                background: p.description_en ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_en ? '#166534' : '#991b1b',
+                                                fontWeight: '700',
+                                                flex: 0
+                                            }}>EN {p.description_en ? '✓' : '✗'}</span>
+                                            <span style={{ 
+                                                fontSize: '10px', 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                background: p.description_pt ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_pt ? '#166534' : '#991b1b',
+                                                fontWeight: '700',
+                                                flex: 0
+                                            }}>PT {p.description_pt ? '✓' : '✗'}</span>
+                                            <span style={{ 
+                                                fontSize: '10px', 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                background: p.description_fr ? '#dcfce7' : '#fee2e2',
+                                                color: p.description_fr ? '#166534' : '#991b1b',
+                                                fontWeight: '700',
+                                                flex: 0
+                                            }}>FR {p.description_fr ? '✓' : '✗'}</span>
+                                        </div>
+                                        
+                                        {/* Botones de Acción - Grid Responsivo */}
+                                        <div style={{ 
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 1fr',
+                                            gap: '8px',
+                                            marginTop: 'auto'
+                                        }}>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); startEditing(p); }} 
+                                                style={{ 
+                                                    ...btnAction, 
+                                                    color: '#20B2AA',
+                                                    padding: '10px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                ✏️ Editar
+                                            </button>
+                                            <button 
+                                                onClick={(e)=>{ e.stopPropagation(); setTranslateItem(p); }} 
+                                                style={{ 
+                                                    ...btnAction, 
+                                                    color:'#9333ea',
+                                                    padding: '10px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                🈂️ Traducir
+                                            </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     router.push(`/admin/image-manager?mode=place-gallery&attractionId=${p.id}`);
                                                 }}
-                                                style={{ ...btnAction, color: '#1A3A6C' }}
+                                                style={{ 
+                                                    ...btnAction, 
+                                                    color: '#1A3A6C',
+                                                    padding: '10px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600'
+                                                }}
                                             >
                                                 🗂️ Galería
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); if (p.id) { deletePlace(p.id); } }} style={{ ...btnAction, color: '#ff4444' }}>Borrar</button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); if (p.id) { deletePlace(p.id); } }} 
+                                                style={{ 
+                                                    ...btnAction, 
+                                                    color: '#ff4444',
+                                                    padding: '10px 12px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                🗑️ Borrar
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -2379,17 +2595,49 @@ export default function AdminDashboard() {
                                 </div>
                                 <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '10px' }}>
                                     <label style={labelStyle}>Foto del Negocio</label>
-                                    <div className="responsive-row row-center" style={{ marginBottom: '10px' }}>
-                                        <input type="file" accept="image/*" onChange={e => setBusinessFile(e.target.files?.[0] || null)} style={{ flex: 1 }} />
-                                        <button type="button" onClick={() => captureImage('business')} style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>📸 Cámara</button>
+                                    <div className="responsive-row row-center" style={{ marginBottom: '10px', flexWrap: 'wrap' }}>
+                                        <input
+                                            ref={businessFileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={e => {
+                                                const file = e.target.files?.[0] || null;
+                                                setBusinessFile(file);
+                                                setNewBusinessSelectedFileName(file?.name || '');
+                                                if (file) setNewBusiness(prev => ({ ...prev, image_url: URL.createObjectURL(file) }));
+                                            }}
+                                        />
                                         <button
                                             type="button"
+                                            className="icon-button"
+                                            onClick={() => businessFileInputRef.current?.click()}
+                                            style={{ padding: '8px 12px', background: '#334155', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                                        >
+                                            📁 <span className="icon-label">Seleccionar</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
+                                            onClick={() => captureImage('business')}
+                                            style={{ padding: '8px 12px', background: '#20B2AA', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                                        >
+                                            📸 <span className="icon-label">Cámara</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="icon-button"
                                             onClick={() => router.push('/admin/image-manager')}
                                             style={{ padding: '8px 12px', background: '#1A3A6C', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
                                         >
-                                            🗂️ Galería
+                                            🗂️ <span className="icon-label">Galería</span>
                                         </button>
                                     </div>
+                                    {newBusinessSelectedFileName && (
+                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: '#565656' }}>
+                                            Archivo seleccionado: {newBusinessSelectedFileName}
+                                        </p>
+                                    )}
                                     {newBusiness.image_url && <NextImage src={newBusiness.image_url} width={90} height={60} style={{ height: '60px', width: 'auto', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }} alt="Vista previa negocio" />}
                                 </div>
                                 
@@ -3877,31 +4125,31 @@ const COLOR_DARK = '#0e1f1d';
 const tabStyle = (active: boolean) => ({ 
     background: active ? `linear-gradient(135deg, ${COLOR_GOLD} 0%, #e8b90f 100%)` : 'transparent', 
     border: 'none', 
-    padding: '15px 20px', 
-    borderRadius: '50px', 
+    padding: '2px 2px', 
+    borderRadius: '15px', 
     color: active ? COLOR_DARK : 'rgba(255,255,255,0.8)', 
     textAlign: 'left' as const, 
     cursor: 'pointer', 
-    fontSize: '16px',
+    fontSize: '12px',
     fontWeight: active ? 'bold' : '600',
     transition: 'all 0.2s ease',
-    boxShadow: active ? `0 8px 20px ${COLOR_GOLD}44` : 'none'
+    boxShadow: active ? `0 6px 14px ${COLOR_GOLD}44` : 'none'
 });
 
 const cardStyle = { 
     background: 'white', 
-    padding: '40px', 
-    borderRadius: '32px', 
-    boxShadow: '0 15px 50px rgba(0,0,0,0.12)',
-    border: `2px solid ${COLOR_GOLD}22`
+    padding: '5px', 
+    borderRadius: '8px', 
+    boxShadow: '0 8px 20px rgba(0,0,0,0.11)',
+    border: `1px solid ${COLOR_GOLD}22`
 };
 
 const logoutBtn = { 
     background: `linear-gradient(135deg, #ef4444 0%, #dc2626 100%)`, 
     border: 'none', 
     color: 'white', 
-    padding: '14px', 
-    borderRadius: '50px', 
+    padding: '5px', 
+    borderRadius: '15px', 
     width: '100%', 
     cursor: 'pointer',
     fontWeight: 'bold',
@@ -3920,25 +4168,28 @@ const labelStyle = {
 
 const inputStyle = { 
     width: '100%', 
-    padding: '16px 22px', 
-    borderRadius: '50px', 
-    border: '2px solid #e2e8f0', 
+    padding: '10px 12px', 
+    borderRadius: '16px', 
+    border: '1px solid #cbd5e1', 
     outline: 'none', 
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: '500',
     transition: 'all 0.2s ease'
 };
 
 const textareaStyle = { 
     width: '100%', 
-    padding: '16px 22px', 
-    borderRadius: '24px', 
-    border: '2px solid #e2e8f0', 
+    padding: '10px 12px', 
+    borderRadius: '12px', 
+    border: '1px solid #cbd5e1', 
     outline: 'none', 
     fontFamily: 'inherit', 
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: '500',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    minHeight: '80px',
+    maxHeight: '120px',
+    resize: 'vertical' as const
 };
 
 const btnPrimary = { 
@@ -3961,10 +4212,16 @@ const btnAction = {
     padding: '8px 14px', 
     borderRadius: '50px', 
     cursor: 'pointer', 
-    fontSize: '14px',
-    fontWeight: '600',
+    fontSize: '13px',
+    fontWeight: '700',
     color: COLOR_BLUE,
-    transition: 'all 0.2s ease'
+    transition: 'all 0.25s ease',
+    minHeight: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
+    whiteSpace: 'nowrap' as const
 };
 
 const submitBtn = { 
@@ -3972,7 +4229,7 @@ const submitBtn = {
     color: COLOR_DARK, 
     border: 'none', 
     padding: '16px 28px', 
-    borderRadius: '50px', 
+    borderRadius: '20px', 
     fontWeight: 'bold', 
     cursor: 'pointer', 
     width: '100%',
@@ -3998,7 +4255,7 @@ const btnDelete = {
     border: 'none', 
     background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', 
     padding: '12px', 
-    borderRadius: '50px', 
+    borderRadius: '20px', 
     cursor: 'pointer', 
     fontSize: '14px', 
     width: '100%', 
@@ -4008,25 +4265,28 @@ const btnDelete = {
 };
 
 const listItem = { 
-    padding: '20px', 
-    border: `2px solid ${COLOR_GOLD}22`, 
-    borderRadius: '24px', 
+    padding: '10px', 
+    border: `1px solid ${COLOR_GOLD}22`, 
+    borderRadius: '16px', 
     display: 'flex', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
     background: '#fff',
-    boxShadow: '0 8px 25px rgba(0,0,0,0.08)',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
     transition: 'all 0.2s ease'
 };
 
 const placeCard = { 
     border: `2px solid ${COLOR_GOLD}22`, 
-    borderRadius: '24px', 
+    borderRadius: '18px', 
     overflow: 'hidden', 
     background: '#fff', 
     cursor: 'pointer', 
-    transition: 'all 0.2s ease',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+    transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    height: '100%'
 };
 
 

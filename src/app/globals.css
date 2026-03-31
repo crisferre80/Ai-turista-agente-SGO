@@ -211,6 +211,18 @@ button:active {
   min-width: 0;
 }
 
+.icon-label {
+  display: inline;
+  margin-left: 6px;
+}
+
+@media (max-width: 768px) {
+  .admin-main .icon-label {
+    display: none;
+  }
+  .admin-main .file-input { width: 100%; min-width: 0; }
+}
+
 /* Image helper */
 .responsive-img, img {
   max-width: 100%;
@@ -242,7 +254,10 @@ pre, code {
 @media (max-width: 768px) {
   .admin-layout { flex-direction: column; }
   .admin-sidebar { width: 100%; flex: 0 0 auto; }
-  .responsive-row { flex-direction: column; }
+  .responsive-row { flex-direction: column; gap: 4px; }
+  .admin-main .responsive-row { gap: 4px; }
+  .admin-main .responsive-col { min-width: 0; }
+  .admin-main .form-grid > * { margin-bottom: 4px; }
   .list-item { justify-content: flex-start; }
 }
 
@@ -309,8 +324,13 @@ pre, code {
 }
 
 /* Prevent preview and other heavy elements from overflowing */
-.preview-wrapper { width: 100%; max-width: 100%; overflow: hidden; }
-.preview-wrapper > canvas, .preview-wrapper canvas, .preview-wrapper canvas :is(canvas) { display: block; width: 100% !important; height: auto !important; max-height: 60vh; }
+.preview-wrapper { width: 100%; max-width: 100%; overflow: hidden; min-height: 280px; }
+.preview-wrapper > canvas, .preview-wrapper canvas, .preview-wrapper canvas :is(canvas) { display: block; width: 100% !important; height: 100% !important; max-height: 60vh !important; min-height: 250px !important; }
+
+@media (max-width: 768px) {
+  .preview-wrapper { min-height: 220px; }
+  .preview-wrapper > canvas, .preview-wrapper canvas, .preview-wrapper canvas :is(canvas) { max-height: 40vh !important; }
+}
 
 /* Ensure inputs, selects and media scale down inside admin panels */
 .admin-main input, .admin-main textarea, .admin-main select, .admin-main button, .ar-config-left select, .ar-config-left input {
@@ -321,6 +341,159 @@ pre, code {
 @media (max-width: 480px) {
   .preview-wrapper > canvas, .preview-wrapper canvas { max-height: 40vh; }
   .ar-config-grid { height: auto; }
+}
+
+/* Model Transform Grid - Responsive for 3D preview panel */
+.model-transform-grid {
+  display: grid;
+  grid-template-columns: 110px 60px 60px 60px 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .model-transform-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+}
+
+/* Model Animations Panel - Responsive for 3D preview panel */
+.model-animations-panel {
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .model-animations-panel {
+    width: 100%;
+  }
+}
+
+/* Phone Preview Section - Now a standalone block below canvas */
+.phone-preview-section {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-height: auto;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+  margin: 12px auto 0;
+}
+
+/* Phone device mockup container - with phone-like aspect ratio */
+.phone-device-container {
+  width: 240px;
+  max-width: calc(100vw - 10px);
+  aspect-ratio: 9 / 16;
+  min-height: 520px;
+  background: #000;
+  border-radius: 40px;
+  overflow: hidden;
+  border: 8px solid #111;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+
+/* Notch simulation (optional, for iPhone-like look) */
+.phone-device-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 25px;
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  z-index: 10;
+}
+
+/* Screen/Display area */
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+/* Ensure all children of phone-screen expand to fill space */
+.phone-screen > * {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.phone-screen canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  object-fit: contain !important;
+}
+
+.phone-screen > div {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 768px) {
+  .phone-device-container {
+    width: 190px;
+    min-height: 400px;
+    border-radius: 35px;
+    border: 6px solid #111;
+  }
+  
+  .phone-device-container::before {
+    width: 130px;
+    height: 20px;
+    border-radius: 0 0 18px 18px;
+  }
+}
+
+/* Ensure canvas elements inside phone screen expand properly */
+.phone-screen canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Model Transform Container - Responsive layout for position/rotation/scale */
+.model-transform-container {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .model-transform-container {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 /* General safeguard: avoid any child causing horizontal scroll inside admin-main */

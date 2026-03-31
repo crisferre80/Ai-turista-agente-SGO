@@ -104,7 +104,7 @@ export default function ARScene({
       <PerspectiveCamera 
         makeDefault 
         position={[0, 1.6, 3]} 
-        fov={75}
+        fov={phonePreview ? 100 : 75}
         near={0.01}
         far={20}
       />
@@ -217,15 +217,15 @@ function MainModel({ modelUrl, imageUrl, position, isAnchored, transform, phoneP
   transform?: { position: { x:number;y:number;z:number }; rotation: { x:number;y:number;z:number }; scale: { x:number;y:number;z:number } } | null;
   phonePreview?: { cameraDistance: number; yOffset: number; previewScale: number };
 }) {
-  let gltfScene = null;
-  
-  // useModel delega en useGLTF internamente y requiere Suspense en el árbol padre
-  try {
-    const gltf = useModel(modelUrl as string);
-    gltfScene = gltf?.scene ?? null;
-  } catch (err) {
-    console.error('❌ Error al obtener modelo con useModel:', err);
+  // Si no hay URL válida del modelo, mostrar fallback
+  if (!modelUrl || typeof modelUrl !== 'string' || modelUrl.trim() === '') {
+    return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;
   }
+
+  // useModel delega en useGLTF internamente y requiere Suspense en el árbol padre
+  // No wrapar en try-catch: React hooks deben estar siempre disponibles
+  const gltf = useModel(modelUrl);
+  const gltfScene = gltf?.scene ?? null;
 
   if (!gltfScene) {
     return <FallbackVisual imageUrl={imageUrl} position={position} isAnchored={isAnchored} />;

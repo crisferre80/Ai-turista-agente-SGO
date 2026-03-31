@@ -193,24 +193,24 @@ export default function AdminAISettings() {
   }
 
   return (
-    <div style={{ padding: 12, maxWidth: 720 }}>
-      <h3>Configuración de IA y TTS</h3>
+    <div style={{ padding: 8, maxWidth: '100%', width: '100%', boxSizing: 'border-box' }}>
+      <h3 style={{ margin: '0 0 10px 0', fontSize: '1.05rem' }}>Configuración de IA y TTS</h3>
       {loading ? <div>Cargando...</div> : (
         <>
-          <div style={{ marginBottom: 8 }}>
-            <label>Proveedor IA</label><br />
-            <select value={settings.ia_provider ?? 'gemini'} onChange={e => setSettings({ ...settings, ia_provider: e.target.value as 'gemini' | 'openai' })}>
+          <div style={{ marginBottom: 6 }}>
+            <label style={{ fontSize: '0.9rem' }}>Proveedor IA</label><br />
+            <select style={{ width: '100%', padding: '6px 8px', fontSize: '0.9rem' }} value={settings.ia_provider ?? 'gemini'} onChange={e => setSettings({ ...settings, ia_provider: e.target.value as 'gemini' | 'openai' })}>
               <option value="gemini">Gemini (Google)</option>
               <option value="openai">OpenAI</option>
               <option value="huggingface">HuggingFace (open-source)</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: 8 }}>
-            <label>Modelo IA</label><br />
+          <div style={{ marginBottom: 6 }}>
+            <label style={{ fontSize: '0.9rem' }}>Modelo IA</label><br />
 
             {/* Enhanced model selection interface */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
               <input 
                 value={settings.ia_model ?? ''} 
                 onChange={e => setSettings({ ...settings, ia_model: e.target.value })} 
@@ -241,12 +241,12 @@ export default function AdminAISettings() {
             {models.length > 0 && (
               <div style={{ 
                 border: '1px solid #e0e0e0', 
-                borderRadius: 8, 
-                padding: 16, 
+                borderRadius: 6, 
+                padding: 12, 
                 backgroundColor: '#fafafa',
-                marginBottom: 12
+                marginBottom: 8
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <h4 style={{ margin: 0, color: '#333' }}>
                     {models.some(m => m.provider !== models[0]?.provider) ? 
                       `Modelos de Todos los Proveedores (${models.length})` : 
