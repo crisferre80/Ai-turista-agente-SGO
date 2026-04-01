@@ -137,7 +137,7 @@ export default function Header() {
       
       <nav style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, marginLeft: 'auto' }}>
         {/* Weather Widget */}
-        {!isMobile && <WeatherWidget />}
+        <WeatherWidget />
         
         {!isMobile && (
           <Link href="/explorar" style={{ 
