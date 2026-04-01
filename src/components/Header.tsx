@@ -7,6 +7,7 @@ import { User } from '@supabase/supabase-js';
 import UserAvatar from './UserAvatar';
 import WeatherWidget from './WeatherWidget';
 import { useI18n } from '@/i18n/LanguageProvider';
+import { Locale } from '@/i18n/translations';
 
 const COLOR_GOLD = "#F1C40F";
 const COLOR_WHITE = "#FFFFFF";
@@ -80,14 +81,6 @@ export default function Header() {
     }
   };
 
-  // Language flag map
-  const languageFlagMap: Record<string, string> = {
-    es: '🇪🇸',
-    en: '🇬🇧',
-    pt: '🇧🇷',
-    fr: '🇫🇷'
-  };
-
   return (
     <div style={{
       position: 'fixed',
@@ -154,7 +147,7 @@ export default function Header() {
         {/* Language Selector */}
         <select 
           value={locale} 
-          onChange={(e) => setLocale(e.target.value as any)}
+          onChange={(e) => setLocale(e.target.value as Locale)}
           style={{
             background: 'rgba(255, 255, 255, 0.1)',
             color: COLOR_WHITE,
