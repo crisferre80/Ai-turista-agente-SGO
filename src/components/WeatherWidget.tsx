@@ -98,19 +98,19 @@ const styles = {
   container: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    background: 'rgba(255, 255, 255, 0.7)',
-    padding: '4px 12px',
+    gap: '4px',
+    background: 'rgba(255, 255, 255, 0)',
+    padding: '2px 4px',
     borderRadius: '20px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
     backdropFilter: 'blur(5px)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+    border: '1px solid rgba(34, 38, 46, 0.46)',
   },
   text: {
     display: 'flex',
     flexDirection: 'column' as const,
     lineHeight: '1.2',
-    color: '#333',
+    color: '#fafafa',
   }
 };
 
