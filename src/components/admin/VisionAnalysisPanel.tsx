@@ -21,6 +21,12 @@ interface VisionConfig {
   detectionInterval: number; // ms
   confidenceThreshold: number; // 0-1
   saveSnapshots: boolean;
+  // Configuración de cámara
+  cameraResolution: '480p' | '720p' | '1080p' | '4K';
+  cameraFacing: 'user' | 'environment';
+  cameraFrameRate: number; // fps
+  imageQuality: number; // 0.5-1.0
+  imageFormat: 'image/jpeg' | 'image/png' | 'image/webp';
 }
 
 export default function VisionAnalysisPanel() {
@@ -35,6 +41,12 @@ export default function VisionAnalysisPanel() {
     detectionInterval: 2000,
     confidenceThreshold: 0.5,
     saveSnapshots: true,
+    // Configuración de cámara
+    cameraResolution: '720p',
+    cameraFacing: 'environment',
+    cameraFrameRate: 30,
+    imageQuality: 0.8,
+    imageFormat: 'image/jpeg',
   });
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({
@@ -59,11 +71,22 @@ export default function VisionAnalysisPanel() {
   // Inicializar cámara
   const initCamera = useCallback(async () => {
     try {
+      // Mapear resolución configurada
+      const resolutionMap = {
+        '480p': { width: 640, height: 480 },
+        '720p': { width: 1280, height: 720 },
+        '1080p': { width: 1920, height: 1080 },
+        '4K': { width: 3840, height: 2160 },
+      };
+
+      const resolution = resolutionMap[config.cameraResolution];
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          facingMode: config.cameraFacing,
+          width: { ideal: resolution.width },
+          height: { ideal: resolution.height },
+          frameRate: { ideal: config.cameraFrameRate, max: config.cameraFrameRate }
         }
       });
       
@@ -75,7 +98,7 @@ export default function VisionAnalysisPanel() {
       console.error('Error al acceder a la cámara:', error);
       alert('No se pudo acceder a la cámara. Por favor, verifica los permisos.');
     }
-  }, []);
+  }, [config.cameraResolution, config.cameraFacing, config.cameraFrameRate]);
 
   // Detener cámara
   const stopCamera = useCallback(() => {
@@ -148,9 +171,9 @@ export default function VisionAnalysisPanel() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     try {
-      // Obtener imagen como blob
+      // Obtener imagen como blob con formato y calidad configurables
       const imageBlob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+        canvas.toBlob(resolve, config.imageFormat, config.imageQuality);
       });
 
       if (!imageBlob) return;
@@ -317,6 +340,33 @@ export default function VisionAnalysisPanel() {
           </button>
         </div>
 
+        {/* Info de configuración activa */}
+        {isActive && (
+          <div style={{
+            padding: '10px 15px',
+            background: '#e0f2fe',
+            borderRadius: '8px',
+            marginTop: '10px',
+            fontSize: '13px',
+            color: '#0369a1',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '10px',
+            alignItems: 'center'
+          }}>
+            <span>📹 Cámara activa:</span>
+            <span style={{ fontWeight: 'bold' }}>{config.cameraResolution}</span>
+            <span>•</span>
+            <span>{config.cameraFrameRate} fps</span>
+            <span>•</span>
+            <span>{config.cameraFacing === 'environment' ? '🔙 Trasera' : '🤳 Frontal'}</span>
+            <span>•</span>
+            <span>{config.imageFormat.split('/')[1].toUpperCase()}</span>
+            <span>•</span>
+            <span>Calidad {(config.imageQuality * 100).toFixed(0)}%</span>
+          </div>
+        )}
+
         {/* Visor de Cámara */}
         <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
           <video
@@ -432,6 +482,147 @@ export default function VisionAnalysisPanel() {
             onChange={(e) => setConfig({ ...config, confidenceThreshold: parseFloat(e.target.value) })}
             style={{ width: '100%' }}
           />
+        </div>
+
+        {/* Configuración de Cámara */}
+        <div style={{ 
+          marginTop: '25px', 
+          paddingTop: '20px', 
+          borderTop: '2px solid #e5e7eb' 
+        }}>
+          <h3 style={{ 
+            margin: '0 0 15px 0', 
+            color: COLOR_BLUE, 
+            fontSize: '1.2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            📹 Configuración de Cámara
+          </h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                Resolución
+              </label>
+              <select
+                value={config.cameraResolution}
+                onChange={(e) => setConfig({ ...config, cameraResolution: e.target.value as any })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px'
+                }}
+                disabled={isActive}
+              >
+                <option value="480p">480p (640x480)</option>
+                <option value="720p">720p HD (1280x720)</option>
+                <option value="1080p">1080p Full HD (1920x1080)</option>
+                <option value="4K">4K Ultra HD (3840x2160)</option>
+              </select>
+              {isActive && (
+                <p style={{ fontSize: '11px', color: '#999', margin: '3px 0 0 0' }}>
+                  Detén la cámara para cambiar
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                Cámara
+              </label>
+              <select
+                value={config.cameraFacing}
+                onChange={(e) => setConfig({ ...config, cameraFacing: e.target.value as any })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px'
+                }}
+                disabled={isActive}
+              >
+                <option value="environment">🔙 Trasera (environment)</option>
+                <option value="user">🤳 Frontal (user)</option>
+              </select>
+              {isActive && (
+                <p style={{ fontSize: '11px', color: '#999', margin: '3px 0 0 0' }}>
+                  Detén la cámara para cambiar
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                FPS (Cuadros por segundo)
+              </label>
+              <select
+                value={config.cameraFrameRate}
+                onChange={(e) => setConfig({ ...config, cameraFrameRate: parseInt(e.target.value) })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px'
+                }}
+                disabled={isActive}
+              >
+                <option value="15">15 fps (Bajo)</option>
+                <option value="24">24 fps (Cinema)</option>
+                <option value="30">30 fps (Estándar)</option>
+                <option value="60">60 fps (Alto)</option>
+              </select>
+              {isActive && (
+                <p style={{ fontSize: '11px', color: '#999', margin: '3px 0 0 0' }}>
+                  Detén la cámara para cambiar
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                Formato de imagen
+              </label>
+              <select
+                value={config.imageFormat}
+                onChange={(e) => setConfig({ ...config, imageFormat: e.target.value as any })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="image/jpeg">JPEG (Comprimido)</option>
+                <option value="image/png">PNG (Sin pérdida)</option>
+                <option value="image/webp">WebP (Moderno)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Calidad de imagen: {(config.imageQuality * 100).toFixed(0)}%
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="1"
+              step="0.05"
+              value={config.imageQuality}
+              onChange={(e) => setConfig({ ...config, imageQuality: parseFloat(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+            <p style={{ fontSize: '12px', color: '#666', margin: '5px 0 0 0' }}>
+              Mayor calidad = mayor tamaño de archivo. Recomendado: 80%
+            </p>
+          </div>
         </div>
       </div>
 

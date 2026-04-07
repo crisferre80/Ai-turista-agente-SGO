@@ -80,14 +80,39 @@ Se ha implementado un **sistema completo de análisis de visión por computadora
 
 ```typescript
 {
+  // Detección IA
   enableYolo: boolean,           // Activar/desactivar YOLO
   enableMediaPipe: boolean,      // Activar/desactivar MediaPipe
   enableFaceRecognition: boolean, // Reconocimiento facial
   detectionInterval: number,     // Intervalo de análisis (ms)
   confidenceThreshold: number,   // Umbral de confianza (0-1)
-  saveSnapshots: boolean         // Guardar capturas
+  saveSnapshots: boolean,        // Guardar capturas
+  
+  // Configuración de Cámara
+  cameraResolution: '480p' | '720p' | '1080p' | '4K',  // Resolución de video
+  cameraFacing: 'user' | 'environment',  // Cámara frontal o trasera
+  cameraFrameRate: number,       // FPS (15, 24, 30, 60)
+  imageQuality: number,          // Calidad JPEG (0.5-1.0)
+  imageFormat: string            // 'image/jpeg' | 'image/png' | 'image/webp'
 }
 ```
+
+#### Opciones de Resolución
+- **480p** (640x480) - Ideal para dispositivos con recursos limitados
+- **720p HD** (1280x720) - Equilibrio entre calidad y rendimiento (recomendado)
+- **1080p Full HD** (1920x1080) - Alta calidad, mayor procesamiento
+- **4K Ultra HD** (3840x2160) - Máxima calidad, requiere hardware potente
+
+#### Opciones de Frame Rate
+- **15 fps** - Bajo consumo de recursos, para análisis básico
+- **24 fps** - Estándar cinematográfico
+- **30 fps** - Estándar de video, recomendado
+- **60 fps** - Alta fluidez, para detección rápida de movimiento
+
+#### Formatos de Imagen
+- **JPEG** - Comprimido, menor tamaño (recomendado)
+- **PNG** - Sin pérdida, mayor tamaño
+- **WebP** - Formato moderno, equilibrio óptimo
 
 ### 4. **Almacenamiento y Estadísticas**
 
@@ -252,6 +277,79 @@ Elimina registros más antiguos de 30 días.
 - ✅ Solo admins pueden subir snapshots
 - ✅ Bucket público para visualización
 - ✅ Solo admins pueden eliminar snapshots
+
+---
+
+## 💡 Mejores Prácticas de Configuración
+
+### Escenarios Recomendados
+
+#### **🏃‍♂️ Análisis Rápido en Tiempo Real**
+```
+Resolución: 720p
+Frame Rate: 30 fps
+Intervalo: 1000ms
+Formato: JPEG
+Calidad: 70%
+```
+Ideal para monitoreo continuo con buena calidad y bajo consumo.
+
+#### **📊 Análisis Detallado de Alta Precisión**
+```
+Resolución: 1080p
+Frame Rate: 60 fps
+Intervalo: 2000ms
+Formato: PNG o WebP
+Calidad: 90%
+```
+Para análisis exhaustivos donde la calidad es prioritaria.
+
+#### **⚡ Modo Económico (Bajo Consumo)**
+```
+Resolución: 480p
+Frame Rate: 15 fps
+Intervalo: 3000ms
+Formato: JPEG
+Calidad: 60%
+```
+Para dispositivos con recursos limitados o conexión lenta.
+
+#### **🎥 Grabación de Evidencia**
+```
+Resolución: 1080p
+Frame Rate: 30 fps
+Intervalo: 500ms
+Formato: WebP
+Calidad: 85%
+Guardar capturas: Activado
+```
+Para documentar eventos con máximo detalle.
+
+### Recomendaciones por Dispositivo
+
+| Dispositivo | Resolución | FPS | Calidad |
+|-------------|-----------|-----|---------|
+| 📱 Móvil básico | 480p | 15-24 | 60-70% |
+| 📱 Móvil moderno | 720p | 30 | 80% |
+| 💻 Laptop | 720p-1080p | 30 | 80-85% |
+| 🖥️ Desktop potente | 1080p-4K | 30-60 | 90% |
+| 📹 Cámara IP | 1080p | 30 | 85% |
+
+### Consideraciones de Rendimiento
+
+**Tamaño estimado por frame:**
+- 480p JPEG 70%: ~50-80 KB
+- 720p JPEG 80%: ~100-150 KB
+- 1080p JPEG 80%: ~200-300 KB
+- 1080p PNG: ~800KB-1.2MB
+- 1080p WebP 85%: ~150-250 KB
+
+**Ancho de banda requerido (con guardado):**
+- Intervalo 1s: Multiplicar tamaño × 60 = MB/minuto
+- Intervalo 2s: Multiplicar tamaño × 30 = MB/minuto
+- Intervalo 5s: Multiplicar tamaño × 12 = MB/minuto
+
+**Ejemplo:** 720p JPEG 80% a 2s = 150KB × 30 = 4.5 MB/min
 
 ---
 
