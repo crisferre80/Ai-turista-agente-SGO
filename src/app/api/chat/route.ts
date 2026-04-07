@@ -131,10 +131,10 @@ function checkRateLimit(userId: string): { allowed: boolean; remainingRequests: 
 
 export async function POST(req: Request) {
     try {
-        const { messages, userLocation, weather: reqWeather, locale: reqLocale } = await req.json();
+        const { messages, userLocation, weather: reqWeather, locale: reqLocale, visionContext: reqVisionContext } = await req.json();
         const locale = reqLocale || 'es'; // default to spanish if missing
         
-        console.log('🌐 Chat API received request with locale:', locale, 'reqLocale:', reqLocale);
+        console.log('🌐 Chat API received request with locale:', locale, 'reqLocale:', reqLocale, 'hasVisionContext:', !!reqVisionContext);
 
         // --- weather context (optional) ------------------------------------------------
         let weatherContext = '';
@@ -157,6 +157,52 @@ export async function POST(req: Request) {
                 }
             } catch (e) {
                 console.warn('No se pudo obtener contexto del clima:', e);
+            }
+        }
+        // --------------------------------------------------------------------------------
+
+        // --- vision AI context (optional) -----------------------------------------------
+        let visionContext = '';
+        if (reqVisionContext && typeof reqVisionContext === 'object') {
+            const vc = reqVisionContext;
+            
+            // Build vision context for system prompt
+            const detections: string[] = [];
+            
+            if (vc.peopleDetected > 0) {
+                detections.push(`${vc.peopleDetected} persona${vc.peopleDetected > 1 ? 's' : ''} detectada${vc.peopleDetected > 1 ? 's' : ''}`);
+            }
+            
+            if (vc.knownFaces && vc.knownFaces.length > 0) {
+                const names = vc.knownFaces.map((f: any) => f.nickname || 'visitante conocido').join(', ');
+                detections.push(`rostros conocidos: ${names}`);
+            }
+            
+            if (vc.detectedObjects && vc.detectedObjects.length > 0) {
+                const objects = vc.detectedObjects.slice(0, 5).map((o: any) => o.label).join(', ');
+                detections.push(`objetos visibles: ${objects}`);
+            }
+            
+            if (vc.nearbyLandmarks && vc.nearbyLandmarks.length > 0) {
+                const landmarks = vc.nearbyLandmarks.slice(0, 3).map((l: any) => l.name).join(', ');
+                detections.push(`monumentos/puntos de interés cercanos: ${landmarks}`);
+            }
+            
+            if (vc.gestures && vc.gestures.length > 0) {
+                const gestures = vc.gestures.map((g: any) => g.type).join(', ');
+                detections.push(`gestos detectados: ${gestures}`);
+            }
+            
+            if (vc.groupType) {
+                detections.push(`tipo de grupo: ${vc.groupType}`);
+            }
+            
+            if (detections.length > 0) {
+                visionContext = `ANÁLISIS VISUAL DEL ENTORNO (vía cámara):\n${detections.map(d => `- ${d}`).join('\n')}\n\n` +
+                    'Usa esta información visual para personalizar tu respuesta. Si detectas personas conocidas, salúdalas por su nombre. ' +
+                    'Si hay monumentos visibles, proporciona información relevante. Si detectas gestos (como señalar), interpreta la intención del usuario.';
+                
+                console.log('👁️ Vision context added to prompt:', detections);
             }
         }
         // --------------------------------------------------------------------------------
@@ -665,6 +711,7 @@ export async function POST(req: Request) {
 
     Current app context:
     ${weatherContext}
+    ${visionContext}
     ${localContext}
     ${userContext}
     `;

@@ -9,6 +9,7 @@ import { takePhoto } from '@/lib/photoService';
 import { getDefaultCategories, mergeWithDefaultCategories, normalizeCategoryName } from '@/lib/categories';
 import { generateUniqueFileName } from '@/lib/sanitize-filename';
 import { getErrorMessage, logError } from '@/lib/error-handler';
+import VisionAnalysisPanel from '@/components/admin/VisionAnalysisPanel';
 
 // Tipos básicos usados en este panel
 
@@ -1829,6 +1830,7 @@ export default function AdminDashboard() {
                     <button onClick={() => { setActiveTab('planes'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'planes')}>💳 Planes</button>
                     <button onClick={() => { setActiveTab('usuarios'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'usuarios')}>👥 Usuarios</button>
                     <button onClick={() => { setActiveTab('ai'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'ai')}>🤖 IA / TTS</button>
+                    <button onClick={() => { setActiveTab('vision'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'vision')}>👁️ Visión IA</button>
                     <button onClick={() => { setActiveTab('backup'); setIsMobileMenuOpen(false); }} style={tabStyle(activeTab === 'backup')}>💾 Copia</button>
                 </div>
 
@@ -1871,6 +1873,7 @@ export default function AdminDashboard() {
                                 activeTab === 'planes' ? 'Planes de Pago' :
                                 activeTab === 'usuarios' ? 'Gestión de Usuarios' :
                                 activeTab === 'ai' ? 'IA y TTS' :
+                                activeTab === 'vision' ? 'Visión IA y Detección' :
                                 activeTab === 'backup' ? 'Copia de Seguridad' :
                                 'Santi'}
                     </h1>
@@ -3577,6 +3580,11 @@ export default function AdminDashboard() {
                         <h3 style={{ fontSize: '1.5rem', color: COLOR_BLUE, marginBottom: '25px', fontWeight: 'bold' }}>🤖 IA y TTS</h3>
                         <AdminAISettings />
                     </div>
+                )}
+
+                {/* Tab: VISION IA */}
+                {activeTab === 'vision' && (
+                    <VisionAnalysisPanel />
                 )}
 
                 {/* Tab: BACKUP/EXPORT */}

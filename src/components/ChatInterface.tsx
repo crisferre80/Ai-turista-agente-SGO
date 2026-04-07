@@ -7,6 +7,13 @@ import { getSessionSafe, getUserSafe } from '@/lib/supabaseAuth';
 import { stopSantiNarration } from '@/lib/speech';
 import { useI18n } from '@/i18n/LanguageProvider';
 
+// Vision AI imports
+import { useYOLO } from '@/hooks/useYOLO';
+import { useMediaPipeVision } from '@/hooks/useMediaPipeVision';
+import { VisionAnalysisOverlay } from '@/components/VisionAnalysisOverlay';
+import { analyzeScene, buildContextForChat, generateUserSummary } from '@/lib/vision/vision-orchestrator';
+import type { VisionAnalysisResult } from '@/types/vision';
+
 declare global {
     interface Window {
         santiNarrate?: (text: string) => void;
@@ -71,6 +78,39 @@ const ChatInterface = ({ externalTrigger, externalStory, isModalOpen, userLocati
     const [showBubbleManual, setShowBubbleManual] = useState(false); // Manual click toggle for bubble
     const [isMicHover, setIsMicHover] = useState(false); // Hover/focus state for mic legend
     const [promotionalMessages, setPromotionalMessages] = useState<PromoMessage[]>([]); // Promotional messages from DB (with optional media)
+
+    // Vision AI states
+    const [visionAnalysisActive, setVisionAnalysisActive] = useState(false);
+    const [visionResult, setVisionResult] = useState<VisionAnalysisResult | null>(null);
+    const [showVisionOverlay, setShowVisionOverlay] = useState(false);
+    
+    // Vision AI hooks - Opciones estables para evitar re-creaciones
+    const yoloOptions = React.useMemo(() => ({ autoLoad: false }), []);
+    const mediapipeOptions = React.useMemo(() => ({ autoLoad: false }), []);
+    const yolo = useYOLO(yoloOptions);
+    const mediapipe = useMediaPipeVision(mediapipeOptions);
+
+    // Pre-cargar modelos de visión en segundo plano después de 5 segundos
+    // Esto mejora la UX haciendo que estén listos cuando el usuario los necesite
+    useEffect(() => {
+        const preloadTimer = setTimeout(() => {
+            // Solo pre-cargar si los modelos no están ya cargados/cargando y no hay errores
+            if (!yolo.isReady && !yolo.isLoading && !yolo.error) {
+                console.log('🔄 Pre-cargando modelo YOLO en segundo plano...');
+                yolo.loadModel().catch(err => {
+                    console.warn('⚠️ Pre-carga de YOLO fallida (esperado si el modelo no existe):', err);
+                });
+            }
+            if (!mediapipe.isReady && !mediapipe.isLoading && !mediapipe.error) {
+                console.log('🔄 Pre-cargando modelo MediaPipe en segundo plano...');
+                mediapipe.loadModels().catch(err => {
+                    console.warn('⚠️ Pre-carga de MediaPipe fallida:', err);
+                });
+            }
+        }, 5000); // 5 segundos de delay
+
+        return () => clearTimeout(preloadTimer);
+    }, []); // Solo ejecutar una vez al montar
 
     // weather data (mirrors widget) so we can send it to the chat backend
     interface WeatherData {
@@ -526,6 +566,147 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         }
     }, [cleanTextForSpeech, locale, t]);
 
+    // Vision AI: Detectar frases trigger para análisis visual
+    const isVisionQuery = useCallback((text: string): boolean => {
+        const triggers = [
+            'qué ves', 'que ves',
+            'analiza esto', 'analiza esta', 'analiza el', 'analiza la',
+            'mira esto',  'mira esta','mira este', 'mira eso',
+            'qué hay aquí', 'que hay aqui',
+            'qué detectas', 'que detectas',
+            'usa tu visión', 'usa tus ojos',
+            'what do you see', 'analyze this', 'look at this',
+            'o que você vê', 'analise isto',
+            'qu\'est-ce que tu vois'
+        ];
+        
+        const lowerText = text.toLowerCase();
+        return triggers.some(trigger => lowerText.includes(trigger));
+    }, []);
+
+    // Vision AI: Ejecutar análisis visual completo
+    const executeVisionAnalysis = useCallback(async () => {
+        console.log('🔍 Ejecutando análisis visual...');
+        console.log('📊 Estado inicial - YOLO:', { isReady: yolo.isReady, isLoading: yolo.isLoading, error: yolo.error });
+        console.log('📊 Estado inicial - MediaPipe:', { isReady: mediapipe.isReady, isLoading: mediapipe.isLoading, error: mediapipe.error });
+        
+        setVisionAnalysisActive(true);
+        setShowVisionOverlay(true);
+
+        try {
+            // Mostrar mensaje si es primera vez que se cargan los modelos
+            const needsToLoad = (!yolo.isReady && !yolo.isLoading && !yolo.error) || 
+                              (!mediapipe.isReady && !mediapipe.isLoading && !mediapipe.error);
+            
+            if (needsToLoad) {
+                // Agregar mensaje temporal informando al usuario
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: '🔄 Descargando modelos de visión por primera vez (12 MB)... Esto puede tardar unos 20-30 segundos. Por favor, espera...'
+                }]);
+            }
+            
+            // Iniciar carga solo si NO están listos, NO están cargando, y NO tienen error
+            if (!yolo.isReady && !yolo.isLoading && !yolo.error) {
+                console.log('📦 Iniciando carga de modelo YOLO...');
+                yolo.loadModel(); // No await - solo iniciamos la carga
+            } else if (yolo.isLoading) {
+                console.log('⏳ YOLO ya está cargando, esperando...');
+            } else if (yolo.isReady) {
+                console.log('✅ YOLO ya está listo');
+            }
+            
+            if (!mediapipe.isReady && !mediapipe.isLoading && !mediapipe.error) {
+                console.log('📦 Iniciando carga de modelo MediaPipe...');
+                mediapipe.loadModels(); // No await - solo iniciamos la carga
+            } else if (mediapipe.isLoading) {
+                console.log('⏳ MediaPipe ya está cargando, esperando...');
+            } else if (mediapipe.isReady) {
+                console.log('✅ MediaPipe ya está listo');
+            }
+
+            // Verificar si hay errores críticos
+            if (yolo.error || mediapipe.error) {
+                let errorMessage = 'Lo siento, el sistema de visión no está disponible en este momento.';
+                
+                if (yolo.error?.includes('no encontrado')) {
+                    errorMessage += '\n\n⚠️ El modelo YOLO no está instalado. ' +
+                                   'Para usar la función de visión, necesitas exportar el modelo siguiendo las instrucciones en QUICKSTART_YOLO.md';
+                }
+                
+                console.warn('⚠️ Sistema de visión no disponible:', { 
+                    yoloError: yolo.error, 
+                    mediapipeError: mediapipe.error 
+                });
+                
+                return { 
+                    result: null, 
+                    summary: errorMessage
+                };
+            }
+
+            // Esperar a que estén listos (primera carga puede tardar ~30s descargando modelo YOLO 12MB)
+            const maxWait = 35000; // 35 segundos máximo
+            const startWait = Date.now();
+            let lastLogTime = 0;
+            
+            while ((!yolo.isReady || !mediapipe.isReady) && (Date.now() - startWait) < maxWait) {
+                // Log progress cada 3 segundos
+                const elapsed = Date.now() - startWait;
+                if (elapsed - lastLogTime > 3000) {
+                    console.log(`⏳ Esperando modelos... (${Math.floor(elapsed/1000)}s/${Math.floor(maxWait/1000)}s)`);
+                    console.log(`   YOLO: ${yolo.isReady ? '✅ Listo' : (yolo.isLoading ? '⏳ Cargando' : '❌ No iniciado')} ${yolo.error ? `(Error: ${yolo.error})` : ''}`);
+                    console.log(`   MediaPipe: ${mediapipe.isReady ? '✅ Listo' : (mediapipe.isLoading ? '⏳ Cargando' : '❌ No iniciado')} ${mediapipe.error ? `(Error: ${mediapipe.error})` : ''}`);
+                    lastLogTime = elapsed;
+                }
+                await new Promise(resolve => setTimeout(resolve, 200)); // Chequear más frecuentemente
+            }
+
+            if (!yolo.isReady || !mediapipe.isReady) {
+                console.warn('⚠️ Modelos de visión no cargaron a tiempo después de 35s');
+                console.warn('   YOLO final:', { isReady: yolo.isReady, isLoading: yolo.isLoading, error: yolo.error });
+                console.warn('   MediaPipe final:', { isReady: mediapipe.isReady, isLoading: mediapipe.isLoading, error: mediapipe.error });
+                return {
+                    result: null,
+                    summary: 'Lo siento, el sistema de visión está tardando más de lo esperado. Esto puede ocurrir en la primera carga mientras descarga los modelos (12 MB). Por favor, intenta de nuevo en unos momentos.'
+                };
+            }
+
+            console.log('✅ Modelos listos, iniciando análisis de escena...');
+
+            // Ejecutar análisis
+            const result = await analyzeScene(
+                {
+                    yoloDetect: yolo.detect,
+                    mediapipeDetectPose: mediapipe.detectPose,
+                    mediapipeDetectFace: mediapipe.detectFace,
+                },
+                userLocation ? {
+                    lat: userLocation.latitude,
+                    lng: userLocation.longitude,
+                } : undefined
+            );
+
+            setVisionResult(result);
+            console.log('✅ Análisis visual completado:', result);
+
+            // Generar resumen para el usuario
+            const summary = generateUserSummary(result);
+            
+            return { result, summary };
+
+        } catch (err) {
+            console.error('❌ Error en análisis visual:', err);
+            const errorMessage = 'Hubo un problema al analizar la imagen. Por favor, intenta de nuevo.';
+            return {
+                result: null,
+                summary: errorMessage
+            };
+        } finally {
+            setVisionAnalysisActive(false);
+        }
+    }, [yolo, mediapipe, userLocation]);
+
     const triggerAssistantMessage = useCallback((text: string, skipMapFocus = false) => {
         updateInteractionTime();
         setMessages(prev => [...prev, { role: 'assistant', content: text }]);
@@ -557,6 +738,35 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         setIsLoading(true);
         setIsThinking(true);
 
+        // Vision AI: Detectar y ejecutar análisis visual si es una vision query
+        let visionContext = null;
+        if (isVisionQuery(textToSend)) {
+            console.log('🎯 Vision query detectada, ejecutando análisis...');
+            const { result, summary } = await executeVisionAnalysis();
+            
+            // Si hubo error en el análisis (result es null), mostrar mensaje de error y detener
+            if (!result) {
+                console.warn('⚠️ Análisis visual falló, deteniendo procesamiento');
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: summary 
+                }]);
+                playAudioResponse(summary);
+                setIsLoading(false);
+                setIsThinking(false);
+                setShowVisionOverlay(false);
+                return;
+            }
+            
+            // Si el análisis fue exitoso, construir contexto para enviar a Gemini
+            // NO mostrar el summary básico, Gemini generará una respuesta más natural
+            visionContext = buildContextForChat(result);
+            console.log('✅ Contexto visual construido, enviando a Gemini para análisis:', visionContext);
+            
+            // Mantener overlay visible mientras Gemini procesa
+            // Se ocultará después de recibir la respuesta
+        }
+
         try {
             // Obtener token del usuario autenticado
             // fetch session via helper that swallows AbortError
@@ -574,7 +784,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                     messages: [...getApiMessages(), { role: 'user', content: textToSend }],
                     userLocation: userLocation || undefined,
                     weather: weatherData || undefined,
-                    locale // send current locale so backend can localize descriptions
+                    locale, // send current locale so backend can localize descriptions
+                    visionContext: visionContext || undefined, // Vision AI context if available
                 }),
             });
 
@@ -818,6 +1029,15 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
         } finally {
             setIsLoading(false);
             updateInteractionTime(); // Reset timer again after response
+            
+            // Ocultar overlay de visión si estaba activo (después de que Gemini respondió)
+            if (showVisionOverlay) {
+                setTimeout(() => {
+                    setShowVisionOverlay(false);
+                    setVisionResult(null);
+                }, 3000); // Mantener visible 3 segundos después de la respuesta
+            }
+            
             // Restaurar foco al input para permitir escribir inmediatamente
             setTimeout(() => {
                 const el = inputRef.current;
@@ -830,7 +1050,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 }
             }, 100);
         }
-    }, [input, getApiMessages, playAudioResponse, router, userLocation, t, locale, getLocaleDesc]);
+    }, [input, getApiMessages, playAudioResponse, router, userLocation, t, locale, getLocaleDesc, isVisionQuery, executeVisionAnalysis, showVisionOverlay]);
 
     // Voice navigation command processor - defined after triggerAssistantMessage and playAudioResponse
     const processVoiceNavigationCommand = useCallback((transcript: string): boolean => {
@@ -2290,6 +2510,17 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                     }
                 }
             `}} />
+
+            {/* Vision Analysis Overlay */}
+            <VisionAnalysisOverlay
+                isAnalyzing={visionAnalysisActive}
+                result={visionResult}
+                showBoundingBoxes={false}
+                onClose={() => {
+                    setShowVisionOverlay(false);
+                    setVisionResult(null);
+                }}
+            />
         </div>
     );
 };
