@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useRef, useState, useEffect, Suspense, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -54,6 +55,8 @@ interface ARPreview3DProps {
     previewScale?: number;
   };
   onPhonePreviewChange?: (p: { cameraDistance: number; yOffset: number; previewScale: number }) => void;
+  /** id del contenedor DOM donde renderizar el panel de herramientas mediante portal */
+  toolsPortalId?: string;
 }
 
 /**
@@ -395,13 +398,79 @@ function PhoneCameraFrustumHelper({
 function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
   // Prefer explicit typed fields (image_url). Support legacy content_url for safety.
   const imageUrl = ('image_url' in hotspot && hotspot.image_url) || ((hotspot as unknown as Record<string, unknown>).content_url as string) || '';
-  const texture = useTexture(imageUrl || '') as unknown as THREE.Texture | THREE.Texture[];
-
+  
   // Elevamos un poco el contenido sobre el marcador
   const yOffset = 0.8;
   const pos = Array.isArray(hotspot.position)
     ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
     : (hotspot.position as { x: number; y: number; z: number });
+
+  // Si no hay URL, mostrar placeholder
+  if (!imageUrl) {
+    return (
+      <group position={[pos.x, pos.y + yOffset, pos.z]}>
+        <mesh position={[0, 0, -0.001]}>
+          <planeGeometry args={[1.7, 0.9]} />
+          <meshBasicMaterial color="black" opacity={0.7} transparent />
+        </mesh>
+        <mesh>
+          <planeGeometry args={[1.6, 0.8]} />
+          <meshBasicMaterial color="#555555" />
+        </mesh>
+        <Text
+          position={[0, 0, 0.01]}
+          fontSize={0.3}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.03}
+          outlineColor="#000000"
+        >
+          🖼️
+        </Text>
+        <Text
+          position={[0, -0.55, 0]}
+          fontSize={0.12}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.02}
+          outlineColor="#000000"
+        >
+          {('title' in hotspot && hotspot.title) || 'Imagen'}
+        </Text>
+        <Text
+          position={[0, 0.35, 0.01]}
+          fontSize={0.08}
+          color="#ff6b6b"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.01}
+          outlineColor="#000000"
+        >
+          Sin URL
+        </Text>
+      </group>
+    );
+  }
+
+  // Componente interno que usa la textura
+  return <HotspotImageBillboardWithTexture hotspot={hotspot} imageUrl={imageUrl} yOffset={yOffset} pos={pos} />;
+}
+
+// Componente separado que carga la textura (debe estar envuelto en Suspense)
+function HotspotImageBillboardWithTexture({ 
+  hotspot, 
+  imageUrl, 
+  yOffset, 
+  pos 
+}: { 
+  hotspot: Hotspot; 
+  imageUrl: string; 
+  yOffset: number; 
+  pos: { x: number; y: number; z: number };
+}) {
+  const texture = useTexture(imageUrl);
 
   return (
     <group position={[pos.x, pos.y + yOffset, pos.z]}>
@@ -413,7 +482,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
         <meshBasicMaterial
-          map={imageUrl ? (Array.isArray(texture) ? texture[0] : (texture as THREE.Texture)) : undefined}
+          map={Array.isArray(texture) ? texture[0] : texture}
           toneMapped={false}
         />
       </mesh>
@@ -426,7 +495,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        {('title' in hotspot && hotspot.title) || ''}
+        {('title' in hotspot && hotspot.title) || 'Imagen'}
       </Text>
     </group>
   );
@@ -434,6 +503,7 @@ function HotspotImageBillboard({ hotspot }: { hotspot: Hotspot }) {
 
 // Billboard 3D simple para vídeos (placeholder)
 function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
+  const videoUrl = ('video_url' in hotspot && hotspot.video_url) || '';
   const yOffset = 0.8;
   const pos = Array.isArray(hotspot.position)
     ? { x: hotspot.position[0] ?? 0, y: hotspot.position[1] ?? 0, z: hotspot.position[2] ?? 0 }
@@ -441,10 +511,17 @@ function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
 
   return (
     <group position={[pos.x, pos.y + yOffset, pos.z]}>
+      {/* Fondo */}
+      <mesh position={[0, 0, -0.001]}>
+        <planeGeometry args={[1.7, 0.9]} />
+        <meshBasicMaterial color="black" opacity={0.7} transparent />
+      </mesh>
+      {/* Panel frontal */}
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
-        <meshBasicMaterial color="#7c3aed" opacity={0.9} transparent />
+        <meshBasicMaterial color={videoUrl ? "#7c3aed" : "#555555"} opacity={0.9} transparent />
       </mesh>
+      {/* Icono */}
       <Text
         position={[0, 0, 0.01]}
         fontSize={0.4}
@@ -456,6 +533,7 @@ function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
       >
         🎬
       </Text>
+      {/* Título */}
       <Text
         position={[0, -0.55, 0]}
         fontSize={0.12}
@@ -465,20 +543,35 @@ function HotspotVideoBillboard({ hotspot }: { hotspot: Hotspot }) {
         outlineWidth={0.02}
         outlineColor="#000000"
       >
-        {('title' in hotspot && hotspot.title) || ''}
+        {('title' in hotspot && hotspot.title) || 'Video'}
       </Text>
+      {/* Indicador si no hay URL */}
+      {!videoUrl && (
+        <Text
+          position={[0, 0.35, 0.01]}
+          fontSize={0.08}
+          color="#ff6b6b"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.01}
+          outlineColor="#000000"
+        >
+          Sin URL
+        </Text>
+      )}
     </group>
   );
 }
 
 // Selector de billboard según tipo de hotspot
 function HotspotMediaBillboard({ hotspot }: { hotspot: Hotspot }) {
-  // Select correct field per hotspot type (image_url/video_url). If no media, skip.
-  if (hotspot.type === 'image' && ('image_url' in hotspot) && hotspot.image_url) {
+  // Mostrar billboard para imágenes (con o sin URL)
+  if (hotspot.type === 'image') {
     return <HotspotImageBillboard hotspot={hotspot} />;
   }
 
-  if (hotspot.type === 'video' && ('video_url' in hotspot) && hotspot.video_url) {
+  // Mostrar billboard para videos (con o sin URL)
+  if (hotspot.type === 'video') {
     return <HotspotVideoBillboard hotspot={hotspot} />;
   }
 
@@ -583,6 +676,7 @@ export default function ARPreview3D({
   lightMode = false,
   primitives: externalPrimitives,
   onPrimitivesChange,
+  toolsPortalId,
 }: ARPreview3DProps) {
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>(null);
   const primitives = useMemo(() => externalPrimitives || [], [externalPrimitives]);
@@ -595,7 +689,7 @@ export default function ARPreview3D({
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
-  const [showCameraGizmo, setShowCameraGizmo] = useState(false);
+  const [showCameraGizmo] = useState(false);
   const [selectedCameraGizmo, setSelectedCameraGizmo] = useState(false);
   const orbitRef = useRef<OrbitControlsImpl | null>(null);
   const cameraRef = useRef<THREE.Camera | null>(null);
@@ -1380,9 +1474,11 @@ export default function ARPreview3D({
         })}
 
         {/* Contenido multimedia (imagen / video) anclado en el espacio 3D */}
-        {hotspots.map((hotspot) => (
-          <HotspotMediaBillboard key={`${hotspot.id}-media`} hotspot={hotspot} />
-        ))}
+        <Suspense fallback={null}>
+          {hotspots.map((hotspot) => (
+            <HotspotMediaBillboard key={`${hotspot.id}-media`} hotspot={hotspot} />
+          ))}
+        </Suspense>
         </Canvas>
 
         {/* Indicador de carga del Canvas */}
@@ -1427,122 +1523,66 @@ export default function ARPreview3D({
           </div>
         )}
 
-        {/* Controles e información */}
-
+        {/* Modos de transformación */}
         <div style={{
           position: 'absolute',
           top: 10,
           left: 10,
           background: 'rgba(0,0,0,0.8)',
           color: 'white',
-          padding: '10px',
+          padding: '8px',
           borderRadius: '8px',
-          fontSize: '0.8rem',
-          maxWidth: '250px',
-          border: '1px solid rgba(0, 255, 0, 0.3)'
+          display: 'flex',
+          gap: 6,
+          alignItems: 'center'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              🎮 Controles
-              <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: canvasReady ? '#00ff00' : '#ff9800', borderRadius: '4px', color: '#000' }}>
-                {canvasReady ? '✓' : '...'}
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                if (orbitRef.current) {
-                  orbitRef.current.enabled = true;
-                }
-              }}
-              style={{
-                padding: '2px 6px',
-                background: '#2563eb',
-                border: 'none',
-                borderRadius: 4,
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '0.7rem'
-              }}
-              title="Habilitar controles de cámara"
-            >
-              🔓 Activar
-            </button>
-          </div>
-          <div style={{ fontSize: '0.7rem', lineHeight: '1.5' }}>
-            • <strong>Rotar:</strong> Click izq + arrastrar<br/>
-            • <strong>Zoom:</strong> Rueda del mouse<br/>
-            • <strong>Mover:</strong> Click der + arrastrar<br/>
-            • <strong>Seleccionar:</strong> Click en objeto
-          </div>
+          <button
+            onClick={() => setTransformMode('translate')}
+            style={{
+              padding: '4px 8px',
+              background: transformMode === 'translate' ? '#2563eb' : 'transparent',
+              color: transformMode === 'translate' ? 'white' : '#ddd',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: '0.75rem'
+            }}
+            title="Mover (Translate)"
+          >
+            <Move size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> 
+          </button>
 
-          {/* Gizmo mode buttons */}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
-            <button
-              onClick={() => setTransformMode('translate')}
-              style={{
-                padding: '4px 8px',
-                background: transformMode === 'translate' ? '#2563eb' : 'transparent',
-                color: transformMode === 'translate' ? 'white' : '#ddd',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontSize: '0.75rem'
-              }}
-              title="Mover (Translate)"
-            >
-              <Move size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Mover
-            </button>
+          <button
+            onClick={() => setTransformMode('rotate')}
+            style={{
+              padding: '4px 8px',
+              background: transformMode === 'rotate' ? '#2563eb' : 'transparent',
+              color: transformMode === 'rotate' ? 'white' : '#ddd',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: '0.75rem'
+            }}
+            title="Rotar (Rotate)"
+          >
+            <RotateCcw size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> 
+          </button>
 
-            <button
-              onClick={() => setTransformMode('rotate')}
-              style={{
-                padding: '4px 8px',
-                background: transformMode === 'rotate' ? '#2563eb' : 'transparent',
-                color: transformMode === 'rotate' ? 'white' : '#ddd',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontSize: '0.75rem'
-              }}
-              title="Rotar (Rotate)"
-            >
-              <RotateCcw size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Rotar
-            </button>
-
-            <button
-              onClick={() => setTransformMode('scale')}
-              style={{
-                padding: '4px 8px',
-                background: transformMode === 'scale' ? '#2563eb' : 'transparent',
-                color: transformMode === 'scale' ? 'white' : '#ddd',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontSize: '0.75rem'
-              }}
-              title="Escalar (Scale)"
-            >
-              <Maximize2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Escalar
-            </button>
-
-            {/* Camera gizmo toggle */}
-            <button
-              onClick={() => setShowCameraGizmo(prev => !prev)}
-              title="Mostrar gizmo del ancla AR"
-              style={{
-                marginLeft: 6,
-                padding: '4px 8px',
-                background: showCameraGizmo ? '#10B981' : 'transparent',
-                color: showCameraGizmo ? 'white' : '#ddd',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontSize: '0.75rem'
-              }}
-            >
-              ⚓ Ancla AR
-            </button>
-          </div>
+          <button
+            onClick={() => setTransformMode('scale')}
+            style={{
+              padding: '4px 8px',
+              background: transformMode === 'scale' ? '#2563eb' : 'transparent',
+              color: transformMode === 'scale' ? 'white' : '#ddd',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: '0.75rem'
+            }}
+            title="Escalar (Scale)"
+          >
+            <Maximize2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> 
+          </button>
         </div>
 
         {/* Leyenda de colores */}
@@ -1554,21 +1594,21 @@ export default function ARPreview3D({
           color: 'white',
           padding: '10px',
           borderRadius: '8px',
-          fontSize: '0.75rem'
+          fontSize: '0.55rem'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>
             Tipos de Hotspot
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#4CAF50' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '4px' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4CAF50' }} />
             <span>Información</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#2196F3' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '4px' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#2196F3' }} />
             <span>Imagen</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#FF9800' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF9800' }} />
             <span>Video</span>
           </div>
         </div>
@@ -1650,10 +1690,7 @@ export default function ARPreview3D({
           fontSize: '0.75rem',
           lineHeight: '1.4'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>🖱️ Controles:</div>
-          <div>• Click izquierdo: Rotar vista</div>
-          <div>• Click derecho: Mover vista</div>
-          <div>• Scroll: Zoom</div>
+          
         </div>
       </div>
 
@@ -1939,215 +1976,435 @@ export default function ARPreview3D({
 
       </div>
 
-      {/* Panel lateral de herramientas */}
-      <div style={{ width: '360px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#111', padding: '12px', borderRadius: '8px', border: '1px solid #333', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto', color: 'white' }}>
-        <button 
-          onClick={() => setShowTools(prev => !prev)} 
-          style={{ 
-            padding: '8px 10px', 
-            background: '#667eea', 
-            border: 'none', 
-            borderRadius: 8, 
-            color: 'white', 
-            cursor: 'pointer',
-            fontWeight: '600',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            justifyContent: 'center'
-          }}
-        >
-          <Settings size={14} /> {showTools ? 'Ocultar Herramientas' : 'Mostrar Herramientas'}
-        </button>
+      {/* Panel lateral de herramientas - solo inline si NO hay portal */}
+      {!toolsPortalId && (
+        <div style={{ width: '360px', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#111', padding: '12px', borderRadius: '8px', border: '1px solid #333', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto', color: 'white' }}>
+          <button 
+              onClick={() => setShowTools(prev => !prev)} 
+              style={{ 
+                padding: '8px 10px', 
+                background: '#667eea', 
+                border: 'none', 
+                borderRadius: 8, 
+                color: 'white', 
+                cursor: 'pointer',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                justifyContent: 'center'
+              }}
+            >
+              <Settings size={14} /> {showTools ? 'Ocultar Herramientas' : 'Mostrar Herramientas'}
+            </button>
 
-        {showTools && (
-          <>
-            {/* Primitivas */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Move size={14} /> Primitivas</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                <button onClick={() => addPrimitive('box')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cubo</button>
-                <button onClick={() => addPrimitive('sphere')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Esfera</button>
-                <button onClick={() => addPrimitive('cylinder')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cilindro</button>
-                <button onClick={() => addPrimitive('cone')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cono</button>
-                <button onClick={() => addPrimitive('plane')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Plano</button>
-              </div>
-              {primitives.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Primitivas existentes</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {primitives.map(p => (
-                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedPrimitive === p.id ? 'rgba(255,255,255,0.03)' : 'transparent', borderRadius: 6 }}>
-                        <div style={{ fontSize: '0.85rem' }}>{p.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{p.id}</span></div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => setSelectedPrimitive(p.id)} style={{ padding: '4px 8px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white' }}>Seleccionar</button>
-                          <button onClick={() => removePrimitive(p.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+            {showTools && (
+              <>
+                {/* Primitivas */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Move size={14} /> Primitivas</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <button onClick={() => addPrimitive('box')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cubo</button>
+                    <button onClick={() => addPrimitive('sphere')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Esfera</button>
+                    <button onClick={() => addPrimitive('cylinder')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cilindro</button>
+                    <button onClick={() => addPrimitive('cone')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cono</button>
+                    <button onClick={() => addPrimitive('plane')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Plano</button>
+                  </div>
+                  {primitives.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Primitivas existentes</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {primitives.map(p => (
+                          <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedPrimitive === p.id ? 'rgba(255,255,255,0.03)' : 'transparent', borderRadius: 6 }}>
+                            <div style={{ fontSize: '0.85rem' }}>{p.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{p.id}</span></div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={() => setSelectedPrimitive(p.id)} style={{ padding: '4px 8px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white' }}>Seleccionar</button>
+                              <button onClick={() => removePrimitive(p.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Luces */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Lightbulb size={14} /> Luces</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <button onClick={() => addLight('ambient')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Ambiental</button>
+                    <button onClick={() => addLight('directional')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Direccional</button>
+                    <button onClick={() => addLight('point')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Punto</button>
+                    <button onClick={() => addLight('spot')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Foco</button>
+                  </div>
+                  {lights.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Luces añadidas</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {lights.map(l => (
+                          <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: 'transparent', borderRadius: 6 }}>
+                            <div style={{ fontSize: '0.85rem' }}>{l.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{l.id}</span></div>
+                            <div>
+                              <button onClick={() => removeLight(l.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Camera presets */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}><Camera size={14} /> Vista de Cámara</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setShowLightControls(!showLightControls)} style={{ padding: '4px 8px', background: showLightControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Luces</button>
+                      <button onClick={() => setShowAdvancedControls(!showAdvancedControls)} style={{ padding: '4px 8px', background: showAdvancedControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Avanzado</button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button onClick={frameModel} style={{ padding: '6px 10px', background: '#00C853', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Maximize2 size={14} /> Encuadrar
+                    </button>
+                    <button onClick={syncToPhoneCamera} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }} title="Ver desde la perspectiva del teléfono">
+                      📱 Vista Móvil
+                    </button>
+                    <button onClick={() => setCameraPreset('front')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Frontal</button>
+                    <button onClick={() => setCameraPreset('back')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Trasera</button>
+                    <button onClick={() => setCameraPreset('top')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Superior</button>
+                    <button onClick={() => setCameraPreset('iso')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Isométrica</button>
+                  </div>
+                </div>
+
+                {/* Light controls */}
+                {showLightControls && (
+                  <div style={{ marginBottom: 12, padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: 6 }}>⚡ Sistema de Iluminación</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'ambient', position: { x:0,y:0,z:0 }, intensity:0.5, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#673AB7', border: 'none', borderRadius: 4, color: 'white' }}>+ Ambiental</button>
+                      <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'directional', position: { x:5,y:10,z:5 }, intensity:1, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#FF5722', border: 'none', borderRadius: 4, color: 'white' }}>+ Direccional</button>
+                      <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'point', position: { x:0,y:5,z:0 }, intensity:1.2, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#009688', border: 'none', borderRadius: 4, color: 'white' }}>+ Punto</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Advanced controls */}
+                {showAdvancedControls && (
+                  <div style={{ padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '4px 8px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Cámara</button>
+                      <button onClick={() => { 
+                        if (confirm('¿Resetear posición/rot/escala?')) { 
+                          isTransformingRef.current = true;
+                          setModelPosition({ x:0,y:0,z:0 }); 
+                          setModelRotation({ x:0,y:0,z:0 }); 
+                          setModelScale({ x:1,y:1,z:1 });
+                          if (modelGroupRef.current) {
+                            modelGroupRef.current.position.set(0,0,0);
+                            modelGroupRef.current.rotation.set(0,0,0);
+                            modelGroupRef.current.scale.set(1,1,1);
+                          }
+                          requestAnimationFrame(() => { isTransformingRef.current = false; });
+                        } 
+                      }} style={{ padding: '4px 8px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Modelo</button>
+                      <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
+
+                      {/* Calibración AR - Conceptos WebXR */}
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #333' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración AR (WebXR)</div>
+                        <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 8 }}>En AR real, la cámara está fija en la posición del usuario. Ajusta dónde se ancla el modelo:</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia del ancla (m)</div>
+                            <input type="range" min="0.5" max="10" step="0.1" value={anchorDistance} onChange={(e) => setAnchorDistance(parseFloat(e.target.value))} />
+                          </div>
+                          <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                            <input
+                              type="number"
+                              min={0.5}
+                              max={10}
+                              step={0.1}
+                              value={Number(anchorDistance.toFixed(1))}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                if (Number.isNaN(v)) return;
+                                setAnchorDistance(v);
+                              }}
+                              style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                            />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Altura del ancla (m)</div>
+                            <input type="range" min="-2" max="3" step="0.05" value={anchorYOffset} onChange={(e) => setAnchorYOffset(parseFloat(e.target.value))} />
+                          </div>
+                          <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                            <input
+                              type="number"
+                              min={-2}
+                              max={3}
+                              step={0.05}
+                              value={Number(anchorYOffset.toFixed(2))}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                if (Number.isNaN(v)) return;
+                                setAnchorYOffset(v);
+                              }}
+                              style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                            />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Escala del modelo</div>
+                            <input type="range" min="0.2" max="3" step="0.05" value={arModelScale} onChange={(e) => setArModelScale(parseFloat(e.target.value))} />
+                          </div>
+                          <div style={{ width: '92px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                            <span style={{ opacity: 0.9 }}>x</span>
+                            <input
+                              type="number"
+                              min={0.2}
+                              max={3}
+                              step={0.05}
+                              value={Number(arModelScale.toFixed(2))}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                if (Number.isNaN(v)) return;
+                                setArModelScale(v);
+                              }}
+                              style={{ width: 68, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                            />
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Luces */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Lightbulb size={14} /> Luces</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                <button onClick={() => addLight('ambient')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Ambiental</button>
-                <button onClick={() => addLight('directional')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Direccional</button>
-                <button onClick={() => addLight('point')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Punto</button>
-                <button onClick={() => addLight('spot')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Foco</button>
-              </div>
-              {lights.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Luces añadidas</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {lights.map(l => (
-                      <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: 'transparent', borderRadius: 6 }}>
-                        <div style={{ fontSize: '0.85rem' }}>{l.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{l.id}</span></div>
-                        <div>
-                          <button onClick={() => removeLight(l.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Camera presets */}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}><Camera size={14} /> Vista de Cámara</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => setShowLightControls(!showLightControls)} style={{ padding: '4px 8px', background: showLightControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Luces</button>
-                  <button onClick={() => setShowAdvancedControls(!showAdvancedControls)} style={{ padding: '4px 8px', background: showAdvancedControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Avanzado</button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button onClick={frameModel} style={{ padding: '6px 10px', background: '#00C853', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Maximize2 size={14} /> Encuadrar
-                </button>
-                <button onClick={syncToPhoneCamera} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }} title="Ver desde la perspectiva del teléfono">
-                  📱 Vista Móvil
-                </button>
-                <button onClick={() => setCameraPreset('front')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Frontal</button>
-                <button onClick={() => setCameraPreset('back')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Trasera</button>
-                <button onClick={() => setCameraPreset('top')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Superior</button>
-                <button onClick={() => setCameraPreset('iso')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Isométrica</button>
-              </div>
-            </div>
-
-            {/* Light controls */}
-            {showLightControls && (
-              <div style={{ marginBottom: 12, padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: 6 }}>⚡ Sistema de Iluminación</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'ambient', position: { x:0,y:0,z:0 }, intensity:0.5, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#673AB7', border: 'none', borderRadius: 4, color: 'white' }}>+ Ambiental</button>
-                  <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'directional', position: { x:5,y:10,z:5 }, intensity:1, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#FF5722', border: 'none', borderRadius: 4, color: 'white' }}>+ Direccional</button>
-                  <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'point', position: { x:0,y:5,z:0 }, intensity:1.2, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#009688', border: 'none', borderRadius: 4, color: 'white' }}>+ Punto</button>
-                </div>
-              </div>
+                )}
+              </>
             )}
-
-            {/* Advanced controls */}
-            {showAdvancedControls && (
-              <div style={{ padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '4px 8px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Cámara</button>
-                  <button onClick={() => { 
-                    if (confirm('¿Resetear posición/rot/escala?')) { 
-                      isTransformingRef.current = true;
-                      setModelPosition({ x:0,y:0,z:0 }); 
-                      setModelRotation({ x:0,y:0,z:0 }); 
-                      setModelScale({ x:1,y:1,z:1 });
-                      if (modelGroupRef.current) {
-                        modelGroupRef.current.position.set(0,0,0);
-                        modelGroupRef.current.rotation.set(0,0,0);
-                        modelGroupRef.current.scale.set(1,1,1);
-                      }
-                      requestAnimationFrame(() => { isTransformingRef.current = false; });
-                    } 
-                  }} style={{ padding: '4px 8px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Modelo</button>
-                  <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
-
-                  {/* Calibración AR - Conceptos WebXR */}
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #333' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración AR (WebXR)</div>
-                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 8 }}>En AR real, la cámara está fija en la posición del usuario. Ajusta dónde se ancla el modelo:</div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia del ancla (m)</div>
-                        <input type="range" min="0.5" max="10" step="0.1" value={anchorDistance} onChange={(e) => setAnchorDistance(parseFloat(e.target.value))} />
-                      </div>
-                      <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-                        <input
-                          type="number"
-                          min={0.5}
-                          max={10}
-                          step={0.1}
-                          value={Number(anchorDistance.toFixed(1))}
-                          onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            if (Number.isNaN(v)) return;
-                            setAnchorDistance(v);
-                          }}
-                          style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Altura del ancla (m)</div>
-                        <input type="range" min="-2" max="3" step="0.05" value={anchorYOffset} onChange={(e) => setAnchorYOffset(parseFloat(e.target.value))} />
-                      </div>
-                      <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-                        <input
-                          type="number"
-                          min={-2}
-                          max={3}
-                          step={0.05}
-                          value={Number(anchorYOffset.toFixed(2))}
-                          onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            if (Number.isNaN(v)) return;
-                            setAnchorYOffset(v);
-                          }}
-                          style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Escala del modelo</div>
-                        <input type="range" min="0.2" max="3" step="0.05" value={arModelScale} onChange={(e) => setArModelScale(parseFloat(e.target.value))} />
-                      </div>
-                      <div style={{ width: '92px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-                        <span style={{ opacity: 0.9 }}>x</span>
-                        <input
-                          type="number"
-                          min={0.2}
-                          max={3}
-                          step={0.05}
-                          value={Number(arModelScale.toFixed(2))}
-                          onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            if (Number.isNaN(v)) return;
-                            setArModelScale(v);
-                          }}
-                          style={{ width: 68, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
+          </div>
         )}
-      </div>
+
+        {/* Panel lateral de herramientas - vía portal si existe toolsPortalId */}
+        {toolsPortalId && typeof document !== 'undefined' && (() => {
+          const container = document.getElementById(toolsPortalId);
+          if (!container) return null;
+          
+          return createPortal(
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#111', padding: '12px', borderRadius: '8px', border: '1px solid #333', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto', color: 'white' }}>
+              <button 
+                onClick={() => setShowTools(prev => !prev)} 
+                style={{ 
+                  padding: '8px 10px', 
+                  background: '#667eea', 
+                  border: 'none', 
+                  borderRadius: 8, 
+                  color: 'white', 
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  justifyContent: 'center'
+                }}
+              >
+                <Settings size={14} /> {showTools ? 'Ocultar Herramientas' : 'Mostrar Herramientas'}
+              </button>
+
+              {showTools && (
+                <>
+                  {/* Primitivas */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Move size={14} /> Primitivas</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      <button onClick={() => addPrimitive('box')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cubo</button>
+                      <button onClick={() => addPrimitive('sphere')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Esfera</button>
+                      <button onClick={() => addPrimitive('cylinder')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cilindro</button>
+                      <button onClick={() => addPrimitive('cone')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Cono</button>
+                      <button onClick={() => addPrimitive('plane')} style={{ padding: '6px 10px', background: '#4CAF50', border: 'none', borderRadius: 4, color: 'white' }}>Plano</button>
+                    </div>
+                    {primitives.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Primitivas existentes</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {primitives.map(p => (
+                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedPrimitive === p.id ? 'rgba(255,255,255,0.03)' : 'transparent', borderRadius: 6 }}>
+                              <div style={{ fontSize: '0.85rem' }}>{p.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{p.id}</span></div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => setSelectedPrimitive(p.id)} style={{ padding: '4px 8px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white' }}>Seleccionar</button>
+                                <button onClick={() => removePrimitive(p.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Luces */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Lightbulb size={14} /> Luces</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      <button onClick={() => addLight('ambient')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Ambiental</button>
+                      <button onClick={() => addLight('directional')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Direccional</button>
+                      <button onClick={() => addLight('point')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Punto</button>
+                      <button onClick={() => addLight('spot')} style={{ padding: '6px 10px', background: '#2196F3', border: 'none', borderRadius: 4, color: 'white' }}>Foco</button>
+                    </div>
+                    {lights.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: '0.85rem', opacity: 0.9, marginBottom: 6 }}>Luces añadidas</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {lights.map(l => (
+                            <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: 'transparent', borderRadius: 6 }}>
+                              <div style={{ fontSize: '0.85rem' }}>{l.type} <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>{l.id}</span></div>
+                              <div>
+                                <button onClick={() => removeLight(l.id)} style={{ padding: '4px 8px', background: '#ef4444', border: 'none', borderRadius: 4, color: 'white' }}>Eliminar</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Camera presets */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}><Camera size={14} /> Vista de Cámara</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setShowLightControls(!showLightControls)} style={{ padding: '4px 8px', background: showLightControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Luces</button>
+                        <button onClick={() => setShowAdvancedControls(!showAdvancedControls)} style={{ padding: '4px 8px', background: showAdvancedControls ? '#4CAF50' : '#607D8B', border: 'none', borderRadius: 4, color: 'white' }}>Avanzado</button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button onClick={frameModel} style={{ padding: '6px 10px', background: '#00C853', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Maximize2 size={14} /> Encuadrar
+                      </button>
+                      <button onClick={syncToPhoneCamera} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }} title="Ver desde la perspectiva del teléfono">
+                        📱 Vista Móvil
+                      </button>
+                      <button onClick={() => setCameraPreset('front')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Frontal</button>
+                      <button onClick={() => setCameraPreset('back')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Trasera</button>
+                      <button onClick={() => setCameraPreset('top')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Superior</button>
+                      <button onClick={() => setCameraPreset('iso')} style={{ padding: '6px 10px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white' }}>Isométrica</button>
+                    </div>
+                  </div>
+
+                  {/* Light controls */}
+                  {showLightControls && (
+                    <div style={{ marginBottom: 12, padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: 6 }}>⚡ Sistema de Iluminación</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'ambient', position: { x:0,y:0,z:0 }, intensity:0.5, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#673AB7', border: 'none', borderRadius: 4, color: 'white' }}>+ Ambiental</button>
+                        <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'directional', position: { x:5,y:10,z:5 }, intensity:1, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#FF5722', border: 'none', borderRadius: 4, color: 'white' }}>+ Direccional</button>
+                        <button onClick={() => { setLights([...lights, { id: `light-${Date.now()}`, type: 'point', position: { x:0,y:5,z:0 }, intensity:1.2, color:'#ffffff' }]); }} style={{ padding: '6px 8px', background: '#009688', border: 'none', borderRadius: 4, color: 'white' }}>+ Punto</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Advanced controls */}
+                  {showAdvancedControls && (
+                    <div style={{ padding: 8, background: '#0a0a0a', borderRadius: 6, border: '1px solid #444' }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>🔧 Controles Avanzados</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <button onClick={() => { if (orbitRef.current) orbitRef.current.reset(); }} style={{ padding: '4px 8px', background: '#FF9800', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Cámara</button>
+                        <button onClick={() => { 
+                          if (confirm('¿Resetear posición/rot/escala?')) { 
+                            isTransformingRef.current = true;
+                            setModelPosition({ x:0,y:0,z:0 }); 
+                            setModelRotation({ x:0,y:0,z:0 }); 
+                            setModelScale({ x:1,y:1,z:1 });
+                            if (modelGroupRef.current) {
+                              modelGroupRef.current.position.set(0,0,0);
+                              modelGroupRef.current.rotation.set(0,0,0);
+                              modelGroupRef.current.scale.set(1,1,1);
+                            }
+                            requestAnimationFrame(() => { isTransformingRef.current = false; });
+                          } 
+                        }} style={{ padding: '4px 8px', background: '#E91E63', border: 'none', borderRadius: 4, color: 'white', fontSize: '0.72rem' }}>Resetear Modelo</button>
+                        <button onClick={() => setLights([])} style={{ padding: '6px 10px', background: '#9C27B0', border: 'none', borderRadius: 4, color: 'white' }}>Limpiar Luces</button>
+
+                        {/* Calibración AR - Conceptos WebXR */}
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #333' }}>
+                          <div style={{ fontWeight: 'bold', marginBottom: 6 }}>📱 Calibración AR (WebXR)</div>
+                          <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: 8 }}>En AR real, la cámara está fija en la posición del usuario. Ajusta dónde se ancla el modelo:</div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Distancia del ancla (m)</div>
+                              <input type="range" min="0.5" max="10" step="0.1" value={anchorDistance} onChange={(e) => setAnchorDistance(parseFloat(e.target.value))} />
+                            </div>
+                            <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                              <input
+                                type="number"
+                                min={0.5}
+                                max={10}
+                                step={0.1}
+                                value={Number(anchorDistance.toFixed(1))}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  if (Number.isNaN(v)) return;
+                                  setAnchorDistance(v);
+                                }}
+                                style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Altura del ancla (m)</div>
+                              <input type="range" min="-2" max="3" step="0.05" value={anchorYOffset} onChange={(e) => setAnchorYOffset(parseFloat(e.target.value))} />
+                            </div>
+                            <div style={{ width: '76px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                              <input
+                                type="number"
+                                min={-2}
+                                max={3}
+                                step={0.05}
+                                value={Number(anchorYOffset.toFixed(2))}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  if (Number.isNaN(v)) return;
+                                  setAnchorYOffset(v);
+                                }}
+                                style={{ width: 72, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Escala del modelo</div>
+                              <input type="range" min="0.2" max="3" step="0.05" value={arModelScale} onChange={(e) => setArModelScale(parseFloat(e.target.value))} />
+                            </div>
+                            <div style={{ width: '92px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                              <span style={{ opacity: 0.9 }}>x</span>
+                              <input
+                                type="number"
+                                min={0.2}
+                                max={3}
+                                step={0.05}
+                                value={Number(arModelScale.toFixed(2))}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  if (Number.isNaN(v)) return;
+                                  setArModelScale(v);
+                                }}
+                                style={{ width: 68, padding: '4px', borderRadius: 4, border: '1px solid #555', background: '#111', color: 'white', textAlign: 'right' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>,
+            container
+          );
+        })()}
     </div>
   );
 }

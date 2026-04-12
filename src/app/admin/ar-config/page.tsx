@@ -216,6 +216,36 @@ export default function ARConfigPage() {
     loadAttractions();
   }, []);
 
+  // Detectar mobile para cambiar comportamiento de la caja de herramientas
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+
+    type MQWithListeners = MediaQueryList & {
+      addEventListener?: (type: 'change', listener: (e: MediaQueryListEvent) => void) => void;
+      removeEventListener?: (type: 'change', listener: (e: MediaQueryListEvent) => void) => void;
+      addListener?: (listener: (e: MediaQueryListEvent) => void) => void;
+      removeListener?: (listener: (e: MediaQueryListEvent) => void) => void;
+    };
+
+    const mqTyped = mq as MQWithListeners;
+
+    if (typeof mqTyped.addEventListener === 'function') {
+      mqTyped.addEventListener('change', handler);
+      return () => { mqTyped.removeEventListener?.('change', handler); };
+    }
+
+    if (typeof mqTyped.addListener === 'function') {
+      mqTyped.addListener(handler);
+      return () => { mqTyped.removeListener?.(handler); };
+    }
+
+    return undefined;
+  }, []);
+
   // Cargar lista de modelos disponibles del bucket
   useEffect(() => {
     const loadAvailableModels = async () => {
@@ -726,8 +756,8 @@ export default function ARConfigPage() {
           </div>
         ) : null}
 
-        {/* Barra flotante de herramientas (fija) */}
-        {selectedAttraction && arEnabled && (
+        {/* Barra flotante de herramientas (fija en desktop, estática en mobile) */}
+        {selectedAttraction && !isMobile && (
           <div style={{
             position: 'fixed',
             top: '20px',
@@ -772,19 +802,19 @@ export default function ARConfigPage() {
             </button>
             <button
               onClick={saveARConfiguration}
-              disabled={saving}
+              disabled={saving || !arEnabled}
               style={{
-                background: saving ? '#9E9E9E' : '#1976d2',
+                background: saving ? '#9E9E9E' : (!arEnabled ? '#ccc' : '#1976d2'),
                 color: 'white',
                 border: 'none',
                 padding: '6px 12px',
                 borderRadius: '6px',
-                cursor: saving ? 'not-allowed' : 'pointer',
+                cursor: (saving || !arEnabled) ? 'not-allowed' : 'pointer',
                 fontSize: '0.75rem',
                 fontWeight: '600',
                 whiteSpace: 'nowrap'
               }}
-              title="Guardar configuración"
+              title={arEnabled ? "Guardar configuración" : "Habilita AR primero"}
             >
               {saving ? 'Guardando...' : '💾 Guardar'}
             </button>
@@ -795,10 +825,525 @@ export default function ARConfigPage() {
         {selectedAttraction && (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gridTemplateRows: 'auto auto',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gridAutoRows: 'auto',
             gap: '20px'
           }}>
+
+            {/* Panel 3: Configuración de Modelos (row 2, col 1) */}
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '500px',
+              overflowY: 'auto'
+            }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
+                ⚙️ Configuración
+              </h3>
+
+              {/* Selector y info del atractivo */}
+              <div style={{
+                padding: '12px',
+                background: '#f0f7ff',
+                borderRadius: '8px',
+                border: '1px solid #667eea',
+                marginBottom: '12px'
+              }}>
+                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#1A3A6C', marginBottom: '4px' }}>
+                  {selectedAttraction.name}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '8px' }}>
+                  {selectedAttraction.category || 'Sin categoría'}
+                </div>
+                <button
+                  onClick={() => setSelectedAttraction(null)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #667eea',
+                    color: '#667eea',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cambiar Atractivo
+                </button>
+              </div>
+
+              {/* Botones de acción principal - REMOVIDO (están en barra flotante arriba) */}
+              {/* Visto que duplicaría controles, estos están en la barra flotante fija */}
+
+              {/* Advertencia si AR está desactivado */}
+              {!arEnabled && (
+                <div style={{
+                  background: '#fff3e0',
+                  border: '1px solid #ff9800',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  fontSize: '0.85rem',
+                  color: '#e65100'
+                }}>
+                  <strong>⚠️ AR Desactivado</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.75rem' }}>
+                    Activa AR usando el botón de la barra superior para habilitar la configuración completa.
+                  </p>
+                </div>
+              )}
+
+              {/* Selector de modelo 3D */}
+              <div style={{ marginBottom: '12px', opacity: arEnabled ? 1 : 0.6 }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500', color: '#333' }}>
+                  Modelo 3D
+                </label>
+                <select
+                  value={modelFileName}
+                  onChange={(e) => setModelFileName(e.target.value)}
+                  disabled={!arEnabled}
+                  style={{
+                    width: '100%',
+                    padding: '6px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    cursor: arEnabled ? 'pointer' : 'not-allowed',
+                    background: arEnabled ? 'white' : '#f5f5f5'
+                  }}
+                >
+                  <option value="">Sin modelo</option>
+                  {availableModels.map(model => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Upload */}
+              <label style={{
+                background: arEnabled ? '#667eea' : '#ccc',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                cursor: arEnabled ? 'pointer' : 'not-allowed',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                marginBottom: '12px',
+                opacity: arEnabled ? 1 : 0.6
+              }}>
+                <Upload size={14} />
+                {uploadingModel ? 'Subiendo...' : 'Subir Modelo'}
+                <input
+                  type="file"
+                  accept=".glb,.gltf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && arEnabled) handleModelFileUpload(file);
+                  }}
+                  style={{ display: 'none' }}
+                  disabled={uploadingModel || !arEnabled}
+                />
+              </label>
+
+              {/* Vista previa del modelo */}
+              {modelFileName && (
+                <div style={{ marginBottom: '12px', opacity: arEnabled ? 1 : 0.6 }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.8rem', fontWeight: '500' }}>
+                    Vista Miniatura
+                  </label>
+                  <div style={{
+                    width: '100%',
+                    height: '150px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: '#f8f9fa',
+                    overflow: 'hidden'
+                  }}>
+                    <ModelPreview url={currentModelUrl} />
+                  </div>
+                </div>
+              )}
+
+              {/* Transformación del modelo */}
+              <div style={{ 
+                borderTop: '1px solid #e0e0e0',
+                paddingTop: '12px',
+                fontSize: '0.8rem',
+                opacity: arEnabled ? 1 : 0.6
+              }}>
+                <h4 style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#333' }}>
+                  Transformación
+                </h4>
+
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
+                    Posición (X, Y, Z)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+                    <input type="number" step="0.1" value={modelTransform.position.x} onChange={(e) => arEnabled && setModelTransform({...modelTransform, position: {...modelTransform.position, x: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="X" />
+                    <input type="number" step="0.1" value={modelTransform.position.y} onChange={(e) => arEnabled && setModelTransform({...modelTransform, position: {...modelTransform.position, y: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Y" />
+                    <input type="number" step="0.1" value={modelTransform.position.z} onChange={(e) => arEnabled && setModelTransform({...modelTransform, position: {...modelTransform.position, z: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Z" />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
+                    Rotación (X, Y, Z)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+                    <input type="number" step="0.01" value={modelTransform.rotation.x} onChange={(e) => arEnabled && setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, x: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="X" />
+                    <input type="number" step="0.01" value={modelTransform.rotation.y} onChange={(e) => arEnabled && setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, y: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Y" />
+                    <input type="number" step="0.01" value={modelTransform.rotation.z} onChange={(e) => arEnabled && setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, z: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Z" />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
+                    Escala (X, Y, Z)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+                    <input type="number" step="0.1" value={modelTransform.scale.x} onChange={(e) => arEnabled && setModelTransform({...modelTransform, scale: {...modelTransform.scale, x: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="X" />
+                    <input type="number" step="0.1" value={modelTransform.scale.y} onChange={(e) => arEnabled && setModelTransform({...modelTransform, scale: {...modelTransform.scale, y: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Y" />
+                    <input type="number" step="0.1" value={modelTransform.scale.z} onChange={(e) => arEnabled && setModelTransform({...modelTransform, scale: {...modelTransform.scale, z: parseFloat(e.target.value)}})} disabled={!arEnabled} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} placeholder="Z" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modo ligero */}
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.8rem',
+                cursor: arEnabled ? 'pointer' : 'not-allowed',
+                marginTop: '12px',
+                padding: '8px',
+                background: '#f5f5f5',
+                borderRadius: '4px',
+                opacity: arEnabled ? 1 : 0.6
+              }}>
+                <input
+                  type="checkbox"
+                  checked={lightMode}
+                  onChange={(e) => arEnabled && setLightMode(e.target.checked)}
+                  disabled={!arEnabled}
+                />
+                Modo ligero (sin modelo)
+              </label>
+
+              {/* QR */}
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e0e0e0', opacity: arEnabled ? 1 : 0.6 }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500', color: '#333' }}>
+                  ID QR
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={qrCode}
+                    onChange={(e) => arEnabled && setQrCode(e.target.value)}
+                    disabled={!arEnabled}
+                    style={{
+                      flex: 1,
+                      padding: '6px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      background: arEnabled ? 'white' : '#f5f5f5',
+                      cursor: arEnabled ? 'text' : 'not-allowed'
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!selectedAttraction || !arEnabled) return;
+                      const qrValue = (qrCode || `AR_${selectedAttraction.id}`).trim();
+                      try {
+                        setGeneratingQr(true);
+                        const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrValue)}`;
+                        const QR = await import('qrcode');
+                        const dataUrl = await QR.toDataURL(url, { margin: 2, scale: 8 });
+                        setQrDataUrl(dataUrl);
+                        const { error: dbError } = await supabase
+                          .from('attractions')
+                          .update({ qr_code: qrValue })
+                          .eq('id', selectedAttraction.id);
+                        if (!dbError) {
+                          setQrCode(qrValue);
+                          setSelectedAttraction({ ...selectedAttraction, qr_code: qrValue });
+                          setAttractions(prev => prev.map(a => a.id === selectedAttraction.id ? { ...a, qr_code: qrValue } : a));
+                          setQrModalOpen(true);
+                        }
+                      } catch (err) {
+                        console.error('Error:', err);
+                      } finally {
+                        setGeneratingQr(false);
+                      }
+                    }}
+                    disabled={!arEnabled}
+                    style={{
+                      background: arEnabled ? '#1976d2' : '#ccc',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                      cursor: arEnabled ? 'pointer' : 'not-allowed',
+                      fontSize: '0.8rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {generatingQr ? '...' : '✓'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel 4: Hotspots (row 2, col 2) */}
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '500px',
+              overflowY: 'auto'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                  📍 Hotspots ({hotspots.length})
+                </h3>
+                <button
+                  onClick={addHotspot}
+                  disabled={!arEnabled}
+                  style={{
+                    background: arEnabled ? '#4CAF50' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: arEnabled ? 'pointer' : 'not-allowed',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    opacity: arEnabled ? 1 : 0.6
+                  }}
+                  title={arEnabled ? 'Agregar hotspot' : 'Activa AR primero'}
+                >
+                  <Plus size={14} />
+                  Agregar
+                </button>
+              </div>
+
+              {!arEnabled && hotspots.length === 0 && (
+                <div style={{
+                  background: '#f5f5f5',
+                  border: '1px dashed #ccc',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: '#999',
+                  fontSize: '0.85rem'
+                }}>
+                  Activa AR para agregar hotspots
+                </div>
+              )}
+
+              {hotspots.map(hotspot => (
+                <div key={hotspot.id} style={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginBottom: '8px',
+                  background: '#fafafa',
+                  opacity: arEnabled ? 1 : 0.6,
+                  display: 'flex',
+                  gap: '10px'
+                }}>
+                  {/* Miniatura del hotspot */}
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    flexShrink: 0,
+                    borderRadius: '6px',
+                    overflow: 'hidden',
+                    background: hotspot.type === 'image' ? '#e3f2fd' : hotspot.type === 'video' ? '#f3e5f5' : '#e8f5e9',
+                    border: '2px solid',
+                    borderColor: hotspot.type === 'image' ? '#2196F3' : hotspot.type === 'video' ? '#9C27B0' : '#4CAF50',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative'
+                  }}>
+                    {hotspot.type === 'image' && hotspot.content_url ? (
+                      <Image 
+                        src={hotspot.content_url} 
+                        alt={hotspot.title || 'Hotspot image'} 
+                        width={60}
+                        height={60}
+                        style={{
+                          objectFit: 'cover'
+                        }}
+                      />
+                    ) : hotspot.type === 'video' ? (
+                      <div style={{ fontSize: '1.5rem' }}>🎬</div>
+                    ) : hotspot.type === 'image' ? (
+                      <div style={{ fontSize: '1.5rem' }}>🖼️</div>
+                    ) : (
+                      <div style={{ fontSize: '1.5rem' }}>📄</div>
+                    )}
+                    {/* Indicador de tipo en la esquina */}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      right: 2,
+                      background: 'rgba(0,0,0,0.7)',
+                      color: 'white',
+                      fontSize: '0.55rem',
+                      padding: '1px 3px',
+                      borderRadius: '3px',
+                      fontWeight: 'bold'
+                    }}>
+                      {hotspot.type === 'image' ? 'IMG' : hotspot.type === 'video' ? 'VID' : 'TXT'}
+                    </div>
+                  </div>
+
+                  {/* Contenido del hotspot */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      value={hotspot.title}
+                      onChange={(e) => arEnabled && updateHotspot(hotspot.id, { title: e.target.value })}
+                      disabled={!arEnabled}
+                      placeholder="Título"
+                      style={{
+                        flex: 1,
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        padding: '6px',
+                        fontSize: '0.8rem',
+                        background: arEnabled ? 'white' : '#f5f5f5',
+                        cursor: arEnabled ? 'text' : 'not-allowed'
+                      }}
+                    />
+                    <button
+                      onClick={() => arEnabled && removeHotspot(hotspot.id)}
+                      disabled={!arEnabled}
+                      style={{
+                        background: arEnabled ? '#ff5252' : '#ccc',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        cursor: arEnabled ? 'pointer' : 'not-allowed',
+                        color: 'white',
+                        fontSize: '0.8rem'
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <select
+                    value={hotspot.type}
+                    onChange={(e) => arEnabled && updateHotspot(hotspot.id, { type: e.target.value as 'info' | 'image' | 'video' })}
+                    disabled={!arEnabled}
+                    style={{
+                      width: '100%',
+                      padding: '4px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      marginBottom: '8px',
+                      background: arEnabled ? 'white' : '#f5f5f5',
+                      cursor: arEnabled ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    <option value="info">📄 Información</option>
+                    <option value="image">🖼️ Imagen</option>
+                    <option value="video">🎥 Video</option>
+                  </select>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', marginBottom: '4px', color: '#333' }}>
+                      Posición:
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
+                      <input type="number" step="0.1" value={hotspot.position?.x ?? 0} onChange={(e) => arEnabled && updateHotspotPosition(hotspot.id, 'x', parseFloat(e.target.value))} disabled={!arEnabled} placeholder="X" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} />
+                      <input type="number" step="0.1" value={hotspot.position?.y ?? 0} onChange={(e) => arEnabled && updateHotspotPosition(hotspot.id, 'y', parseFloat(e.target.value))} disabled={!arEnabled} placeholder="Y" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} />
+                      <input type="number" step="0.1" value={hotspot.position?.z ?? 0} onChange={(e) => arEnabled && updateHotspotPosition(hotspot.id, 'z', parseFloat(e.target.value))} disabled={!arEnabled} placeholder="Z" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem', background: arEnabled ? 'white' : '#f5f5f5', cursor: arEnabled ? 'text' : 'not-allowed' }} />
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={hotspot.description}
+                    onChange={(e) => arEnabled && updateHotspot(hotspot.id, { description: e.target.value })}
+                    disabled={!arEnabled}
+                    placeholder="Descripción"
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '4px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '0.7rem',
+                      fontFamily: 'inherit',
+                      marginBottom: '8px',
+                      background: arEnabled ? 'white' : '#f5f5f5',
+                      cursor: arEnabled ? 'text' : 'not-allowed'
+                    }}
+                  />
+
+                  {hotspot.type !== 'info' && (
+                    <label style={{
+                      background: '#2196F3',
+                      color: 'white',
+                      padding: '6px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <ImageIcon size={12} />
+                      {hotspot.content_url ? '✓ Actualizar' : 'Subir'}
+                      <input
+                        type="file"
+                        accept={hotspot.type === 'image' ? 'image/*' : 'video/*'}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleHotspotImageUpload(file, hotspot.id);
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  )}
+                  </div>
+                </div>
+              ))}
+
+              {hotspots.length === 0 && (
+                <p style={{
+                  textAlign: 'center',
+                  color: '#999',
+                  padding: '20px',
+                  fontSize: '0.85rem'
+                }}>
+                  No hay hotspots. Agrégalos arriba.
+                </p>
+              )}
+            </div>
 
             {/* Panel 1: Canvas 3D Principal (row 1, col 1) */}
             <div style={{
@@ -829,6 +1374,7 @@ export default function ARConfigPage() {
                     lightMode={lightMode}
                     phonePreview={{ cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 }}
                     onPhonePreviewChange={handlePhonePreviewChange}
+                    toolsPortalId="ar-tools-panel"
                     hotspots={hotspots.map(h => {
                       const base = {
                         id: h.id,
@@ -902,6 +1448,71 @@ export default function ARConfigPage() {
                 💡 Usa las herramientas para rotar y hacer zoom en el canvas
               </div>
             </div>
+
+            {/* Panel de Herramientas (panel separado para alojar las herramientas del preview) */}
+            {selectedAttraction && (
+              <div id="ar-tools-panel" style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                minHeight: '80px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.95rem', color: '#1A3A6C', fontWeight: 700 }}>{selectedAttraction.name}</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={handleToggleArEnabled}
+                      disabled={saving}
+                      style={{
+                        background: arEnabled ? '#4CAF50' : '#999',
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: saving ? 'not-allowed' : 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        opacity: saving ? 0.8 : 1
+                      }}
+                      title="Alternar AR"
+                    >
+                      {arEnabled ? '✓ AR ON' : '✕ AR OFF'}
+                    </button>
+                    <button
+                      onClick={saveARConfiguration}
+                      disabled={saving || !arEnabled}
+                      style={{
+                        background: saving ? '#9E9E9E' : (!arEnabled ? '#ccc' : '#1976d2'),
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: (saving || !arEnabled) ? 'not-allowed' : 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: 600
+                      }}
+                      title={arEnabled ? "Guardar configuración" : "Habilita AR primero"}
+                    >
+                      {saving ? 'Guardando...' : '💾 Guardar'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => { /* placeholder para acciones adicionales */ }}
+                    style={{ background: '#f5f5f5', border: '1px solid #e0e0e0', padding: '8px 10px', borderRadius: '6px', fontSize: '0.85rem' }}
+                  >
+                    ⚙️ Opciones
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Panel 2: Vista Previa Móvil (row 1, col 2) */}
             <div style={{
@@ -1025,417 +1636,6 @@ export default function ARConfigPage() {
               }}>
                 📐 Aspecto 9:20 (portrait). Calibración independiente.
               </div>
-            </div>
-
-            {/* Panel 3: Configuración de Modelos (row 2, col 1) */}
-            <div style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '16px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: '500px',
-              overflowY: 'auto'
-            }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
-                ⚙️ Configuración
-              </h3>
-
-              {/* Selector y info del atractivo */}
-              <div style={{
-                padding: '12px',
-                background: '#f0f7ff',
-                borderRadius: '8px',
-                border: '1px solid #667eea',
-                marginBottom: '12px'
-              }}>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#1A3A6C', marginBottom: '4px' }}>
-                  {selectedAttraction.name}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '8px' }}>
-                  {selectedAttraction.category || 'Sin categoría'}
-                </div>
-                <button
-                  onClick={() => setSelectedAttraction(null)}
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid #667eea',
-                    color: '#667eea',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cambiar Atractivo
-                </button>
-              </div>
-
-              {/* Botones de acción principal - REMOVIDO (están en barra flotante arriba) */}
-              {/* Visto que duplicaría controles, estos están en la barra flotante fija */}
-
-              {arEnabled && (
-                <>
-                  {/* Selector de modelo 3D */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500', color: '#333' }}>
-                      Modelo 3D
-                    </label>
-                    <select
-                      value={modelFileName}
-                      onChange={(e) => setModelFileName(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '6px',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      <option value="">Sin modelo</option>
-                      {availableModels.map(model => (
-                        <option key={model} value={model}>{model}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Upload */}
-                  <label style={{
-                    background: '#667eea',
-                    color: 'white',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    marginBottom: '12px'
-                  }}>
-                    <Upload size={14} />
-                    {uploadingModel ? 'Subiendo...' : 'Subir Modelo'}
-                    <input
-                      type="file"
-                      accept=".glb,.gltf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleModelFileUpload(file);
-                      }}
-                      style={{ display: 'none' }}
-                      disabled={uploadingModel}
-                    />
-                  </label>
-
-                  {/* Vista previa del modelo */}
-                  {modelFileName && (
-                    <div style={{ marginBottom: '12px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.8rem', fontWeight: '500' }}>
-                        Vista Miniatura
-                      </label>
-                      <div style={{
-                        width: '100%',
-                        height: '150px',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        background: '#f8f9fa',
-                        overflow: 'hidden'
-                      }}>
-                        <ModelPreview url={currentModelUrl} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Transformación del modelo */}
-                  <div style={{ 
-                    borderTop: '1px solid #e0e0e0',
-                    paddingTop: '12px',
-                    fontSize: '0.8rem'
-                  }}>
-                    <h4 style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#333' }}>
-                      Transformación
-                    </h4>
-
-                    <div style={{ marginBottom: '8px' }}>
-                      <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
-                        Posición (X, Y, Z)
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
-                        <input type="number" step="0.1" value={modelTransform.position.x} onChange={(e) => setModelTransform({...modelTransform, position: {...modelTransform.position, x: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="X" />
-                        <input type="number" step="0.1" value={modelTransform.position.y} onChange={(e) => setModelTransform({...modelTransform, position: {...modelTransform.position, y: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Y" />
-                        <input type="number" step="0.1" value={modelTransform.position.z} onChange={(e) => setModelTransform({...modelTransform, position: {...modelTransform.position, z: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Z" />
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '8px' }}>
-                      <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
-                        Rotación (X, Y, Z)
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
-                        <input type="number" step="0.01" value={modelTransform.rotation.x} onChange={(e) => setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, x: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="X" />
-                        <input type="number" step="0.01" value={modelTransform.rotation.y} onChange={(e) => setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, y: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Y" />
-                        <input type="number" step="0.01" value={modelTransform.rotation.z} onChange={(e) => setModelTransform({...modelTransform, rotation: {...modelTransform.rotation, z: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Z" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>
-                        Escala (X, Y, Z)
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
-                        <input type="number" step="0.1" value={modelTransform.scale.x} onChange={(e) => setModelTransform({...modelTransform, scale: {...modelTransform.scale, x: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="X" />
-                        <input type="number" step="0.1" value={modelTransform.scale.y} onChange={(e) => setModelTransform({...modelTransform, scale: {...modelTransform.scale, y: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Y" />
-                        <input type="number" step="0.1" value={modelTransform.scale.z} onChange={(e) => setModelTransform({...modelTransform, scale: {...modelTransform.scale, z: parseFloat(e.target.value)}})} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} placeholder="Z" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Modo ligero */}
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                    marginTop: '12px',
-                    padding: '8px',
-                    background: '#f5f5f5',
-                    borderRadius: '4px'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={lightMode}
-                      onChange={(e) => setLightMode(e.target.checked)}
-                    />
-                    Modo ligero (sin modelo)
-                  </label>
-
-                  {/* QR */}
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e0e0e0' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500', color: '#333' }}>
-                      ID QR
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="text"
-                        value={qrCode}
-                        onChange={(e) => setQrCode(e.target.value)}
-                        style={{
-                          flex: 1,
-                          padding: '6px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '0.8rem'
-                        }}
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!selectedAttraction) return;
-                          const qrValue = (qrCode || `AR_${selectedAttraction.id}`).trim();
-                          try {
-                            setGeneratingQr(true);
-                            const url = `${window.location.origin}/ar/${selectedAttraction.id}?qr=${encodeURIComponent(qrValue)}`;
-                            const QR = await import('qrcode');
-                            const dataUrl = await QR.toDataURL(url, { margin: 2, scale: 8 });
-                            setQrDataUrl(dataUrl);
-                            const { error: dbError } = await supabase
-                              .from('attractions')
-                              .update({ qr_code: qrValue })
-                              .eq('id', selectedAttraction.id);
-                            if (!dbError) {
-                              setQrCode(qrValue);
-                              setSelectedAttraction({ ...selectedAttraction, qr_code: qrValue });
-                              setAttractions(prev => prev.map(a => a.id === selectedAttraction.id ? { ...a, qr_code: qrValue } : a));
-                              setQrModalOpen(true);
-                            }
-                          } catch (err) {
-                            console.error('Error:', err);
-                          } finally {
-                            setGeneratingQr(false);
-                          }
-                        }}
-                        style={{
-                          background: '#1976d2',
-                          color: 'white',
-                          border: 'none',
-                          padding: '6px 10px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '0.8rem',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {generatingQr ? '...' : '✓'}
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Panel 4: Hotspots (row 2, col 2) */}
-            <div style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '16px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: '500px',
-              overflowY: 'auto'
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '12px'
-              }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
-                  📍 Hotspots ({hotspots.length})
-                </h3>
-                {arEnabled && (
-                  <button
-                    onClick={addHotspot}
-                    style={{
-                      background: '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Plus size={14} />
-                    Agregar
-                  </button>
-                )}
-              </div>
-
-              {hotspots.map(hotspot => (
-                <div key={hotspot.id} style={{
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px',
-                  padding: '10px',
-                  marginBottom: '8px',
-                  background: '#fafafa'
-                }}>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                    <input
-                      type="text"
-                      value={hotspot.title}
-                      onChange={(e) => updateHotspot(hotspot.id, { title: e.target.value })}
-                      placeholder="Título"
-                      style={{
-                        flex: 1,
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        padding: '6px',
-                        fontSize: '0.8rem'
-                      }}
-                    />
-                    <button
-                      onClick={() => removeHotspot(hotspot.id)}
-                      style={{
-                        background: '#ff5252',
-                        border: 'none',
-                        borderRadius: '4px',
-                        padding: '6px 8px',
-                        cursor: 'pointer',
-                        color: 'white',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-
-                  <select
-                    value={hotspot.type}
-                    onChange={(e) => updateHotspot(hotspot.id, { type: e.target.value as 'info' | 'image' | 'video' })}
-                    style={{
-                      width: '100%',
-                      padding: '4px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      marginBottom: '8px'
-                    }}
-                  >
-                    <option value="info">📄 Información</option>
-                    <option value="image">🖼️ Imagen</option>
-                    <option value="video">🎥 Video</option>
-                  </select>
-
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', marginBottom: '4px', color: '#333' }}>
-                      Posición:
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px' }}>
-                      <input type="number" step="0.1" value={hotspot.position?.x ?? 0} onChange={(e) => updateHotspotPosition(hotspot.id, 'x', parseFloat(e.target.value))} placeholder="X" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} />
-                      <input type="number" step="0.1" value={hotspot.position?.y ?? 0} onChange={(e) => updateHotspotPosition(hotspot.id, 'y', parseFloat(e.target.value))} placeholder="Y" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} />
-                      <input type="number" step="0.1" value={hotspot.position?.z ?? 0} onChange={(e) => updateHotspotPosition(hotspot.id, 'z', parseFloat(e.target.value))} placeholder="Z" style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.7rem' }} />
-                    </div>
-                  </div>
-
-                  <textarea
-                    value={hotspot.description}
-                    onChange={(e) => updateHotspot(hotspot.id, { description: e.target.value })}
-                    placeholder="Descripción"
-                    rows={2}
-                    style={{
-                      width: '100%',
-                      padding: '4px',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      fontSize: '0.7rem',
-                      fontFamily: 'inherit',
-                      marginBottom: '8px'
-                    }}
-                  />
-
-                  {hotspot.type !== 'info' && (
-                    <label style={{
-                      background: '#2196F3',
-                      color: 'white',
-                      padding: '6px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.7rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      <ImageIcon size={12} />
-                      {hotspot.content_url ? '✓ Actualizar' : 'Subir'}
-                      <input
-                        type="file"
-                        accept={hotspot.type === 'image' ? 'image/*' : 'video/*'}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleHotspotImageUpload(file, hotspot.id);
-                        }}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
-                  )}
-                </div>
-              ))}
-
-              {hotspots.length === 0 && (
-                <p style={{
-                  textAlign: 'center',
-                  color: '#999',
-                  padding: '20px',
-                  fontSize: '0.85rem'
-                }}>
-                  No hay hotspots. Agrégalos arriba.
-                </p>
-              )}
             </div>
 
           </div>
