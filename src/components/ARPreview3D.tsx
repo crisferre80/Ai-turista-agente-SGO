@@ -4,7 +4,7 @@
 import { useRef, useState, useEffect, Suspense, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Sphere, TransformControls, useTexture } from '@react-three/drei';
+import { OrbitControls, Text, Box, Sphere, TransformControls } from '@react-three/drei';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
@@ -470,7 +470,40 @@ function HotspotImageBillboardWithTexture({
   yOffset: number; 
   pos: { x: number; y: number; z: number };
 }) {
-  const texture = useTexture(imageUrl);
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!imageUrl) return;
+
+    const loader = new THREE.TextureLoader();
+    
+    // Configurar crossOrigin para evitar problemas CORS en AR
+    loader.setCrossOrigin('anonymous');
+    
+    loader.load(
+      imageUrl,
+      (loadedTexture) => {
+        // Configurar la textura para AR/WebXR
+        loadedTexture.colorSpace = THREE.SRGBColorSpace;
+        loadedTexture.anisotropy = 16;
+        loadedTexture.needsUpdate = true;
+        setTexture(loadedTexture);
+        setLoadError(false);
+      },
+      undefined,
+      (error) => {
+        console.error('Error cargando textura de hotspot:', error);
+        setLoadError(true);
+      }
+    );
+
+    return () => {
+      if (texture) {
+        texture.dispose();
+      }
+    };
+  }, [imageUrl]);
 
   return (
     <group position={[pos.x, pos.y + yOffset, pos.z]}>
@@ -482,10 +515,41 @@ function HotspotImageBillboardWithTexture({
       <mesh>
         <planeGeometry args={[1.6, 0.8]} />
         <meshBasicMaterial
-          map={Array.isArray(texture) ? texture[0] : texture}
+          map={texture || undefined}
+          color={loadError ? '#ff6b6b' : (texture ? '#ffffff' : '#cccccc')}
           toneMapped={false}
+          transparent={!texture}
+          opacity={texture ? 1 : 0.5}
         />
       </mesh>
+      {/* Icono de error si falla la carga */}
+      {loadError && (
+        <Text
+          position={[0, 0, 0.01]}
+          fontSize={0.2}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.02}
+          outlineColor="#000000"
+        >
+          ⚠️
+        </Text>
+      )}
+      {/* Indicador de carga */}
+      {!texture && !loadError && (
+        <Text
+          position={[0, 0, 0.01]}
+          fontSize={0.15}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.02}
+          outlineColor="#000000"
+        >
+          ...
+        </Text>
+      )}
       <Text
         position={[0, -0.55, 0]}
         fontSize={0.12}
