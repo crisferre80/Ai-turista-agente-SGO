@@ -472,31 +472,79 @@ function HotspotImageBillboardWithTexture({
 }) {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  // Forzar actualización del material cuando la textura cambie
+  useFrame(() => {
+    if (meshRef.current && texture) {
+      const material = meshRef.current.material as THREE.MeshBasicMaterial;
+      if (material.map !== texture) {
+        material.map = texture;
+        material.needsUpdate = true;
+      }
+    }
+  });
 
   useEffect(() => {
     if (!imageUrl) return;
 
-    const loader = new THREE.TextureLoader();
+    // Crear elemento de imagen HTML para pre-carga garantizada
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
     
-    // Configurar crossOrigin para evitar problemas CORS en AR
-    loader.setCrossOrigin('anonymous');
-    
-    loader.load(
-      imageUrl,
-      (loadedTexture) => {
-        // Configurar la textura para AR/WebXR
+    img.onload = () => {
+      try {
+        // Crear un canvas para garantizar compatibilidad con WebXR
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          throw new Error('No se pudo crear contexto 2D');
+        }
+        
+        // Usar potencias de 2 para mejor compatibilidad con GPU
+        const width = Math.pow(2, Math.ceil(Math.log2(img.width)));
+        const height = Math.pow(2, Math.ceil(Math.log2(img.height)));
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Dibujar imagen en el canvas
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Crear textura desde el canvas
+        const loadedTexture = new THREE.CanvasTexture(canvas);
+        
+        // Configuración crítica para AR/WebXR
         loadedTexture.colorSpace = THREE.SRGBColorSpace;
         loadedTexture.anisotropy = 16;
+        loadedTexture.minFilter = THREE.LinearFilter;
+        loadedTexture.magFilter = THREE.LinearFilter;
+        loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+        loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
         loadedTexture.needsUpdate = true;
+        
+        console.log('✅ Textura cargada exitosamente:', {
+          url: imageUrl,
+          originalSize: `${img.width}x${img.height}`,
+          textureSize: `${width}x${height}`,
+          colorSpace: loadedTexture.colorSpace
+        });
         setTexture(loadedTexture);
         setLoadError(false);
-      },
-      undefined,
-      (error) => {
-        console.error('Error cargando textura de hotspot:', error);
+      } catch (error) {
+        console.error('❌ Error creando textura:', error);
         setLoadError(true);
       }
-    );
+    };
+    
+    img.onerror = (error) => {
+      console.error('❌ Error cargando imagen de hotspot:', imageUrl, error);
+      setLoadError(true);
+    };
+    
+    // Iniciar carga
+    img.src = imageUrl;
 
     return () => {
       if (texture) {
@@ -512,14 +560,17 @@ function HotspotImageBillboardWithTexture({
         <planeGeometry args={[1.7, 0.9]} />
         <meshBasicMaterial color="black" opacity={0.7} transparent />
       </mesh>
-      <mesh>
+      <mesh ref={meshRef}>
         <planeGeometry args={[1.6, 0.8]} />
         <meshBasicMaterial
           map={texture || undefined}
-          color={loadError ? '#ff6b6b' : (texture ? '#ffffff' : '#cccccc')}
+          color={loadError ? '#ff6b6b' : (!texture ? '#cccccc' : '#ffffff')}
           toneMapped={false}
-          transparent={!texture}
-          opacity={texture ? 1 : 0.5}
+          transparent={loadError || !texture}
+          opacity={loadError ? 0.7 : (!texture ? 0.5 : 1)}
+          side={THREE.DoubleSide}
+          depthWrite={true}
+          depthTest={true}
         />
       </mesh>
       {/* Icono de error si falla la carga */}
