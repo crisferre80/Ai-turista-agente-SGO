@@ -488,63 +488,93 @@ function HotspotImageBillboardWithTexture({
   useEffect(() => {
     if (!imageUrl) return;
 
-    // Crear elemento de imagen HTML para pre-carga garantizada
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+    console.log('🔍 Intentando cargar imagen:', imageUrl);
     
-    img.onload = () => {
-      try {
-        // Crear un canvas para garantizar compatibilidad con WebXR
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-          throw new Error('No se pudo crear contexto 2D');
-        }
-        
-        // Usar potencias de 2 para mejor compatibilidad con GPU
-        const width = Math.pow(2, Math.ceil(Math.log2(img.width)));
-        const height = Math.pow(2, Math.ceil(Math.log2(img.height)));
-        
-        canvas.width = width;
-        canvas.height = height;
-        
-        // Dibujar imagen en el canvas
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Crear textura desde el canvas
-        const loadedTexture = new THREE.CanvasTexture(canvas);
-        
-        // Configuración crítica para AR/WebXR
-        loadedTexture.colorSpace = THREE.SRGBColorSpace;
-        loadedTexture.anisotropy = 16;
-        loadedTexture.minFilter = THREE.LinearFilter;
-        loadedTexture.magFilter = THREE.LinearFilter;
-        loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
-        loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-        loadedTexture.needsUpdate = true;
-        
-        console.log('✅ Textura cargada exitosamente:', {
-          url: imageUrl,
-          originalSize: `${img.width}x${img.height}`,
-          textureSize: `${width}x${height}`,
-          colorSpace: loadedTexture.colorSpace
-        });
-        setTexture(loadedTexture);
-        setLoadError(false);
-      } catch (error) {
-        console.error('❌ Error creando textura:', error);
-        setLoadError(true);
+    // Intentar cargar sin CORS primero (para URLs del mismo origen o data URLs)
+    const attemptLoad = (useCORS: boolean) => {
+      const img = new Image();
+      
+      if (useCORS) {
+        img.crossOrigin = 'anonymous';
+        console.log('🔄 Reintentando con CORS habilitado...');
       }
+      
+      img.onload = () => {
+        try {
+          console.log('📥 Imagen descargada, procesando...', {
+            width: img.width,
+            height: img.height,
+            usedCORS: useCORS
+          });
+          
+          // Crear un canvas para garantizar compatibilidad con WebXR
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            throw new Error('No se pudo crear contexto 2D');
+          }
+          
+          // Usar potencias de 2 para mejor compatibilidad con GPU
+          const width = Math.pow(2, Math.ceil(Math.log2(img.width)));
+          const height = Math.pow(2, Math.ceil(Math.log2(img.height)));
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Dibujar imagen en el canvas
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Crear textura desde el canvas
+          const loadedTexture = new THREE.CanvasTexture(canvas);
+          
+          // Configuración crítica para AR/WebXR
+          loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.anisotropy = 16;
+          loadedTexture.minFilter = THREE.LinearFilter;
+          loadedTexture.magFilter = THREE.LinearFilter;
+          loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+          loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+          loadedTexture.needsUpdate = true;
+          
+          console.log('✅ Textura cargada exitosamente:', {
+            url: imageUrl.substring(0, 100) + (imageUrl.length > 100 ? '...' : ''),
+            originalSize: `${img.width}x${img.height}`,
+            textureSize: `${width}x${height}`,
+            colorSpace: loadedTexture.colorSpace
+          });
+          setTexture(loadedTexture);
+          setLoadError(false);
+        } catch (error) {
+          console.error('❌ Error creando textura:', error);
+          setLoadError(true);
+        }
+      };
+      
+      img.onerror = (event) => {
+        const errorType = typeof event === 'string' ? event : (event as Event).type;
+        console.error('❌ Error cargando imagen:', {
+          url: imageUrl.substring(0, 100) + (imageUrl.length > 100 ? '...' : ''),
+          usedCORS: useCORS,
+          errorType,
+          eventDetails: typeof event === 'object' ? JSON.stringify(event, null, 2) : event
+        });
+        
+        // Si falló sin CORS, intentar con CORS
+        if (!useCORS && !imageUrl.startsWith('data:')) {
+          console.log('⚠️ Falló sin CORS, reintentando con CORS...');
+          attemptLoad(true);
+        } else {
+          setLoadError(true);
+        }
+      };
+      
+      // Iniciar carga
+      img.src = imageUrl;
     };
     
-    img.onerror = (error) => {
-      console.error('❌ Error cargando imagen de hotspot:', imageUrl, error);
-      setLoadError(true);
-    };
-    
-    // Iniciar carga
-    img.src = imageUrl;
+    // Comenzar intento de carga
+    attemptLoad(false);
 
     return () => {
       if (texture) {
@@ -795,6 +825,76 @@ export default function ARPreview3D({
 }: ARPreview3DProps) {
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>(null);
   const primitives = useMemo(() => externalPrimitives || [], [externalPrimitives]);
+  
+  // 🧪 HOTSPOTS DE PRUEBA - Para debugging de texturas
+  const testHotspots = useMemo<Hotspot[]>(() => {
+    // Generar imagen de canvas como data URL
+    let canvasDataURL = '';
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Gradiente
+        const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 356);
+        gradient.addColorStop(0, '#ff6b6b');
+        gradient.addColorStop(1, '#4ecdc4');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Texto
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('CANVAS TEST', 256, 240);
+        ctx.font = '24px Arial';
+        ctx.fillText('Generado localmente', 256, 290);
+        
+        canvasDataURL = canvas.toDataURL('image/png');
+      }
+    } catch (e) {
+      console.error('Error generando canvas de prueba:', e);
+    }
+    
+    return [
+      {
+        id: 'test-hotspot-svg',
+        type: 'image',
+        position: { x: 2, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        title: '🧪 Test SVG Local',
+        description: 'SVG data URL - no requiere red',
+        image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2300ff88;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%2300aaff;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="512" height="512" fill="url(%23grad)"/%3E%3Ccircle cx="256" cy="200" r="80" fill="white" opacity="0.9"/%3E%3Ctext x="256" y="340" font-family="Arial" font-size="60" font-weight="bold" fill="white" text-anchor="middle"%3ETEST SVG%3C/text%3E%3Ctext x="256" y="400" font-family="Arial" font-size="30" fill="white" text-anchor="middle" opacity="0.8"%3EData URL%3C/text%3E%3C/svg%3E',
+      },
+      {
+        id: 'test-hotspot-canvas', 
+        type: 'image',
+        position: { x: -2, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        title: '🧪 Test Canvas',
+        description: 'Canvas generado con JavaScript',
+        image_url: canvasDataURL || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+      },
+      {
+        id: 'test-hotspot-simple',
+        type: 'image',
+        position: { x: 0, y: 0, z: 2 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        title: '🧪 Test Simple PNG',
+        description: 'PNG simple data URL (1x1 rojo)',
+        // PNG 1x1 rojo
+        image_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+      },
+    ];
+  }, []);
+  
+  // Combinar hotspots reales con hotspots de prueba
+  const allHotspots = useMemo(() => [...hotspots, ...testHotspots], [hotspots, testHotspots]);
+  
   const [lights, setLights] = useState<Light[]>([]);
   const [selectedPrimitive, setSelectedPrimitive] = useState<string | null>(null);
   const [modelSelected, setModelSelected] = useState(false);
@@ -1542,7 +1642,7 @@ export default function ARPreview3D({
         })}
 
         {/* Hotspots con gizmo cuando están seleccionados */}
-        {hotspots.map((hotspot) => {
+        {allHotspots.map((hotspot) => {
           const isSelected = selectedHotspot === hotspot.id;
 
             if (isSelected && onHotspotPositionChange) {
@@ -1590,7 +1690,7 @@ export default function ARPreview3D({
 
         {/* Contenido multimedia (imagen / video) anclado en el espacio 3D */}
         <Suspense fallback={null}>
-          {hotspots.map((hotspot) => (
+          {allHotspots.map((hotspot) => (
             <HotspotMediaBillboard key={`${hotspot.id}-media`} hotspot={hotspot} />
           ))}
         </Suspense>
@@ -1742,7 +1842,7 @@ export default function ARPreview3D({
             fontSize: '0.85rem'
           }}>
             {(() => {
-              const hotspot = hotspots.find(h => h.id === selectedHotspot);
+              const hotspot = allHotspots.find(h => h.id === selectedHotspot);
               if (!hotspot) return null;
 
               const pos = Array.isArray(hotspot.position)
@@ -1776,7 +1876,7 @@ export default function ARPreview3D({
           </div>
         )}
 
-        {!modelUrl && !lightMode && primitives.length === 0 && hotspots.length === 0 && (
+        {!modelUrl && !lightMode && primitives.length === 0 && allHotspots.length === 0 && (
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -2053,11 +2153,11 @@ export default function ARPreview3D({
         {/* Hotspots (debajo del canvas) */}
         <div style={{ background: '#111', color: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
           <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Hotspots</div>
-          {hotspots.length === 0 ? (
+          {allHotspots.length === 0 ? (
             <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Aún no hay hotspots configurados.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {hotspots.map(h => (
+              {allHotspots.map(h => (
                 <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', background: selectedHotspot === h.id ? 'rgba(102,126,234,0.2)' : 'transparent', borderRadius: 6 }}>
                   <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => setSelectedHotspot(h.id)}>{('title' in h && h.title) ? h.title : '(sin título)'}</div>
                   <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{h.type}</div>
@@ -2065,7 +2165,7 @@ export default function ARPreview3D({
               ))}
 
               {selectedHotspot && (() => {
-                const hs = hotspots.find(h => h.id === selectedHotspot);
+                const hs = allHotspots.find(h => h.id === selectedHotspot);
                 if (!hs) return null;
                 const posObj = Array.isArray(hs.position) ? { x: hs.position[0] ?? 0, y: hs.position[1] ?? 0, z: hs.position[2] ?? 0 } : hs.position as { x:number;y:number;z:number };
                 return (

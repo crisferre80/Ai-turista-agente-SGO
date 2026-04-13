@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { normalizeARData, canonicalizeARDataForSave } from '@/lib/ar-utils';
 import { loadARModelFromScene, saveARModelToScene } from '@/lib/ar-scene-persistence';
 import type { ARHotspot, ARHotspotType } from '@/types/ar';
-import { Upload, Plus, Trash2, Image as ImageIcon, Box } from 'lucide-react';
+import { Upload, Plus, Trash2, Image as ImageIcon, Box, ArrowUp, ArrowDown, Maximize2, Minimize2 } from 'lucide-react';
 import * as THREE from 'three';
 import ARScene from '@/components/ARPageClient/ARScene';
 
@@ -182,6 +182,20 @@ export default function ARConfigPage() {
   // Calibración de la vista móvil (persistible)
   const [phonePreview, setPhonePreview] = useState<{ cameraDistance: number; yOffset: number; previewScale: number }>({ cameraDistance: 1.0, yOffset: 0, previewScale: 1.0 });
 
+  // Estado para ordenamiento personalizado de paneles
+  const [panelOrder, setPanelOrder] = useState<string[]>(['config', 'hotspots', 'canvas', 'mobile']);
+
+  // Estado para tamaños de paneles (1-4 columnas)
+  const [panelSizes, setPanelSizes] = useState<Record<string, number>>({
+    config: 1,
+    hotspots: 1,
+    canvas: 2,
+    mobile: 1
+  });
+
+  // Estado para layout preset
+  const [layoutPreset, setLayoutPreset] = useState<string>('auto');
+
   // Lista de modelos disponibles en el bucket
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
@@ -245,6 +259,145 @@ export default function ARConfigPage() {
 
     return undefined;
   }, []);
+
+  // Cargar orden de paneles guardado desde localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ar-config-panel-order');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 4) {
+          setPanelOrder(parsed);
+        }
+      }
+      
+      // Cargar tamaños guardados
+      const savedSizes = localStorage.getItem('ar-config-panel-sizes');
+      if (savedSizes) {
+        const parsed = JSON.parse(savedSizes);
+        setPanelSizes(parsed);
+      }
+      
+      // Cargar preset guardado
+      const savedPreset = localStorage.getItem('ar-config-layout-preset');
+      if (savedPreset) {
+        setLayoutPreset(savedPreset);
+      }
+    } catch (error) {
+      console.error('Error cargando configuración de paneles:', error);
+    }
+  }, []);
+
+  // Guardar orden de paneles en localStorage cuando cambie
+  useEffect(() => {
+    try {
+      localStorage.setItem('ar-config-panel-order', JSON.stringify(panelOrder));
+    } catch (error) {
+      console.error('Error guardando orden de paneles:', error);
+    }
+  }, [panelOrder]);
+
+  // Guardar tamaños de paneles
+  useEffect(() => {
+    try {
+      localStorage.setItem('ar-config-panel-sizes', JSON.stringify(panelSizes));
+    } catch (error) {
+      console.error('Error guardando tamaños de paneles:', error);
+    }
+  }, [panelSizes]);
+
+  // Guardar preset de layout
+  useEffect(() => {
+    try {
+      localStorage.setItem('ar-config-layout-preset', layoutPreset);
+    } catch (error) {
+      console.error('Error guardando preset de layout:', error);
+    }
+  }, [layoutPreset]);
+
+  // Función para mover un panel arriba en el orden
+  const movePanelUp = (panelId: string) => {
+    const index = panelOrder.indexOf(panelId);
+    if (index > 0) {
+      const newOrder = [...panelOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      setPanelOrder(newOrder);
+    }
+  };
+
+  // Función para mover un panel abajo en el orden
+  const movePanelDown = (panelId: string) => {
+    const index = panelOrder.indexOf(panelId);
+    if (index < panelOrder.length - 1) {
+      const newOrder = [...panelOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      setPanelOrder(newOrder);
+    }
+  };
+
+  // Función para cambiar tamaño de panel (1-4 columnas)
+  const changePanelSize = (panelId: string, delta: number) => {
+    setPanelSizes(prev => {
+      const current = prev[panelId] || 1;
+      const newSize = Math.max(1, Math.min(4, current + delta));
+      return { ...prev, [panelId]: newSize };
+    });
+  };
+
+  // Aplicar preset de layout
+  const applyLayoutPreset = (preset: string) => {
+    setLayoutPreset(preset);
+    
+    switch (preset) {
+      case 'large-top':
+        // 1 grande arriba + 3 pequeños abajo
+        setPanelSizes({
+          canvas: 4,
+          config: 1,
+          hotspots: 1,
+          mobile: 2
+        });
+        setPanelOrder(['canvas', 'config', 'hotspots', 'mobile']);
+        break;
+        
+      case 'large-left':
+        // 1 grande izquierda + 3 a la derecha
+        setPanelSizes({
+          canvas: 2,
+          config: 1,
+          hotspots: 1,
+          mobile: 2
+        });
+        setPanelOrder(['canvas', 'mobile', 'config', 'hotspots']);
+        break;
+        
+      case 'two-large':
+        // 2 grandes arriba + 2 pequeños abajo
+        setPanelSizes({
+          canvas: 2,
+          mobile: 2,
+          config: 1,
+          hotspots: 1
+        });
+        setPanelOrder(['canvas', 'mobile', 'config', 'hotspots']);
+        break;
+        
+      case 'equal':
+        // Todos iguales 2x2
+        setPanelSizes({
+          config: 1,
+          hotspots: 1,
+          canvas: 1,
+          mobile: 1
+        });
+        setPanelOrder(['config', 'hotspots', 'canvas', 'mobile']);
+        break;
+        
+      default:
+        // Auto - mantener configuración actual
+        break;
+    }
+  };
 
   // Cargar lista de modelos disponibles del bucket
   useEffect(() => {
@@ -698,19 +851,28 @@ export default function ARConfigPage() {
   // Obtener URL pública del modelo seleccionado
   const currentModelUrl = modelFileName ? supabase.storage.from('ar-content').getPublicUrl(`ar-models/${modelFileName}`).data.publicUrl : undefined;
 
+  // Helper para renderizar panel con controles de orden (no usado actualmente)
+  // const renderPanelWithControls = (...) => { ... };
+
   return (
     <div style={{ 
       minHeight: '100vh', 
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
+      padding: isMobile ? '12px' : '20px',
+      overflowX: 'hidden'
     }}>
-      <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
+      <div style={{ 
+        maxWidth: '1600px', 
+        margin: '0 auto',
+        width: '100%',
+        overflowX: 'hidden'
+      }}>
         {/* Header */}
         <div style={{
           background: 'white',
-          padding: '24px',
+          padding: isMobile ? '16px' : '24px',
           borderRadius: '16px',
-          marginBottom: '20px',
+          marginBottom: isMobile ? '12px' : '20px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
         }}>
           <h1 style={{ margin: 0, fontSize: '2rem', color: '#1A3A6C' }}>
@@ -726,11 +888,11 @@ export default function ARConfigPage() {
           <div style={{
             background: 'white',
             borderRadius: '12px',
-            padding: '20px',
+            padding: isMobile ? '16px' : '20px',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            marginBottom: '20px'
+            marginBottom: isMobile ? '12px' : '20px'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: isMobile ? '0.9rem' : '1rem', color: '#1A3A6C' }}>
               📍 Selecciona un Atractivo
             </h3>
             <select
@@ -740,10 +902,10 @@ export default function ARConfigPage() {
               }}
               style={{
                 width: '100%',
-                padding: '10px',
+                padding: isMobile ? '8px' : '10px',
                 border: '1px solid #ddd',
                 borderRadius: '6px',
-                fontSize: '0.95rem'
+                fontSize: isMobile ? '0.85rem' : '0.95rem'
               }}
             >
               <option value="">Seleccionar atractivo...</option>
@@ -760,27 +922,56 @@ export default function ARConfigPage() {
         {selectedAttraction && !isMobile && (
           <div style={{
             position: 'fixed',
-            top: '20px',
-            right: '20px',
+            top: isMobile ? '12px' : '20px',
+            right: isMobile ? '12px' : '20px',
             background: 'white',
             borderRadius: '12px',
-            padding: '12px 16px',
+            padding: isMobile ? '8px 12px' : '12px 16px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
             zIndex: 50,
             display: 'flex',
-            gap: '8px',
+            gap: isMobile ? '6px' : '8px',
             alignItems: 'center',
             backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255,255,255,0.3)'
+            border: '1px solid rgba(255,255,255,0.3)',
+            flexWrap: 'wrap',
+            maxWidth: isMobile ? 'calc(100vw - 24px)' : 'auto'
           }}>
             <div style={{
-              fontSize: '0.8rem',
+              fontSize: isMobile ? '0.7rem' : '0.8rem',
               color: '#666',
               fontWeight: '600'
             }}>
               {selectedAttraction.name}
             </div>
             <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+            
+            {/* Selector de Layout - oculto en mobile */}
+            {!isMobile && (
+              <>
+            <select
+              value={layoutPreset}
+              onChange={(e) => applyLayoutPreset(e.target.value)}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #ddd',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                background: 'white'
+              }}
+              title="Cambiar disposición de paneles"
+            >
+              <option value="auto">Layout Personalizado</option>
+              <option value="equal">📐 Igual 2x2</option>
+              <option value="large-top">⬆️ Grande arriba</option>
+              <option value="large-left">⬅️ Grande izquierda</option>
+              <option value="two-large">📊 Dos grandes</option>
+            </select>
+            
+            <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+              </>
+            )}
             <button
               onClick={handleToggleArEnabled}
               disabled={saving}
@@ -821,17 +1012,24 @@ export default function ARConfigPage() {
           </div>
         )}
 
-        {/* Panel Principal - Layout Grid 2x2 */}
+        {/* Panel Principal - Layout Grid con tamaños personalizables */}
         {selectedAttraction && (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gridAutoRows: 'auto',
-            gap: '20px'
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+            gridAutoRows: isMobile ? 'minmax(300px, auto)' : 'minmax(400px, auto)',
+            gap: isMobile ? '12px' : '20px'
           }}>
 
-            {/* Panel 3: Configuración de Modelos (row 2, col 1) */}
-            <div style={{
+            {/* Paneles en orden personalizable */}
+            {panelOrder.map((panelId, idx) => {
+              const canMoveUp = idx > 0;
+              const canMoveDown = idx < panelOrder.length - 1;
+              const panelSize = panelSizes[panelId] || 1;
+              
+              // Panel 3: Configuración de Modelos
+              if (panelId === 'config') return (
+            <div key="config" style={{
               background: 'white',
               borderRadius: '12px',
               padding: '16px',
@@ -839,11 +1037,113 @@ export default function ARConfigPage() {
               display: 'flex',
               flexDirection: 'column',
               minHeight: '500px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              gridColumn: isMobile ? 'span 1' : `span ${panelSize}`,
+              boxSizing: 'border-box',
+              width: '100%',
+              overflowX: 'hidden'
             }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C' }}>
-                ⚙️ Configuración
-              </h3>
+              {/* Header con controles de orden y tamaño */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #e0e0e0',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                  ⚙️ Configuración
+                </h3>
+                <div style={{ display: 'flex', gap:'4px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#999', marginRight: '4px' }}>
+                    {idx + 1}/{panelOrder.length}{!isMobile && ` | ${panelSize}col`}
+                  </span>
+                  
+                  {/* Controles de tamaño */}
+                  {!isMobile && (
+                    <>
+                      <button
+                        onClick={() => changePanelSize(panelId, -1)}
+                        disabled={panelSize <= 1}
+                        title="Reducir ancho"
+                        style={{
+                          background: panelSize > 1 ? '#4CAF50' : '#e0e0e0',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 6px',
+                          cursor: panelSize > 1 ? 'pointer' : 'not-allowed',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Minimize2 size={12} />
+                      </button>
+                      <button
+                        onClick={() => changePanelSize(panelId, 1)}
+                        disabled={panelSize >= 4}
+                        title="Aumentar ancho"
+                        style={{
+                          background: panelSize < 4 ? '#4CAF50' : '#e0e0e0',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 6px',
+                          cursor: panelSize < 4 ? 'pointer' : 'not-allowed',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Maximize2 size={12} />
+                      </button>
+                      <div style={{ width: '1px', height: '20px', background: '#e0e0e0', margin: '0 2px' }} />
+                    </>
+                  )}
+                  
+                  {/* Controles de posición */}
+                  <button
+                    onClick={() => movePanelUp(panelId)}
+                    disabled={!canMoveUp}
+                    title="Mover arriba"
+                    style={{
+                      background: canMoveUp ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveUp ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => movePanelDown(panelId)}
+                    disabled={!canMoveDown}
+                    title="Mover abajo"
+                    style={{
+                      background: canMoveDown ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveDown ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              </div>
 
               {/* Selector y info del atractivo */}
               <div style={{
@@ -1101,9 +1401,11 @@ export default function ARConfigPage() {
                 </div>
               </div>
             </div>
+              ); // Fin panel config
 
-            {/* Panel 4: Hotspots (row 2, col 2) */}
-            <div style={{
+              // Panel Hotspots
+              if (panelId === 'hotspots') return (
+            <div key="hotspots" style={{
               background: 'white',
               borderRadius: '12px',
               padding: '16px',
@@ -1111,17 +1413,80 @@ export default function ARConfigPage() {
               display: 'flex',
               flexDirection: 'column',
               minHeight: '500px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              gridColumn: isMobile ? 'span 1' : `span ${panelSize}`,
+              boxSizing: 'border-box',
+              width: '100%',
+              overflowX: 'hidden'
             }}>
+              {/* Header con titulo y controles */}
               <div style={{
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '12px'
+                justifyContent: 'space-between',
+                marginBottom: '8px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #e0e0e0',
+                flexWrap: 'wrap',
+                gap: '8px'
               }}>
                 <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
                   📍 Hotspots ({hotspots.length})
                 </h3>
+                <div style={{ display: 'flex', gap:'4px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#999', marginRight: '4px' }}>
+                    {idx + 1}/{panelOrder.length} | {panelSize}col
+                  </span>
+                  {!isMobile && (
+                    <>
+                      <button onClick={() => changePanelSize(panelId, -1)} disabled={panelSize <= 1} title="Reducir ancho" style={{ background: panelSize > 1 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize > 1 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minimize2 size={12} /></button>
+                      <button onClick={() => changePanelSize(panelId, 1)} disabled={panelSize >= 4} title="Aumentar ancho" style={{ background: panelSize < 4 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize < 4 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Maximize2 size={12} /></button>
+                      <div style={{ width: '1px', height: '20px', background: '#e0e0e0', margin: '0 2px' }} />
+                    </>
+                  )}
+                  <span style={{ fontSize: '0.7rem', color: '#999', marginRight: '4px' }}>
+                    {idx + 1}/{panelOrder.length}
+                  </span>
+                  <button
+                    onClick={() => movePanelUp(panelId)}
+                    disabled={!canMoveUp}
+                    title="Mover arriba"
+                    style={{
+                      background: canMoveUp ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveUp ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => movePanelDown(panelId)}
+                    disabled={!canMoveDown}
+                    title="Mover abajo"
+                    style={{
+                      background: canMoveDown ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveDown ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              </div>
+              {/* Botón agregar hotspot */}
+              <div style={{ marginBottom: '12px' }}>
                 <button
                   onClick={addHotspot}
                   disabled={!arEnabled}
@@ -1129,13 +1494,15 @@ export default function ARConfigPage() {
                     background: arEnabled ? '#4CAF50' : '#ccc',
                     color: 'white',
                     border: 'none',
-                    padding: '6px 10px',
+                    width: '100%',
+                    padding: '8px 12px',
                     borderRadius: '6px',
                     cursor: arEnabled ? 'pointer' : 'not-allowed',
-                    fontSize: '0.8rem',
+                    fontSize: '0.85rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
+                    justifyContent: 'center',
+                    gap: '6px',
                     opacity: arEnabled ? 1 : 0.6
                   }}
                   title={arEnabled ? 'Agregar hotspot' : 'Activa AR primero'}
@@ -1344,21 +1711,104 @@ export default function ARConfigPage() {
                 </p>
               )}
             </div>
+              ); // Fin panel hotspots
 
-            {/* Panel 1: Canvas 3D Principal (row 1, col 1) */}
-            <div style={{
+              // Panel Canvas 3D
+              if (panelId === 'canvas') return (
+            <div key="canvas" style={{
               background: 'white',
               borderRadius: '12px',
               padding: '16px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '500px'
+              minHeight: '500px',
+              gridColumn: isMobile ? 'span 1' : `span ${panelSize}`,
+              boxSizing: 'border-box',
+              width: '100%',
+              overflowX: 'hidden'
             }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                👁️ Canvas 3D
-              </h3>
+              {/* Header con controles */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #e0e0e0',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                  👁️ Canvas 3D
+                </h3>
+                <div style={{ display: 'flex', gap:'4px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#999', marginRight: '4px' }}>
+                    {idx + 1}/{panelOrder.length}{!isMobile && ` | ${panelSize}col`}
+                  </span>
+                  {!isMobile && (
+                    <>
+                      <button onClick={() => changePanelSize(panelId, -1)} disabled={panelSize <= 1} title="Reducir ancho" style={{ background: panelSize > 1 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize > 1 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minimize2 size={12} /></button>
+                      <button onClick={() => changePanelSize(panelId, 1)} disabled={panelSize >= 4} title="Aumentar ancho" style={{ background: panelSize < 4 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize < 4 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Maximize2 size={12} /></button>
+                      <div style={{ width: '1px', height: '20px', background: '#e0e0e0', margin: '0 2px' }} />
+                    </>
+                  )}
+                  <button
+                    onClick={() => movePanelUp(panelId)}
+                    disabled={!canMoveUp}
+                    title="Mover arriba"
+                    style={{
+                      background: canMoveUp ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveUp ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => movePanelDown(panelId)}
+                    disabled={!canMoveDown}
+                    title="Mover abajo"
+                    style={{
+                      background: canMoveDown ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveDown ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              </div>
               
+              {/* Contenedor flex para canvas y herramientas */}
+              <div style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '12px',
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden'
+              }}>
+                {/* Canvas 3D */}
+                <div style={{
+                  flex: 1,
+                  minHeight: '0',
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
               {arEnabled && (currentModelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) ? (
                 <div style={{
                   flex: 1,
@@ -1436,7 +1886,24 @@ export default function ARConfigPage() {
                   </div>
                 </div>
               )}
+                </div>
+                
+                {/* Panel de herramientas (portal) */}
+                {!isMobile && (
+                  <div 
+                    id="ar-tools-panel"
+                    style={{
+                      width: '280px',
+                      minWidth: '280px',
+                      maxHeight: '100%',
+                      overflowY: 'auto',
+                      overflowX: 'hidden'
+                    }}
+                  />
+                )}
+              </div>
 
+              {/* Mensaje de ayuda */}
               <div style={{
                 marginTop: '12px',
                 padding: '10px',
@@ -1447,86 +1914,101 @@ export default function ARConfigPage() {
               }}>
                 💡 Usa las herramientas para rotar y hacer zoom en el canvas
               </div>
+              
+              {/* Panel de herramientas en mobile (abajo) */}
+              {isMobile && (
+                <div 
+                  id="ar-tools-panel"
+                  style={{
+                    width: '100%',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    marginTop: '12px'
+                  }}
+                />
+              )}
             </div>
+              ); // Fin panel canvas
 
-            {/* Panel de Herramientas (panel separado para alojar las herramientas del preview) */}
-            {selectedAttraction && (
-              <div id="ar-tools-panel" style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                minHeight: '80px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                gap: '8px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '0.95rem', color: '#1A3A6C', fontWeight: 700 }}>{selectedAttraction.name}</div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={handleToggleArEnabled}
-                      disabled={saving}
-                      style={{
-                        background: arEnabled ? '#4CAF50' : '#999',
-                        color: 'white',
-                        border: 'none',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        cursor: saving ? 'not-allowed' : 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: 600,
-                        opacity: saving ? 0.8 : 1
-                      }}
-                      title="Alternar AR"
-                    >
-                      {arEnabled ? '✓ AR ON' : '✕ AR OFF'}
-                    </button>
-                    <button
-                      onClick={saveARConfiguration}
-                      disabled={saving || !arEnabled}
-                      style={{
-                        background: saving ? '#9E9E9E' : (!arEnabled ? '#ccc' : '#1976d2'),
-                        color: 'white',
-                        border: 'none',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        cursor: (saving || !arEnabled) ? 'not-allowed' : 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: 600
-                      }}
-                      title={arEnabled ? "Guardar configuración" : "Habilita AR primero"}
-                    >
-                      {saving ? 'Guardando...' : '💾 Guardar'}
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => { /* placeholder para acciones adicionales */ }}
-                    style={{ background: '#f5f5f5', border: '1px solid #e0e0e0', padding: '8px 10px', borderRadius: '6px', fontSize: '0.85rem' }}
-                  >
-                    ⚙️ Opciones
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Panel 2: Vista Previa Móvil (row 1, col 2) */}
-            <div style={{
+              // Panel Vista Móvil
+              if (panelId === 'mobile') return (
+            <div key="mobile" style={{
               background: 'white',
               borderRadius: '12px',
               padding: '16px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '500px'
+              minHeight: '500px',
+              gridColumn: isMobile ? 'span 1' : `span ${panelSize}`,
+              boxSizing: 'border-box',
+              width: '100%',
+              overflowX: 'hidden'
             }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1A3A6C', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📱 Vista Móvil
-              </h3>
+              {/* Header con controles */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #e0e0e0',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A3A6C' }}>
+                  📱 Vista Móvil
+                </h3>
+                <div style={{ display: 'flex', gap:'4px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#999', marginRight: '4px' }}>
+                    {idx + 1}/{panelOrder.length}{!isMobile && ` | ${panelSize}col`}
+                  </span>
+                  {!isMobile && (
+                    <>
+                      <button onClick={() => changePanelSize(panelId, -1)} disabled={panelSize <= 1} title="Reducir ancho" style={{ background: panelSize > 1 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize > 1 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minimize2 size={12} /></button>
+                      <button onClick={() => changePanelSize(panelId, 1)} disabled={panelSize >= 4} title="Aumentar ancho" style={{ background: panelSize < 4 ? '#4CAF50' : '#e0e0e0', border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: panelSize < 4 ? 'pointer' : 'not-allowed', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Maximize2 size={12} /></button>
+                      <div style={{ width: '1px', height: '20px', background: '#e0e0e0', margin: '0 2px' }} />
+                    </>
+                  )}
+                  <button
+                    onClick={() => movePanelUp(panelId)}
+                    disabled={!canMoveUp}
+                    title="Mover arriba"
+                    style={{
+                      background: canMoveUp ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveUp ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => movePanelDown(panelId)}
+                    disabled={!canMoveDown}
+                    title="Mover abajo"
+                    style={{
+                      background: canMoveDown ? '#667eea' : '#e0e0e0',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 6px',
+                      cursor: canMoveDown ? 'pointer' : 'not-allowed',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              </div>
 
               {arEnabled && (currentModelUrl || hotspots.length > 0 || primitives.length > 0 || lightMode) ? (
                 <div style={{
@@ -1637,6 +2119,11 @@ export default function ARConfigPage() {
                 📐 Aspecto 9:20 (portrait). Calibración independiente.
               </div>
             </div>
+              ); // Fin panel mobile
+
+              // Default (no debería llegar aquí)
+              return null;
+            })}
 
           </div>
         )}
