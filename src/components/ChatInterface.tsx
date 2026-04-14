@@ -1271,6 +1271,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
             if (timeSinceLast >= idleTime && !isSpeaking && !isThinking && !isListening && !input.trim()) {
                 setIsIdle(true);
                 setShowHistory(false);
+                setShowBubbleManual(false);
             } else {
                 setIsIdle(false);
             }
@@ -1934,7 +1935,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                 <div role="dialog" aria-modal="true" aria-label="Promotional media" style={{
                     position: 'fixed',
                     inset: 0,
-                    zIndex: 40000,
+                    zIndex: 60000,
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
@@ -1968,7 +1969,7 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
             <div className="robot-container" style={{
                 position: 'fixed',
                 bottom: isModalOpen ? '-120px' : '20px',
-                left: '20px',
+                left: isIdle ? '-60px' : '20px',
                 zIndex: isSpeaking || isThinking || audioBlocked || displayedText || isHovering || showBubbleManual ? 40000 : 100,
                 pointerEvents: 'none',
                 display: 'flex',
@@ -2011,8 +2012,8 @@ const [promoMedia, setPromoMedia] = useState<{type: 'image' | 'video', url: stri
                         }}
                     />
 
-                    {/* The Floating Thought Bubble: only show when active, speaking, thinking, audioBlocked, hovered or manually toggled */}
-                    {!showHistory && (isThinking || isSpeaking || audioBlocked || displayedText || isHovering || showBubbleManual) && (
+                    {/* The Floating Thought Bubble: only show when active, speaking, thinking, audioBlocked, hovered or manually toggled (but not when idle) */}
+                    {!showHistory && !isIdle && (isThinking || isSpeaking || audioBlocked || displayedText || isHovering || showBubbleManual) && (
                         <div className="thought-bubble-popup" style={{
                             position: 'absolute',
                             left: '50px',

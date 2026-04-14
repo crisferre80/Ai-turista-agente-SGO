@@ -192,6 +192,20 @@ button:active {
   .webxr-sidebar button { font-size: 16px; padding: 12px 14px; text-align: left; }
 }
 
+/* Mapbox popup z-index fix - ensure popups are not hidden by other elements */
+.mapboxgl-popup {
+  z-index: 50000 !important;
+}
+
+.mapboxgl-popup-content {
+  z-index: 50001 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+}
+
+.mapboxgl-popup-tip {
+  z-index: 49999 !important;
+}
+
 /* Utility row that wraps on small screens */
 .responsive-row {
   display: flex;
