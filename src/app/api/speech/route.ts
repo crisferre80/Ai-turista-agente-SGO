@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
+import path from 'path';
+import fs from 'fs';
 
 export async function POST(req: Request) {
     try {
@@ -26,13 +29,14 @@ export async function POST(req: Request) {
         }
 
         if (ttsProvider === 'google') {
-            const apiKey = req.headers.get('x-google-tts-api-key') || process.env.GOOGLE_TTS_API_KEY || settings?.google_tts_api_key;
+            // Use Service Account instead of API key to avoid HTTP referrer restrictions
+            const serviceAccountPath = path.join(process.cwd(), 'santiguia-service-account.json');
             
-            console.log('Google TTS key available:', !!apiKey);
+            console.log('Google TTS using Service Account:', serviceAccountPath);
             
-            if (!apiKey) {
-                console.error('Google TTS API key is missing');
-                return NextResponse.json({ error: 'Google TTS API key is missing', fallback: true }, { status: 401 });
+            if (!fs.existsSync(serviceAccountPath)) {
+                console.error('Google TTS Service Account file not found');
+                return NextResponse.json({ error: 'Google TTS Service Account not configured', fallback: true }, { status: 401 });
             }
 
             // determine language code
@@ -91,48 +95,52 @@ export async function POST(req: Request) {
             };
             if (ttsEngine) requestBody.voice.name = ttsEngine;
 
-            // actually call Google TTS API
-            const apiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`;
-            console.log('Google TTS request to', apiUrl, 'body', requestBody);
+            // Use Google Cloud SDK with Service Account authentication
+            console.log('Google TTS request body:', requestBody);
             
-            // Create abort controller with 10 second timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-                signal: controller.signal
-            }).finally(() => clearTimeout(timeoutId));
+            try {
+                // Load service account credentials
+                const auth = new google.auth.GoogleAuth({
+                    keyFile: serviceAccountPath,
+                    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+                });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Google TTS error:', response.status, errorText);
+                const authClient = await auth.getClient();
+                const texttospeech = google.texttospeech('v1');
+
+                // Call Google TTS API with authenticated client
+                const [response] = await texttospeech.text.synthesize({
+                    auth: authClient,
+                    requestBody: requestBody
+                });
+
+                const audioContent = response.data.audioContent;
+                
+                if (!audioContent) {
+                    console.error('No audio content received from Google TTS');
+                    return NextResponse.json({ error: 'No audio content received from Google TTS', fallback: true }, { status: 500 });
+                }
+
+                console.log('Google TTS success, audio size:', audioContent.length);
+
+                // Convert base64 to buffer
+                const audioBuffer = Buffer.from(audioContent, 'base64');
+
+                return new NextResponse(audioBuffer, {
+                    headers: {
+                        'Content-Type': 'audio/mpeg',
+                        'Content-Length': audioBuffer.length.toString(),
+                    },
+                });
+                
+            } catch (googleError: unknown) {
+                const errorMessage = googleError instanceof Error ? googleError.message : String(googleError);
+                console.error('Google TTS SDK error:', errorMessage);
                 return NextResponse.json({ 
-                    error: `Google TTS error: ${response.status} - ${errorText}`, 
+                    error: `Google TTS error: ${errorMessage}`, 
                     fallback: true 
-                }, { status: response.status });
+                }, { status: 500 });
             }
-
-            const data = await response.json();
-            
-            if (!data.audioContent) {
-                console.error('No audio content received from Google TTS');
-                return NextResponse.json({ error: 'No audio content received from Google TTS', fallback: true }, { status: 500 });
-            }
-
-            console.log('Google TTS success, audio size:', data.audioContent.length);
-
-            // Convert base64 to buffer
-            const audioBuffer = Buffer.from(data.audioContent, 'base64');
-
-            return new NextResponse(audioBuffer, {
-                headers: {
-                    'Content-Type': 'audio/mpeg',
-                    'Content-Length': audioBuffer.length.toString(),
-                },
-            });
         }
 
         if (ttsProvider === 'openai') {

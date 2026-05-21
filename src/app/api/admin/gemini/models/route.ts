@@ -41,8 +41,8 @@ export async function GET() {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY not configured, returning fallback models');
+    if (!apiKey || apiKey === 'tu-gemini-api-key' || apiKey === 'key_not_set') {
+      console.warn('[GEMINI API] ⚠️  GEMINI_API_KEY not configured, returning fallback models');
       return NextResponse.json({ 
         provider: 'gemini',
         models: fallbackGeminiModels,
@@ -50,9 +50,11 @@ export async function GET() {
       });
     }
 
-    console.log('Attempting to fetch Gemini models with API key:', apiKey.substring(0, 8) + '...');
+    const sanitizedKey = apiKey.substring(0, 8) + '***';
+    console.log('[GEMINI API] Fetching models with API key:', sanitizedKey);
 
     // Try to fetch from Google API
+    // IMPORTANTE: En producción, considera usar un proxy o backend para no exponer la API key directamente
     const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     
     const controller = new AbortController();

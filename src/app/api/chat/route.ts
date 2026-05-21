@@ -908,8 +908,19 @@ export async function POST(req: Request) {
                             models = lm?.models || [];
                         } else {
                             const apiKey = process.env.GEMINI_API_KEY;
-                            if (apiKey) {
-                                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { Authorization: `Bearer ${apiKey}` } });
+                            if (apiKey && apiKey !== 'key_not_set' && apiKey !== 'tu-gemini-api-key') {
+                                // Sanitizar la clave en logs
+                                const sanitizedKey = apiKey.substring(0, 8) + '***';
+                                console.log('[GEMINI] Intentando obtener modelos disponibles con clave:', sanitizedKey);
+                                
+                                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { 
+                                    headers: { 
+                                        Authorization: `Bearer ${apiKey}`,
+                                        'User-Agent': 'TouristAssistant/1.0'
+                                    },
+                                    // Timeout de seguridad
+                                    signal: AbortSignal.timeout(5000)
+                                });
                                 if (r.ok) {
                                     const data = await r.json();
                                     models = data?.models || [];
@@ -919,6 +930,7 @@ export async function POST(req: Request) {
                         const modelNames = models.map(m => m.name).slice(0, 50);
                         throw new Error(`[GoogleGenerativeAI Error]: ${(err as Error).message}. Available models: ${modelNames.join(', ')}`);
                     } catch {
+                        // No exponer información sensible en el error final
                         throw err;
                     }
                 }

@@ -8,7 +8,8 @@
     "kill-port": "powershell -ExecutionPolicy Bypass -File ./kill-port-3000.ps1",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "security:check": "node scripts/verify-api-security.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.1",
