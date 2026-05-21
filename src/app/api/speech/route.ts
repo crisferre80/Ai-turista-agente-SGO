@@ -29,13 +29,24 @@ export async function POST(req: Request) {
         }
 
         if (ttsProvider === 'google') {
-            // Use Service Account instead of API key to avoid HTTP referrer restrictions
+            // Use Service Account - support both file (local) and env var (production)
             const serviceAccountPath = path.join(process.cwd(), 'santiguia-service-account.json');
+            let credentials: any;
             
-            console.log('Google TTS using Service Account:', serviceAccountPath);
-            
-            if (!fs.existsSync(serviceAccountPath)) {
-                console.error('Google TTS Service Account file not found');
+            // Try to load from file first (local development)
+            if (fs.existsSync(serviceAccountPath)) {
+                console.log('Google TTS using Service Account from file:', serviceAccountPath);
+                const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
+                credentials = JSON.parse(fileContent);
+            } 
+            // Fallback to environment variable (production/Vercel)
+            else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+                console.log('Google TTS using Service Account from environment variable');
+                credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+            } 
+            // No credentials available
+            else {
+                console.error('Google TTS Service Account not configured (no file or env var)');
                 return NextResponse.json({ error: 'Google TTS Service Account not configured', fallback: true }, { status: 401 });
             }
 
@@ -99,9 +110,9 @@ export async function POST(req: Request) {
             console.log('Google TTS request body:', requestBody);
             
             try {
-                // Load service account credentials and get access token
+                // Create auth client with credentials
                 const auth = new google.auth.GoogleAuth({
-                    keyFile: serviceAccountPath,
+                    credentials: credentials,
                     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
                 });
 
