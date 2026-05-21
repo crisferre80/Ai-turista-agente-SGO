@@ -99,22 +99,46 @@ export async function POST(req: Request) {
             console.log('Google TTS request body:', requestBody);
             
             try {
-                // Load service account credentials
+                // Load service account credentials and get access token
                 const auth = new google.auth.GoogleAuth({
                     keyFile: serviceAccountPath,
                     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
                 });
 
-                const authClient = await auth.getClient();
-                const texttospeech = google.texttospeech('v1');
+                const client = await auth.getClient();
+                const accessToken = await client.getAccessToken();
+                
+                if (!accessToken.token) {
+                    console.error('Failed to get access token from service account');
+                    return NextResponse.json({ 
+                        error: 'Failed to authenticate with Google Cloud', 
+                        fallback: true 
+                    }, { status: 401 });
+                }
 
-                // Call Google TTS API with authenticated client
-                const response = await texttospeech.text.synthesize({
-                    auth: authClient,
-                    requestBody: requestBody
+                // Call Google TTS API with OAuth2 token
+                const apiUrl = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken.token}`
+                    },
+                    body: JSON.stringify(requestBody)
                 });
 
-                const audioContent = response.data.audioContent;
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Google TTS error:', response.status, errorText);
+                    return NextResponse.json({ 
+                        error: `Google TTS error: ${response.status} - ${errorText}`, 
+                        fallback: true 
+                    }, { status: response.status });
+                }
+
+                const data = await response.json();
+                const audioContent = data.audioContent;
                 
                 if (!audioContent) {
                     console.error('No audio content received from Google TTS');
