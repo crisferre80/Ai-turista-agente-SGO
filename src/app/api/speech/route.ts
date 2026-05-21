@@ -109,7 +109,7 @@ export async function POST(req: Request) {
                 const texttospeech = google.texttospeech('v1');
 
                 // Call Google TTS API with authenticated client
-                const [response] = await texttospeech.text.synthesize({
+                const response = await texttospeech.text.synthesize({
                     auth: authClient,
                     requestBody: requestBody
                 });
